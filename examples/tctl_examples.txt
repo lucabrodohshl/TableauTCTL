@@ -1,0 +1,137 @@
+# TCTL Example Formulas
+# ======================
+#
+# This file demonstrates the TCTL syntax supported by the extended parser.
+# Run: ./ctl_sat --selftest  OR  ./ctl_sat examples/tctl_examples.txt
+#
+
+# ============================================================================
+# 1. CTL (unchanged) — All existing CTL syntax still works
+# ============================================================================
+
+# Boolean formulas
+p & q
+p | q
+!p
+p -> q
+p <-> q
+
+# CTL temporal operators (untimed)
+EX p
+AX p
+EF p
+AF p
+EG p
+AG p
+E(p U q)
+A(p U q)
+
+# Nested CTL
+AG (p -> EF q)
+EF (AG p)
+A(p U E(q U r))
+
+# ============================================================================
+# 2. TCTL Timed Unary Modalities
+# ============================================================================
+
+# AF[a,b] φ — eventually φ within time [a,b] on all paths
+AF[1,5] p
+AF[0,10] (p & q)
+AF[2,100] EX r
+
+# EF[a,b] φ — eventually φ within time [a,b] on some path
+EF[1,5] p
+EF[0,7] response
+EF[3,15] (ready | done)
+
+# AG[a,b] φ — always φ during time [a,b] on all paths
+AG[0,5] stable
+AG[1,10] !error
+AG[2,20] (temp > 0 & temp < 100)
+
+# EG[a,b] φ — always φ during time [a,b] on some path
+EG[0,3] alive
+EG[1,5] connected
+EG[0,inf) running
+
+# Infinity upper bound
+AF[5,inf) done
+EF[10,inf) terminated
+AG[0,inf) safe
+EG[1,inf) reachable
+
+# ============================================================================
+# 3. TCTL Timed Until
+# ============================================================================
+
+# E(φ U[a,b] ψ) — there exists a path where φ holds until ψ within [a,b]
+E(waiting U[1,5] granted)
+E(p U[0,10] q)
+E((idle | busy) U[2,8] done)
+
+# A(φ U[a,b] ψ) — on all paths, φ holds until ψ within [a,b]
+A(running U[0,10] complete)
+A(p U[1,100] q)
+A(safe U[0,inf) terminated)
+
+# Complex timed until
+E((p & r) U[1,3] (q | s))
+A((!error) U[0,5] success)
+
+# ============================================================================
+# 4. Mixed CTL/TCTL
+# ============================================================================
+
+# Timed with untimed
+EF AF[1,5] p
+AG EF[0,10] response
+AF[1,5] EG safe
+EF (AG[0,3] stable)
+
+# Nested timed operators
+AF[0,5] EF[1,10] goal
+EG[1,3] AF[2,8] ack
+A(p U[1,5] E(q U[2,10] r))
+
+# Boolean combinations
+AF[1,5] p & EG[2,10] q
+EF[0,3] (p | AG[1,5] q)
+AG[0,inf) (p -> EF[1,10] response)
+
+# ============================================================================
+# 5. Desugaring Demonstration
+# ============================================================================
+# The following formulas are SUGAR and will be desugared to canonical form:
+#
+# EF[a,b] φ  ≡  E(true U[a,b] φ)
+# AF[a,b] φ  ≡  A(true U[a,b] φ)
+# EG[a,b] φ  ≡  ¬A(true U[a,b] ¬φ)
+# AG[a,b] φ  ≡  ¬E(true U[a,b] ¬φ)
+
+EF[1,5] p       # → E(true U[1,5] p)
+AF[2,10] q      # → A(true U[2,10] q)
+EG[0,3] r       # → ¬A(true U[0,3] ¬r)
+AG[1,7] s       # → ¬E(true U[1,7] ¬s)
+
+# ============================================================================
+# 6. Real-world TCTL patterns
+# ============================================================================
+
+# Response within deadline
+AG (request -> AF[0,5] response)
+
+# Bounded liveness
+AF[0,100] done
+
+# Safety during interval
+AG[0,10] !collision
+
+# Bounded waiting
+A(waiting U[0,30] served)
+
+# Eventually stabilize
+EF[10,inf) (AG stable)
+
+# Timeout pattern
+AG (start -> E(running U[0,60] (success | timeout)))

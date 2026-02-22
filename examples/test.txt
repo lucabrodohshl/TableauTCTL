@@ -1,0 +1,8 @@
+EF>=1 p & AG>=1 !p
+EG[0,5] (p) & AG[2,4] !p
+EG[0,5] (p & q) & AG[2,4] !q
+AG p
+AG[0,4] p 
+AG [0,5] (p & !p)
+AG[0,5] p & EF(4,234) (q&f)
+AG[1,2] (EF (AG (EF (AG (EF (AG (EF (AG (EF (AG (EF[5,6] p)))))))))))
