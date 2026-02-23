@@ -427,13 +427,19 @@ TimedAutomaton build_from_tableau(const TableauEngine& engine) {
                 case NodeKind::EU:
                 case NodeKind::AU:
                 case NodeKind::AX:
+                case NodeKind::ER:
+                case NodeKind::AR:
                 case NodeKind::TimedEU:
                 case NodeKind::TimedAU:
+                case NodeKind::TimedER:
+                case NodeKind::TimedAR:
                     return false;
                 case NodeKind::Not: {
                     const FormulaNode& inner = factory.node(n.children[0]);
                     if (inner.kind == NodeKind::TimedEU ||
-                        inner.kind == NodeKind::TimedAU)
+                        inner.kind == NodeKind::TimedAU ||
+                        inner.kind == NodeKind::EU ||
+                        inner.kind == NodeKind::AU)
                         return false;
                     break;
                 }
@@ -518,28 +524,177 @@ TimedAutomaton build_from_tableau(const TableauEngine& engine) {
     //   Names are L_<id>.  Atoms already stored in TALocation::atoms.
 
     // ── 3. Build location invariants ────────────────────────────────────
-    //   Compute time-closure: zone.up(), then extract finite upper bounds.
+    //   Extract finite upper bounds from the zone directly.
+    //   These constrain how long the system may stay in the location
+    //   (e.g., a zone [1 ≤ x ≤ 3] yields invariant x ≤ 3).
+    //
+    //   NOTE: We must NOT apply up() first — up() removes exactly
+    //   the upper bounds we need.  The zone already encodes the
+    //   valid clock valuations for this location.
+    //
+    //   Skip degenerate "point zones" where upper == lower (e.g. x=0
+    //   from a clock reset).  These are entry conditions, not stay
+    //   invariants — the delay successor will widen the zone.
 
     for (auto& [lid, loc] : ta.locations) {
         const Zone& zone = loc_zone[lid];
         if (zone.is_empty() || zone.num_clocks() <= 1) continue;
 
-        // Time-closure: apply delay (up) to get the set of valuations
-        // reachable by letting time pass.
-        Zone closed_zone = zone;
-        closed_zone.up();
-
         for (ClockId clk = 1;
-             clk < static_cast<ClockId>(closed_zone.num_clocks()); ++clk) {
-            Bound ub = closed_zone.get_bound(clk, kReferenceClock);
-            if (!ub.is_infinity()) {
+             clk < static_cast<ClockId>(zone.num_clocks()); ++clk) {
+            Bound ub = zone.get_bound(clk, kReferenceClock);
+            if (ub.is_infinity()) continue;
+
+            // Check if this is a point zone for this clock
+            // (upper bound == lower bound → just an entry condition).
+            Bound lb = zone.get_bound(kReferenceClock, clk);
+            if (!lb.is_infinity()) {
+                // lower bound on clock = -lb.value
+                std::int32_t actual_lower = -lb.value;
+                if (actual_lower == ub.value && lb.is_strict == ub.is_strict) {
+                    continue;  // Point zone — skip degenerate invariant.
+                }
+            }
+
+            TAConstraint c;
+            c.clock_x   = clk;
+            c.clock_y   = kReferenceClock;
+            c.bound     = ub.value;
+            c.is_strict = ub.is_strict;
+            c.is_upper  = true;
+            loc.invariants.push_back(c);
+        }
+    }
+
+    // ── 3b. Deadline invariants from active timed obligations ────────────
+    //
+    //   Every timed operator still active at a state node imposes a
+    //   constraint on how long the system may remain in the corresponding
+    //   TA location.  The correct bound depends on the operator kind AND
+    //   on whether the local state already satisfies the relevant
+    //   sub-formula.
+    //
+    //   UNTIL operators  (TimedEU / TimedAU):  E(φ U_I ψ) / A(φ U_I ψ)
+    //     The eventuality ψ must be reached within I.  Any location where
+    //     the eventuality has not yet been fulfilled must be left before
+    //     the upper bound of I.
+    //       → invariant:  x ≤ upper   (or x < upper if upper is strict)
+    //
+    //   RELEASE operators  (TimedER / TimedAR):  E(φ R_I ψ) / A(φ R_I ψ)
+    //     The safety formula ψ must hold throughout I.  Two cases:
+    //     (a) ψ HOLDS at this location (e.g. the p-location for AG[1,3] p):
+    //         The system may stay until the interval ends.
+    //           → invariant:  x ≤ upper
+    //     (b) ψ does NOT hold at this location (e.g. initial location
+    //         before time 1 for AG[1,3] p):
+    //         The system must leave BEFORE the interval starts, otherwise
+    //         ψ would be violated during [lower, ...].
+    //           → invariant:  x < lower   (strict  when I = [l, ...])
+    //                         x ≤ lower   (non-strict when I = (l, ...))
+    //
+    //   Examples:
+    //     AF[1,3] p  →  A(⊤ U[1,3] p):  L0 (no p) → inv x ≤ 3
+    //     EF[2,5] p  →  E(⊤ U[2,5] p):  L0 (no p) → inv x ≤ 5
+    //     EG[1,3] p  →  E(⊥ R[1,3] p):  L0 (no p) → inv x < 1
+    //                                     L1 (has p) → inv x ≤ 3
+    //     AG[1,3] q  →  A(⊥ R[1,3] q):  L0 (no q) → inv x < 1
+    //                                     L1 (has q) → inv x ≤ 3
+
+    {
+        for (const TableauNode* node : state_nodes) {
+            auto loc_it = node_to_loc.find(node);
+            if (loc_it == node_to_loc.end()) continue;
+            std::uint32_t lid = loc_it->second;
+            auto& loc = ta.locations[lid];
+
+            for (FormulaId fid : node->active_timed) {
+                const FormulaNode& fn = factory.node(fid);
+                if (fn.kind != NodeKind::TimedAU &&
+                    fn.kind != NodeKind::TimedEU &&
+                    fn.kind != NodeKind::TimedAR &&
+                    fn.kind != NodeKind::TimedER)
+                    continue;
+
+                auto cit = engine.clock_of_.find(fid);
+                if (cit == engine.clock_of_.end()) continue;
+                ClockId clk = cit->second;
+
+                std::int32_t inv_bound;
+                bool         inv_strict;
+
+                if (fn.kind == NodeKind::TimedER ||
+                    fn.kind == NodeKind::TimedAR) {
+                    // Release / safety operator.
+                    // Check whether the safety formula ψ holds at this
+                    // location.
+                    FormulaId psi = fn.children[1];
+                    const FormulaNode& psi_fn = factory.node(psi);
+
+                    bool psi_holds = false;
+                    if (psi_fn.kind == NodeKind::Atom) {
+                        psi_holds = loc.atoms.count(psi_fn.atom_name) > 0;
+                    } else if (psi_fn.kind == NodeKind::Not) {
+                        // ¬p: check that p is NOT in atoms
+                        const FormulaNode& inner =
+                            factory.node(psi_fn.children[0]);
+                        if (inner.kind == NodeKind::Atom)
+                            psi_holds = loc.atoms.count(inner.atom_name) == 0;
+                        else
+                            psi_holds = node->gamma.contains(psi);
+                    } else {
+                        // Complex ψ: check gamma directly.
+                        psi_holds = node->gamma.contains(psi);
+                    }
+
+                    if (psi_holds) {
+                        // ψ holds → can stay until interval ends.
+                        if (fn.time_upper.is_infinity) continue;
+                        inv_bound  = static_cast<std::int32_t>(
+                                         fn.time_upper.value);
+                        inv_strict = fn.time_upper.is_strict;
+                    } else {
+                        // ψ does NOT hold → must leave before interval
+                        // starts.
+                        //   [l, ...]  →  x < l   (strict)
+                        //   (l, ...]  →  x ≤ l   (non-strict)
+                        inv_bound  = static_cast<std::int32_t>(
+                                         fn.time_lower.value);
+                        inv_strict = !fn.time_lower.is_strict;
+
+                        // x < 0 is always empty → location is dead,
+                        // skip the invariant (pruning will handle it).
+                        if (inv_bound == 0 && inv_strict) continue;
+                    }
+                } else {
+                    // Until / eventuality operator → deadline is upper
+                    // bound.
+                    if (fn.time_upper.is_infinity) continue;
+                    inv_bound  = static_cast<std::int32_t>(
+                                     fn.time_upper.value);
+                    inv_strict = fn.time_upper.is_strict;
+                }
+
                 TAConstraint c;
                 c.clock_x   = clk;
                 c.clock_y   = kReferenceClock;
-                c.bound     = ub.value;
-                c.is_strict = ub.is_strict;
+                c.bound     = inv_bound;
+                c.is_strict = inv_strict;
                 c.is_upper  = true;
-                loc.invariants.push_back(c);
+
+                // Skip if this invariant already exists.
+                bool exists = false;
+                for (const auto& inv : loc.invariants) {
+                    if (inv.clock_x == c.clock_x &&
+                        inv.clock_y == c.clock_y &&
+                        inv.bound   == c.bound   &&
+                        inv.is_strict == c.is_strict &&
+                        inv.is_upper  == c.is_upper) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists)
+                    loc.invariants.push_back(c);
             }
         }
     }
@@ -591,10 +746,11 @@ TimedAutomaton build_from_tableau(const TableauEngine& engine) {
         for (ClockId r : node->clock_resets)
             resets.push_back(r);
 
-        // If this is a delay-successor, update cur_zone to its (delayed) zone.
-        if (node->is_delay_successor) {
-            cur_zone = node->zone;
-        }
+        // Track zone through every node on the walk.
+        // For delay-successor nodes this captures the time-elapse;
+        // for expansion children (e.g. TimedER zone-splitting) it
+        // captures the zone restriction (PRE / IN / POST fragment).
+        cur_zone = node->zone;
 
         // Detect timed-until discharge: formula in parent->active_timed
         // but NOT in node->active_timed  ⇒  discharged here.
@@ -719,6 +875,22 @@ TimedAutomaton build_from_tableau(const TableauEngine& engine) {
                 // Append timed-until discharge guard constraints.
                 for (const auto& eg : desc.extra_guards)
                     trans.guard.push_back(eg);
+
+                // Deduplicate guard constraints.
+                {
+                    auto guard_key = [](const TAConstraint& c) {
+                        return std::make_tuple(c.clock_x, c.clock_y,
+                                               c.bound, c.is_strict,
+                                               c.is_upper);
+                    };
+                    std::set<decltype(guard_key(TAConstraint{}))> seen_g;
+                    std::vector<TAConstraint> unique_guard;
+                    for (const auto& g : trans.guard) {
+                        if (seen_g.insert(guard_key(g)).second)
+                            unique_guard.push_back(g);
+                    }
+                    trans.guard = std::move(unique_guard);
+                }
 
                 // ── 4.2 Resets ──────────────────────────────────────
                 // Deduplicate resets.

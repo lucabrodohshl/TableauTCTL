@@ -489,9 +489,16 @@ bool TableauEngine::dfs(TableauNode* node, BranchState& bs) {
 #ifdef TABLEAU_DEBUG
     std::cerr << "DFS node " << node->id << " depth=" << node->depth 
               << " gamma_size=" << node->gamma.size()
-              << " children=" << node->children.size() << "\n";
+              << " children=" << node->children.size()
+              << " delay=" << node->is_delay_successor << "\n";
     for (FormulaId fid : node->gamma.elements()) {
         std::cerr << "  gamma: " << factory_.to_string(fid) << " (id=" << fid << ")\n";
+    }
+    std::cerr << "  zone: " << node->zone.to_string() << "\n";
+    if (!node->active_timed.empty()) {
+        std::cerr << "  active_timed:";
+        for (FormulaId fid : node->active_timed) std::cerr << " " << fid;
+        std::cerr << "\n";
     }
 #endif
     // ── Early stop (another thread already found SAT) ────────────────────
