@@ -1,0 +1,51 @@
+formula,result,test_passed,time_taken_s
+"E(p U[1,3] q)",SATISFIABLE,true,0.004440
+"A(p U[1,4] q)",SATISFIABLE,true,0.005118
+"E(p U(1,5) q)",SATISFIABLE,true,0.004589
+"E(true U[0,3] p)",SATISFIABLE,true,0.001716
+"A(p U(0,2] q)",SATISFIABLE,true,0.005706
+"AG[0,inf) !q & E(p U[1,3] q)",UNSATISFIABLE,true,0.011846
+"AG[0,inf) !p & A(true U(1,5) p)",UNSATISFIABLE,true,0.012791
+"E(true U[1,3] false)",UNSATISFIABLE,true,0.005752
+"A(true U(0,2] false)",UNSATISFIABLE,true,0.005504
+"AG[0,inf) !r & E(p U[2,6] r)",UNSATISFIABLE,true,0.019430
+"EF>2 p",SATISFIABLE,true,0.007214
+"EF<=4 q",SATISFIABLE,true,0.002205
+"AF>=1 p",SATISFIABLE,true,0.005161
+"EF<3 p & AG[0,5] !p",UNSATISFIABLE,true,0.017572
+"AF<=2 p & AG[0,inf) !p",UNSATISFIABLE,true,0.013598
+"AG[0,10] !p & EF[5,8] p",UNSATISFIABLE,true,0.015211
+"EF[1,3] EF[0,2] p",SATISFIABLE,true,0.005475
+"EF[0,2] AG[0,3] p",SATISFIABLE,true,0.004814
+"E(p U[1,4] A(q U[0,2] r))",SATISFIABLE,true,0.005274
+"AF[0,3] EF[1,5] q",SATISFIABLE,true,0.005777
+"E(p U[1,3] A(q U[2,4] r)) & AG[0,inf) !r",UNSATISFIABLE,true,0.022987
+"EF[1,2] AG[0,inf) false",UNSATISFIABLE,true,0.007102
+"AF[0,3] EF[1,5] p & AG[0,inf) !p",UNSATISFIABLE,true,0.028059
+"EF[0,2] A(true U[1,3] false)",UNSATISFIABLE,true,0.009806
+"E(true U[1,3] p) & E(true U[4,6] q)",SATISFIABLE,true,0.009331
+"EF[1,4] p & EF[2,6] q & EF[3,8] r",SATISFIABLE,true,0.018116
+"EG[0,3] p & EF[1,2] q",SATISFIABLE,true,0.006949
+"A(true U[1,3] p) & E(true U[0,2] q)",SATISFIABLE,true,0.007040
+"EG<3 !p & AG>2 p",UNSATISFIABLE,true,0.007179
+"AG[0,5] p & EF[1,3] !p",UNSATISFIABLE,true,0.015207
+"AG[0,3] p & AG[0,3] !p",UNSATISFIABLE,true,0.005274
+"AG[0,4] p & E(true U[2,3] !p)",UNSATISFIABLE,true,0.015296
+"AG[0,5] p",SATISFIABLE,true,0.003767
+"EG[0,4] p",SATISFIABLE,true,0.003275
+"EF[2,4] q",SATISFIABLE,true,0.004565
+"AF[1,5] p",SATISFIABLE,true,0.004685
+"EG[0,3] p & AF[0,2] !p",UNSATISFIABLE,true,0.014349
+"AG[0,5] p & AF[1,3] !p",UNSATISFIABLE,true,0.016792
+"EG[0,inf) p & AG[0,inf) !p",UNSATISFIABLE,true,0.005456
+"EF[1,3] p & AG[0,4] !p",UNSATISFIABLE,true,0.015154
+"E(true U[0,1] p)",SATISFIABLE,true,0.001725
+"E(true U(0,2] p)",SATISFIABLE,true,0.004494
+"E(true U[1,2) p)",SATISFIABLE,true,0.004814
+"EG[0,2] p & AG[1,3] !p",UNSATISFIABLE,true,0.007229
+"E(true U[2,3] p) & AG[0,3] !p",UNSATISFIABLE,true,0.014874
+"E(true U(2,3) p) & AG[2,4] !p",UNSATISFIABLE,true,0.020635
+"EF[1,5] p & EG[0,3] !p",SATISFIABLE,true,0.006737
+"A(p U[1,3] q) & EG[0,2] p",SATISFIABLE,true,0.015112
+"AG[0,2] p & AG[2,5] !p",UNSATISFIABLE,true,0.015959
+"EG[1,5] q & AG[2,4] !q",UNSATISFIABLE,true,0.014912

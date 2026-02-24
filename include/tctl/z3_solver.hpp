@@ -26,6 +26,7 @@
 #include <z3++.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -57,6 +58,17 @@ public:
     /// If positive is true, asserts the atom is true; otherwise false.
     void add_boolean_literal(const std::string& atom_name, bool positive);
 
+    /// Add a state predicate formula (propositional + arithmetic) to the solver.
+    /// Returns true if the formula was supported and added, false if ignored.
+    ///
+    /// Supported state formulas are built from:
+    ///   True/False, Atom, Not, And, Or, Implies, Iff,
+    ///   and arithmetic constraints (IntLessEq, IntLess, IntGreaterEq,
+    ///   IntGreater, IntEqual).
+    ///
+    /// Temporal operators are ignored (return false).
+    bool add_state_formula(FormulaId formula_id);
+
     /// Check satisfiability of all added constraints.
     Z3Result check();
 
@@ -73,6 +85,10 @@ private:
 
     // Convert a FormulaId representing a constraint to Z3 expr (boolean).
     z3::expr to_z3_constraint(FormulaId id);
+
+    // Convert a FormulaId representing a supported state predicate to Z3 expr.
+    // Returns nullopt if the formula contains temporal operators or unsupported kinds.
+    std::optional<z3::expr> to_z3_state_bool(FormulaId id);
 
     // Get or create a Z3 integer variable for the given name.
     z3::expr get_int_var(const std::string& name);

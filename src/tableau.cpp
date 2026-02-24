@@ -1818,112 +1818,23 @@ bool TableauEngine::expand_node(TableauNode* node) {
 
 bool TableauEngine::has_contradiction(TableauNode* node) {
     const FormulaSet& gamma = node->gamma;
-    
-    // Quick check: if 'false' is in Γ, definitely inconsistent
-    FormulaId false_id = factory_.make_false();
-    if (gamma.contains(false_id)) {
-        return true;
-    }
 
-    // ── General φ ∧ ¬φ check ────────────────────────────────────────────
-    // For every Not(x) in Γ, if x is also in Γ, that's a contradiction.
-    // This works for ALL formula kinds (atoms, temporal, etc.) thanks to
-    // formula interning — structurally identical formulas share the same
-    // FormulaId, so the check is O(|Γ|).
-    for (FormulaId id : gamma.elements()) {
-        const FormulaNode& n = factory_.node(id);
-        if (n.kind == NodeKind::Not) {
-            if (gamma.contains(n.children[0])) {
-                return true;  // φ ∧ ¬φ
-            }
-        }
-    }
-
-    // ── Z3-based consistency check ──────────────────────────────────────
-    // Encode all state constraints (boolean literals + arithmetic) into Z3
-    // and check satisfiability in a single unified check.
-    
+    // First-class SMT check: encode the entire state-predicate fragment of Γ
+    // (propositional + arithmetic, with full boolean structure) into Z3.
+    // Temporal formulas are ignored here by design.
     Z3Checker z3_checker(factory_);
-    bool has_constraints = false;
-
-    // Recursively extract and add state constraints from formulas
-    std::function<void(FormulaId, bool)> add_state_constraint = [&](FormulaId id, bool positive) {
-        const FormulaNode& n = factory_.node(id);
-        
-        // Boolean atoms
-        if (n.kind == NodeKind::Atom) {
-            z3_checker.add_boolean_literal(n.atom_name, positive);
-            has_constraints = true;
-            return;
-        }
-        
-        // Arithmetic constraints
-        if (n.kind == NodeKind::IntLessEq ||
-            n.kind == NodeKind::IntLess ||
-            n.kind == NodeKind::IntGreaterEq ||
-            n.kind == NodeKind::IntGreater ||
-            n.kind == NodeKind::IntEqual) {
-            if (positive) {
-                z3_checker.add_constraint(id);
-            } else {
-                // Negate the constraint
-                z3_checker.add_constraint(get_negation(id));
-            }
-            has_constraints = true;
-            return;
-        }
-        
-        // Handle AND/OR nodes when negated (apply De Morgan's laws)
-        if (!positive) {
-            if (n.kind == NodeKind::And) {
-                // !(a & b) = !a | !b - at least one must be false
-                // This represents a disjunction which can't be directly encoded
-                // as multiple assertions in Z3. Skip for now.
-                return;
-            } else if (n.kind == NodeKind::Or) {
-                // !(a | b) = !a & !b - both must be false
-                add_state_constraint(n.children[0], false);
-                add_state_constraint(n.children[1], false);
-                return;
-            }
-        } else {
-            // Positive AND/OR
-            if (n.kind == NodeKind::And) {
-                // (a & b) - both must be true
-                add_state_constraint(n.children[0], true);
-                add_state_constraint(n.children[1], true);
-                return;
-            } else if (n.kind == NodeKind::Or) {
-                // (a | b) - at least one must be true
-                // Can't encode directly as multiple assertions, skip
-                return;
-            }
-        }
-        
-        // Ignore other nodes (temporal formulas, etc.)
-    };
+    bool has_state_predicates = false;
 
     for (FormulaId id : gamma.elements()) {
-        const FormulaNode& n = factory_.node(id);
-
-        if (n.kind == NodeKind::Not) {
-            // Negated formula
-            add_state_constraint(n.children[0], false);
-        } else {
-            // Positive formula
-            add_state_constraint(id, true);
-        }
+        has_state_predicates = z3_checker.add_state_formula(id) || has_state_predicates;
     }
 
-    // If we have any constraints, check their satisfiability
-    if (has_constraints) {
-        Z3Result result = z3_checker.check();
-        if (result == Z3Result::UNSAT) {
-            return true;  // Contradiction detected by Z3
-        }
+    if (!has_state_predicates) {
+        return false;
     }
 
-    return false;
+    Z3Result result = z3_checker.check();
+    return result == Z3Result::UNSAT;
 }
 
 // ============================================================================

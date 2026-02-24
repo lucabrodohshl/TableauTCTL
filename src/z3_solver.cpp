@@ -54,6 +54,101 @@ void Z3Checker::add_boolean_literal(const std::string& atom_name, bool positive)
     }
 }
 
+std::optional<z3::expr> Z3Checker::to_z3_state_bool(FormulaId id) {
+    const FormulaNode& n = factory_.node(id);
+
+    switch (n.kind) {
+        case NodeKind::True:
+            return ctx_.bool_val(true);
+        case NodeKind::False:
+            return ctx_.bool_val(false);
+
+        case NodeKind::Atom:
+            return get_bool_var(n.atom_name);
+
+        case NodeKind::Not: {
+            auto child = to_z3_state_bool(n.children[0]);
+            if (!child) return std::nullopt;
+            return !(*child);
+        }
+
+        case NodeKind::And: {
+            auto lhs = to_z3_state_bool(n.children[0]);
+            auto rhs = to_z3_state_bool(n.children[1]);
+            if (!lhs || !rhs) return std::nullopt;
+            return (*lhs) && (*rhs);
+        }
+
+        case NodeKind::Or: {
+            auto lhs = to_z3_state_bool(n.children[0]);
+            auto rhs = to_z3_state_bool(n.children[1]);
+            if (!lhs || !rhs) return std::nullopt;
+            return (*lhs) || (*rhs);
+        }
+
+        case NodeKind::Implies: {
+            auto lhs = to_z3_state_bool(n.children[0]);
+            auto rhs = to_z3_state_bool(n.children[1]);
+            if (!lhs || !rhs) return std::nullopt;
+            return z3::implies(*lhs, *rhs);
+        }
+
+        case NodeKind::Iff: {
+            auto lhs = to_z3_state_bool(n.children[0]);
+            auto rhs = to_z3_state_bool(n.children[1]);
+            if (!lhs || !rhs) return std::nullopt;
+            return (*lhs) == (*rhs);
+        }
+
+        case NodeKind::IntLessEq:
+        case NodeKind::IntLess:
+        case NodeKind::IntGreaterEq:
+        case NodeKind::IntGreater:
+        case NodeKind::IntEqual:
+            return to_z3_constraint(id);
+
+        // Temporal operators are not state predicates.
+        case NodeKind::EX:
+        case NodeKind::AX:
+        case NodeKind::EU:
+        case NodeKind::AU:
+        case NodeKind::ER:
+        case NodeKind::AR:
+        case NodeKind::EF:
+        case NodeKind::AF:
+        case NodeKind::EG:
+        case NodeKind::AG:
+        case NodeKind::TimedEU:
+        case NodeKind::TimedAU:
+        case NodeKind::TimedER:
+        case NodeKind::TimedAR:
+        case NodeKind::TimedEF:
+        case NodeKind::TimedAF:
+        case NodeKind::TimedEG:
+        case NodeKind::TimedAG:
+            return std::nullopt;
+
+        // Integer expressions are not boolean formulas on their own.
+        case NodeKind::IntVar:
+        case NodeKind::IntConst:
+        case NodeKind::IntPlus:
+        case NodeKind::IntMinus:
+        case NodeKind::IntTimes:
+            return std::nullopt;
+    }
+
+    return std::nullopt;
+}
+
+bool Z3Checker::add_state_formula(FormulaId formula_id) {
+    auto expr = to_z3_state_bool(formula_id);
+    if (!expr) {
+        return false;
+    }
+    solver_.add(*expr);
+    return true;
+}
+
 z3::expr Z3Checker::to_z3_expr(FormulaId id) {
     const FormulaNode& n = factory_.node(id);
 
