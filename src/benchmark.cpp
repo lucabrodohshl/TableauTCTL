@@ -190,12 +190,9 @@ static std::string gen_b3_negated_window(int M) {
 // max_const_in_formula = k * step ≈ M.  Structure is constant (5 conjuncts,
 // 5 clocks); only the interval endpoints grow with M, tightening
 // extrapolation and forcing finer zone distinctions.
-static constexpr int kB4_k = 5;
-
 struct B4Result { std::string formula; int k; int max_const; };
 
-static B4Result gen_b4_chain_windows(int M) {
-    int k    = kB4_k;
+static B4Result gen_b4_chain_windows(int M, int k) {
     int step = std::max(1, M / k);
     std::string result;
     for (int i = 0; i < k; ++i) {
@@ -212,12 +209,9 @@ static B4Result gen_b4_chain_windows(int M) {
 // E(true U[0,M] E(true U[0,M] ... p0)) — 6 levels.
 // Structure is constant (6 nested EU, 6 clocks); only M varies,
 // which raises max_constants_ per clock and tightens extrapolation.
-static constexpr int kB5_depth = 6;
-
 struct B5Result { std::string formula; int depth; int max_const; };
 
-static B5Result gen_b5_nested_timed_chain(int M) {
-    int depth = kB5_depth;
+static B5Result gen_b5_nested_timed_chain(int M, int depth) {
     std::string interval = "[0," + std::to_string(M) + "]";
     std::string core = "p0";
     for (int i = 0; i < depth; ++i) {
@@ -405,10 +399,11 @@ static std::string gen_g3_killed(int k, int M) {
 
 // H1: existential chain (SAT).
 // E(p1 U[0,2] E(p2 U[0,2] ... E(pn U[0,2] q)...))
-static std::string gen_h1_chain_eu(int n) {
+static std::string gen_h1_chain_eu(int n, int M) {
+    std::string interval = "[0," + std::to_string(M) + "]";
     std::string core = "q";
     for (int i = n; i >= 1; --i) {
-        core = "E(p" + std::to_string(i) + " U[0,2] " + core + ")";
+        core = "E(p" + std::to_string(i) + " U" + interval + " " + core + ")";
     }
     return core;
 }
@@ -418,8 +413,8 @@ static std::string gen_h1_chain_eu(int n) {
 // The AG globally prevents q from ever holding, so no EU obligation
 // can be fulfilled.  Forces the engine to exhaust the full search
 // space (or hit timeout), rather than finding a shallow witness.
-static std::string gen_h2_chain_killed(int n) {
-    return gen_h1_chain_eu(n) + " & AG !q";
+static std::string gen_h2_chain_killed(int n, int M) {
+    return gen_h1_chain_eu(n, M) + " & AG !q";
 }
 
 // ── Family I — Modality alternation (fixed M=1, fixed clocks) ──────────────
@@ -436,30 +431,33 @@ static std::string gen_h2_chain_killed(int n) {
 //     acceptance because eventualities compete with safety constraints.
 
 // I1: A(p1 R[0,1] A(p2 R[0,1] ... A(pn R[0,1] q)))
-static std::string gen_i1_pure_safety(int n) {
+static std::string gen_i1_pure_safety(int n, int M) {
+    std::string interval = "[0," + std::to_string(M) + "]";
     std::string core = "q";
     for (int i = n; i >= 1; --i) {
-        core = "A(p" + std::to_string(i) + " R[0,1] " + core + ")";
+        core = "A(p" + std::to_string(i) + " R" + interval + " " + core + ")";
     }
     return core;
 }
 
-// I2: A(p1 U[0,1] A(p2 U[0,1] ... A(pn U[0,1] q)))
-static std::string gen_i2_pure_liveness(int n) {
+// I2: A(p1 U[0,M] A(p2 U[0,M] ... A(pn U[0,M] q)))
+static std::string gen_i2_pure_liveness(int n, int M) {
+    std::string interval = "[0," + std::to_string(M) + "]";
     std::string core = "q";
     for (int i = n; i >= 1; --i) {
-        core = "A(p" + std::to_string(i) + " U[0,1] " + core + ")";
+        core = "A(p" + std::to_string(i) + " U" + interval + " " + core + ")";
     }
     return core;
 }
 
-// I3: A(p1 U[0,1] A(p2 R[0,1] A(p3 U[0,1] ... q)))
+// I3: A(p1 U[0,M] A(p2 R[0,M] A(p3 U[0,M] ... q)))
 // Odd layers (1,3,5,...) are Until; even layers (2,4,6,...) are Release.
-static std::string gen_i3_alternating(int n) {
+static std::string gen_i3_alternating(int n, int M) {
+    std::string interval = "[0," + std::to_string(M) + "]";
     std::string core = "q";
     for (int i = n; i >= 1; --i) {
         const char* op = ((n - i) % 2 == 0) ? "U" : "R";
-        core = "A(p" + std::to_string(i) + " " + op + "[0,1] " + core + ")";
+        core = "A(p" + std::to_string(i) + " " + op + interval + " " + core + ")";
     }
     return core;
 }
@@ -660,17 +658,19 @@ static void write_reproducibility(const std::string& dir,
 
     // Parameter ranges
     f << "=== Parameter Ranges ===\n";
-    f << "family_A_depth: 1.." << opt.max_depth << "\n";
+    f << "family_A_depth: 1.." << opt.max_depth << " (M=" << opt.M_fixed_A << " fixed)\n";
     f << "family_B_M_values:";
     for (int v : opt.M_values) f << " " << v;
     f << "\n";
+    f << "family_B4_chain_k: " << opt.b4_k << "\n";
+    f << "family_B5_nested_depth: " << opt.b5_depth << "\n";
     f << "family_C_k: 1.." << opt.max_k << "\n";
-    f << "family_D_until_depth: 1.." << opt.max_until_depth << "\n";
+    f << "family_D_until_depth: 1.." << opt.max_until_depth << " (conj cutoff=" << opt.max_conj_untils << ")\n";
     f << "family_E_release_depth: 1.." << opt.max_until_depth << "\n";
-    f << "family_F_zeno_M: 2..16\n";
-    f << "family_G_clocks_k: 1..10 (M=5 fixed)\n";
-    f << "family_H_chain_n: 1..14 (M=2 fixed)\n";
-    f << "family_I_alternation_n: 1..14 (M=1 fixed)\n";
+    f << "family_F_zeno_M: 2.." << opt.max_zeno_M << "\n";
+    f << "family_G_clocks_k: 1.." << opt.max_clocks_k << " (M=" << opt.clocks_M << " fixed)\n";
+    f << "family_H_chain_n: 1.." << opt.max_chain_n << " (M=" << opt.chain_M << " fixed)\n";
+    f << "family_I_alternation_n: 1.." << opt.max_alt_n << " (M=" << opt.alt_M << " fixed)\n";
     f << "\n";
 
     if (!opt.out_dir_override.empty()) {
@@ -737,12 +737,12 @@ int run_benchmarks(const BenchmarkOptions& opt) {
                 if (row.verdict == "ERROR")   ++errors;
             }
 
-            // A2: overlapping timed obligations (SAT, d clocks, M=10)
+            // A2: overlapping timed obligations (SAT, d clocks)
             {
-                std::string formula = gen_a2_overlap_sat(d, 10);
+                std::string formula = gen_a2_overlap_sat(d, opt.M_fixed_A);
                 std::cout << "  A2 depth=" << d << " ... " << std::flush;
                 BenchRow row = run_instance("A_depth", "A2_overlap_sat",
-                                            "depth", d, formula, 10, opt);
+                                            "depth", d, formula, opt.M_fixed_A, opt);
                 write_csv_row(csv, row);
                 std::cout << row.verdict << " (" << std::fixed
                           << std::setprecision(3) << row.elapsed_s << "s, "
@@ -754,10 +754,10 @@ int run_benchmarks(const BenchmarkOptions& opt) {
 
             // A3: nested EU with fresh atoms per layer (SAT, d clocks)
             {
-                std::string formula = gen_a3_nested_eu(d, 10);
+                std::string formula = gen_a3_nested_eu(d, opt.M_fixed_A);
                 std::cout << "  A3 depth=" << d << " ... " << std::flush;
                 BenchRow row = run_instance("A_depth", "A3_nested_eu",
-                                            "depth", d, formula, 10, opt);
+                                            "depth", d, formula, opt.M_fixed_A, opt);
                 write_csv_row(csv, row);
                 std::cout << row.verdict << " (" << std::fixed
                           << std::setprecision(3) << row.elapsed_s << "s, "
@@ -769,10 +769,10 @@ int run_benchmarks(const BenchmarkOptions& opt) {
 
             // A4: killed obligations (UNSAT, d+1 clocks)
             {
-                std::string formula = gen_a4_killed_unsat(d, 10);
+                std::string formula = gen_a4_killed_unsat(d, opt.M_fixed_A);
                 std::cout << "  A4 depth=" << d << " ... " << std::flush;
                 BenchRow row = run_instance("A_depth", "A4_killed_unsat",
-                                            "depth", d, formula, 10, opt);
+                                            "depth", d, formula, opt.M_fixed_A, opt);
                 write_csv_row(csv, row);
                 std::cout << row.verdict << " (" << std::fixed
                           << std::setprecision(3) << row.elapsed_s << "s, "
@@ -842,9 +842,9 @@ int run_benchmarks(const BenchmarkOptions& opt) {
                 if (row.verdict == "ERROR")   ++errors;
             }
 
-            // B4: chain-of-windows — fixed k=5, step=M/5, max_const≈M
+            // B4: chain-of-windows — fixed k, step=M/k, max_const≈M
             {
-                auto [formula, k, max_const] = gen_b4_chain_windows(M);
+                auto [formula, k, max_const] = gen_b4_chain_windows(M, opt.b4_k);
                 std::cout << "  B4_chain_windows M=" << M << " k=" << k
                           << " max_const=" << max_const
                           << " ... " << std::flush;
@@ -865,7 +865,7 @@ int run_benchmarks(const BenchmarkOptions& opt) {
 
             // B5: nested timed chain — fixed depth=6, interval [0,M]
             {
-                auto [formula, depth, max_const] = gen_b5_nested_timed_chain(M);
+                auto [formula, depth, max_const] = gen_b5_nested_timed_chain(M, opt.b5_depth);
                 std::cout << "  B5_nested_chain M=" << M << " depth=" << depth
                           << " max_const=" << max_const
                           << " ... " << std::flush;
@@ -1011,10 +1011,10 @@ int run_benchmarks(const BenchmarkOptions& opt) {
         for (int u = 1; u <= opt.max_until_depth; ++u) {
             // D: nested timed until
             {
-                std::string formula = gen_until_nested(u, 10);
+                std::string formula = gen_until_nested(u, opt.M_fixed_A);
                 std::cout << "  D u=" << u << " ... " << std::flush;
                 BenchRow row = run_instance("D_until", "until_nested",
-                                            "until_depth", u, formula, 10, opt);
+                                            "until_depth", u, formula, opt.M_fixed_A, opt);
                 write_csv_row(csv, row);
                 std::cout << row.verdict << " (" << std::fixed
                           << std::setprecision(3) << row.elapsed_s << "s)\n";
@@ -1024,15 +1024,15 @@ int run_benchmarks(const BenchmarkOptions& opt) {
             }
 
             // D optional: conjunctive untils
-            if (u <= 6) {
+            if (u <= opt.max_conj_untils) {
                 std::string formula;
                 for (int i = 1; i <= u; ++i) {
                     if (i > 1) formula += " & ";
-                    formula += "E(true U[1,10] p" + std::to_string(i) + ")";
+                    formula += "E(true U[1," + std::to_string(opt.M_fixed_A) + "] p" + std::to_string(i) + ")";
                 }
                 std::cout << "  D_conj u=" << u << " ... " << std::flush;
                 BenchRow row = run_instance("D_until", "until_conjunctive",
-                                            "until_depth", u, formula, 10, opt);
+                                            "until_depth", u, formula, opt.M_fixed_A, opt);
                 write_csv_row(csv, row);
                 std::cout << row.verdict << " (" << std::fixed
                           << std::setprecision(3) << row.elapsed_s << "s)\n";
@@ -1048,10 +1048,10 @@ int run_benchmarks(const BenchmarkOptions& opt) {
         for (int r = 1; r <= opt.max_until_depth; ++r) {
             // E: nested timed release
             {
-                std::string formula = gen_release_nested(r, 10);
+                std::string formula = gen_release_nested(r, opt.M_fixed_A);
                 std::cout << "  E r=" << r << " ... " << std::flush;
                 BenchRow row = run_instance("E_release", "release_nested",
-                                            "release_depth", r, formula, 10, opt);
+                                            "release_depth", r, formula, opt.M_fixed_A, opt);
                 write_csv_row(csv, row);
                 std::cout << row.verdict << " (" << std::fixed
                           << std::setprecision(3) << row.elapsed_s << "s)\n";
@@ -1066,10 +1066,10 @@ int run_benchmarks(const BenchmarkOptions& opt) {
                   << opt.max_until_depth << ")\n";
 
         for (int n = 1; n <= opt.max_until_depth; ++n) {
-            std::string formula = gen_mixed(n, 10);
+            std::string formula = gen_mixed(n, opt.M_fixed_A);
             std::cout << "  Mixed n=" << n << " ... " << std::flush;
             BenchRow row = run_instance("DE_mixed", "mixed",
-                                        "depth", n, formula, 10, opt);
+                                        "depth", n, formula, opt.M_fixed_A, opt);
             write_csv_row(csv, row);
             std::cout << row.verdict << " (" << std::fixed
                       << std::setprecision(3) << row.elapsed_s << "s)\n";
@@ -1089,14 +1089,11 @@ int run_benchmarks(const BenchmarkOptions& opt) {
         std::ofstream csv(out_dir + "/curves_zeno.csv");
         write_csv_header(csv);
 
-        // M ranges from 2..16 (M=1 would create point interval [1,1]).
-        constexpr int kZenoM_lo = 2;
-        constexpr int kZenoM_hi = 16;
+        // M ranges from 2..max_zeno_M (M=1 would create point interval [1,1]).
+        std::cout << "[benchmark] Family F: Zeno rejection (M=2.."
+                  << opt.max_zeno_M << ", 3 variants)\n";
 
-        std::cout << "[benchmark] Family F: Zeno rejection (M="
-                  << kZenoM_lo << ".." << kZenoM_hi << ", 3 variants)\n";
-
-        for (int M = kZenoM_lo; M <= kZenoM_hi; ++M) {
+        for (int M = 2; M <= opt.max_zeno_M; ++M) {
             // F1: AG[1,M] false — pure Zeno base
             {
                 std::string formula = gen_f1_ag_false(M);
@@ -1157,17 +1154,14 @@ int run_benchmarks(const BenchmarkOptions& opt) {
         std::ofstream csv(out_dir + "/curves_clocks.csv");
         write_csv_header(csv);
 
-        constexpr int kClockM   = 5;   // small fixed M
-        constexpr int kClockMax = 10;   // k = 1..10
-
         std::cout << "[benchmark] Family G: clock dimensionality (k=1.."
-                  << kClockMax << ", M=" << kClockM << ", 3 variants)\n";
+                  << opt.max_clocks_k << ", M=" << opt.clocks_M << ", 3 variants)\n";
 
-        for (int k = 1; k <= kClockMax; ++k) {
+        for (int k = 1; k <= opt.max_clocks_k; ++k) {
             // G1: conjunctive — k staggered EF, SAT
             {
-                std::string formula = gen_g1_conjunctive(k, kClockM);
-                int max_const = kClockM + k - 1;
+                std::string formula = gen_g1_conjunctive(k, opt.clocks_M);
+                int max_const = opt.clocks_M + k - 1;
                 std::cout << "  G1_conjunctive k=" << k
                           << " ... " << std::flush;
                 BenchRow row = run_instance("G_clocks", "G1_conjunctive",
@@ -1186,11 +1180,11 @@ int run_benchmarks(const BenchmarkOptions& opt) {
 
             // G2: nested — k-deep nested EU, SAT
             {
-                std::string formula = gen_g2_nested(k, kClockM);
+                std::string formula = gen_g2_nested(k, opt.clocks_M);
                 std::cout << "  G2_nested k=" << k
                           << " ... " << std::flush;
                 BenchRow row = run_instance("G_clocks", "G2_nested",
-                                            "k", k, formula, kClockM, opt);
+                                            "k", k, formula, opt.clocks_M, opt);
                 row.k     = k;
                 row.depth = k;
                 write_csv_row(csv, row);
@@ -1205,8 +1199,8 @@ int run_benchmarks(const BenchmarkOptions& opt) {
 
             // G3: killed conjunctive — same as G1 + AG killer, UNSAT
             {
-                std::string formula = gen_g3_killed(k, kClockM);
-                int max_const = kClockM + k;
+                std::string formula = gen_g3_killed(k, opt.clocks_M);
+                int max_const = opt.clocks_M + k;
                 std::cout << "  G3_killed k=" << k
                           << " ... " << std::flush;
                 BenchRow row = run_instance("G_clocks", "G3_killed",
@@ -1234,18 +1228,16 @@ int run_benchmarks(const BenchmarkOptions& opt) {
         std::ofstream csv(out_dir + "/curves_chain.csv");
         write_csv_header(csv);
 
-        constexpr int kChainMax = 14;  // n = 1..14
-
         std::cout << "[benchmark] Family H: chained eventualities (n=1.."
-                  << kChainMax << ", M=2, 2 variants)\n";
+                  << opt.max_chain_n << ", M=" << opt.chain_M << ", 2 variants)\n";
 
-        for (int n = 1; n <= kChainMax; ++n) {
+        for (int n = 1; n <= opt.max_chain_n; ++n) {
             // H1: existential chain (SAT)
             {
-                std::string formula = gen_h1_chain_eu(n);
+                std::string formula = gen_h1_chain_eu(n, opt.chain_M);
                 std::cout << "  H1_chain_eu n=" << n << " ... " << std::flush;
                 BenchRow row = run_instance("H_chain", "H1_chain_eu",
-                                            "n", n, formula, 2, opt);
+                                            "n", n, formula, opt.chain_M, opt);
                 row.depth = n;
                 write_csv_row(csv, row);
                 std::cout << row.verdict << " (" << std::fixed
@@ -1259,10 +1251,10 @@ int run_benchmarks(const BenchmarkOptions& opt) {
 
             // H2: chain + AG killer (UNSAT)
             {
-                std::string formula = gen_h2_chain_killed(n);
+                std::string formula = gen_h2_chain_killed(n, opt.chain_M);
                 std::cout << "  H2_chain_killed n=" << n << " ... " << std::flush;
                 BenchRow row = run_instance("H_chain", "H2_chain_killed",
-                                            "n", n, formula, 2, opt);
+                                            "n", n, formula, opt.chain_M, opt);
                 row.depth = n;
                 write_csv_row(csv, row);
                 std::cout << row.verdict << " (" << std::fixed
@@ -1285,18 +1277,16 @@ int run_benchmarks(const BenchmarkOptions& opt) {
         std::ofstream csv(out_dir + "/curves_alternation.csv");
         write_csv_header(csv);
 
-        constexpr int kAltMax = 14;  // n = 1..14
-
         std::cout << "[benchmark] Family I: modality alternation (n=1.."
-                  << kAltMax << ", M=1, 3 variants)\n";
+                  << opt.max_alt_n << ", M=" << opt.alt_M << ", 3 variants)\n";
 
-        for (int n = 1; n <= kAltMax; ++n) {
+        for (int n = 1; n <= opt.max_alt_n; ++n) {
             // I1: pure safety — nested AR
             {
-                std::string formula = gen_i1_pure_safety(n);
+                std::string formula = gen_i1_pure_safety(n, opt.alt_M);
                 std::cout << "  I1_safety n=" << n << " ... " << std::flush;
                 BenchRow row = run_instance("I_alternation", "I1_pure_safety",
-                                            "n", n, formula, 1, opt);
+                                            "n", n, formula, opt.alt_M, opt);
                 row.depth = n;
                 write_csv_row(csv, row);
                 std::cout << row.verdict << " (" << std::fixed
@@ -1310,10 +1300,10 @@ int run_benchmarks(const BenchmarkOptions& opt) {
 
             // I2: pure liveness — nested AU
             {
-                std::string formula = gen_i2_pure_liveness(n);
+                std::string formula = gen_i2_pure_liveness(n, opt.alt_M);
                 std::cout << "  I2_liveness n=" << n << " ... " << std::flush;
                 BenchRow row = run_instance("I_alternation", "I2_pure_liveness",
-                                            "n", n, formula, 1, opt);
+                                            "n", n, formula, opt.alt_M, opt);
                 row.depth = n;
                 write_csv_row(csv, row);
                 std::cout << row.verdict << " (" << std::fixed
@@ -1327,10 +1317,10 @@ int run_benchmarks(const BenchmarkOptions& opt) {
 
             // I3: alternating fixpoint — Until/Release interleaved
             {
-                std::string formula = gen_i3_alternating(n);
+                std::string formula = gen_i3_alternating(n, opt.alt_M);
                 std::cout << "  I3_alternating n=" << n << " ... " << std::flush;
                 BenchRow row = run_instance("I_alternation", "I3_alternating",
-                                            "n", n, formula, 1, opt);
+                                            "n", n, formula, opt.alt_M, opt);
                 row.depth = n;
                 write_csv_row(csv, row);
                 std::cout << row.verdict << " (" << std::fixed
