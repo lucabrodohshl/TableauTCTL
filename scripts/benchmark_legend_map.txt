@@ -1,0 +1,63 @@
+# Benchmark Legend Map — TCTL Tableau Solver
+# Format: old_id -> short_label | full_name
+# Usage: direct replacement in plotting scripts and figure captions
+
+# ── Family A: Depth Scaling ──────────────────────────────────────────────────
+A1_untimed              -> Untimed Baseline     | Untimed Depth Baseline
+A2_overlap_sat          -> Overlap SAT          | Overlapping Timed Obligations (SAT)
+A3_nested_eu            -> Nested EU            | Nested Bounded Existential Until
+A4_killed_unsat         -> Killed UNSAT         | Unsatisfiable Killed Obligations
+
+# ── Family B: Max-Constant Sensitivity ───────────────────────────────────────
+B1_EU_delay             -> EU Delay             | Bounded Until with Mandatory Delay
+B2_deadline_unsat       -> Deadline UNSAT       | Deadline Conflict (UNSAT)
+B3_negated_window       -> Negated Window       | Negated Timed Modality
+B4_chain_windows        -> Window Chain         | Sequential Window Chain
+B5_nested_chain         -> Nested Chain         | Nested Bounded Chain
+B6_forced_delay         -> Forced Delay         | Forced Delay with Extrapolation
+B6_forced_delay_noextr  -> No Extrapolation     | Forced Delay without Extrapolation
+
+# ── Family C: Concurrent Timed Obligations ───────────────────────────────────
+C1_staggered            -> Staggered            | Staggered Window Obligations
+C2_overlapping          -> Identical Windows    | Identical Window Obligations
+
+# ── Family D: Until Nesting ──────────────────────────────────────────────────
+until_nested            -> Nested Until         | Nested Timed Until
+until_conjunctive       -> Conjunctive Until    | Conjunctive Existential Until
+
+# ── Family E: Release Nesting ────────────────────────────────────────────────
+release_nested          -> Nested Release       | Nested Timed Release
+
+# ── Family DE: Mixed Until–Release ───────────────────────────────────────────
+mixed                   -> Until + Release      | Combined Until and Release
+
+# ── Family F: Zeno Rejection ─────────────────────────────────────────────────
+F1_ag_false             -> Safety Vacuity       | Timed Safety Vacuity
+F2_eg_conflict          -> EG Conflict          | Zeno Path Conflict
+F3_stacked_zeno         -> Stacked Traps        | Stacked Zeno Obligation Traps
+
+# ── Family G: Clock Dimensionality ───────────────────────────────────────────
+G1_conjunctive          -> Conjunctive SAT      | Conjunctive Clock Scaling (SAT)
+G2_nested               -> Nested Clocks        | Nested Clock Scaling
+G3_killed               -> Conjunctive UNSAT    | Conjunctive Clock Scaling (UNSAT)
+
+# ── Family H: Eventuality Chain Length ───────────────────────────────────────
+H1_chain_eu             -> Chain SAT            | Existential Eventuality Chain (SAT)
+H2_chain_killed         -> Chain UNSAT          | Blocked Eventuality Chain (UNSAT)
+
+# ── Family I: Fixpoint Alternation ───────────────────────────────────────────
+I1_pure_safety          -> Pure Safety          | Pure Safety Nesting (Release)
+I2_pure_liveness        -> Pure Liveness        | Pure Liveness Nesting (Until)
+I3_alternating          -> Alternating          | Alternating Fixpoint Nesting
+
+# ── Family name map ─────────────────────────────────────────────────────────
+# A_depth       -> Depth Scaling
+# B_bounds_M    -> Max-Constant Sensitivity
+# C_obligations -> Concurrent Timed Obligations
+# D_until       -> Until Nesting
+# E_release     -> Release Nesting
+# DE_mixed      -> Mixed Until–Release
+# F_zeno        -> Zeno Rejection
+# G_clocks      -> Clock Dimensionality
+# H_chain       -> Eventuality Chain Length
+# I_alternation -> Fixpoint Alternation

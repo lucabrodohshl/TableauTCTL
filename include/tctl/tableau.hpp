@@ -43,6 +43,7 @@
 #include <mutex>
 #include <optional>
 #include <set>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -228,11 +229,19 @@ struct TableauStats {
     std::atomic<std::uint32_t> eventualities_checked{0};
     std::atomic<std::uint32_t> distinct_zones{0};
 
+    // ── Memory tracking ─────────────────────────────────────────────────
+    // Computed at the end of check() by iterating all allocated nodes and
+    // summing their footprint (sizeof(TableauNode) + zone DBM heap).
+    // This is deterministic and does not rely on OS-level RSS queries.
+    std::atomic<std::uint64_t> peak_memory_bytes{0};
+    std::atomic<std::uint64_t> avg_memory_per_node_bytes{0};
+
     /// Reset all counters to zero.
     void reset() noexcept {
         nodes_created = 0; nodes_closed = 0; nodes_open = 0;
         max_depth = 0; memo_hits = 0; loop_checks = 0;
         eventualities_checked = 0; distinct_zones = 0;
+        peak_memory_bytes = 0; avg_memory_per_node_bytes = 0;
     }
 
     /// Atomically update max_depth if d is larger.
@@ -249,10 +258,23 @@ struct TableauStats {
 // Thread-local / branch-local DFS state that must NOT be shared across
 // threads.  Each child task gets its own copy so that loop detection
 // (ancestor matching) remains correct.
+//
+// local_closed holds NodeKeys known to be UNSAT on this DFS path.
+// In parallel mode, subtree UNSAT is path-sensitive (it depends on the
+// ancestor context used during loop detection), so it must NOT be
+// stored in the global memo — otherwise a sibling OMP task with a
+// different ancestor context could read stale UNSAT and miss a SAT
+// branch ("memo poisoning").  Only SAT results (and contradiction-
+// based UNSAT, which is path-independent) go into the global memo.
 
 struct BranchState {
     std::vector<TableauNode*>          stack;   // ancestor stack (DFS path)
     std::unordered_set<TableauNode*>   set;     // O(1) membership check
+
+    // Per-path UNSAT memo (parallel mode only).  Inherited when a child
+    // OMP task copies this BranchState, so each task benefits from the
+    // parent's UNSAT knowledge within its own DFS sub-tree.
+    std::unordered_set<NodeKey, NodeKeyHash> local_closed;
 
     void push(TableauNode* n) { stack.push_back(n); set.insert(n); }
     void pop(TableauNode* n)  { stack.pop_back();    set.erase(n); }
@@ -335,6 +357,10 @@ public:
     /// Expose the extracted model (if any) for serialisation.
     const std::optional<KripkeModel>& get_model() const { return model_; }
 
+    /// Compute total memory footprint (bytes) from allocated nodes.
+    /// Sums sizeof(TableauNode) + zone DBM heap for every node.
+    std::uint64_t compute_memory_footprint() const;
+
     /// Expose internal data for TA extraction (read-only).
     const std::vector<std::unique_ptr<TableauNode>>& nodes() const { return nodes_; }
     FormulaFactory& factory() const { return factory_; }
@@ -403,16 +429,12 @@ private:
 
     // ── Concurrent memo table ───────────────────────────────────────────
     // Maps (Γ, ctx, zone_key) → MemoEntry with atomic status.
-    // Protected by a striped-lock scheme: 64 mutexes, selected by
-    // hash(key) % 64.  Locks are held only for find/insert, never
-    // during DFS recursion.
-    static constexpr std::size_t kMemoStripes = 64;
-    std::array<std::mutex, kMemoStripes> memo_locks_;
+    // Protected by a shared_mutex: concurrent reads (find) are allowed,
+    // writes (emplace) require exclusive access.  This is necessary
+    // because std::map is a balanced tree whose structure is mutated by
+    // insertions, making concurrent find + emplace undefined behaviour.
+    mutable std::shared_mutex memo_mutex_;
     std::map<NodeKey, std::shared_ptr<MemoEntry>> memo_;
-
-    std::size_t memo_stripe(const NodeKey& key) const {
-        return NodeKeyHash{}(key) % kMemoStripes;
-    }
 
     // ── Early termination ───────────────────────────────────────────────
     // Set to true when any OR child finds SAT.  Checked by other threads

@@ -38,8 +38,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <memory>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -199,9 +201,10 @@ struct FormulaNodeHash {
 };
 
 // ── FormulaFactory ──────────────────────────────────────────────────────────
-// Thread-unsafe (single-threaded design).  Owns the node storage and the
-// interning map.  Every make_*() method returns the canonical FormulaId for
-// that structure.
+// Thread-safe.  Owns the node storage (std::deque for pointer stability)
+// and the interning map.  Every make_*() method returns the canonical
+// FormulaId for that structure.  A shared_mutex allows concurrent reads
+// (node(), to_string()) while serialising writes (intern/make_*).
 
 class FormulaFactory {
 public:
@@ -269,10 +272,15 @@ public:
 
 private:
     // Intern a node: return existing id when structurally equal, otherwise
-    // allocate a new slot.
+    // allocate a new slot.  Takes exclusive lock internally.
     FormulaId intern(FormulaNode node);
 
-    std::vector<FormulaNode>                                    nodes_;
+    // Unlocked accessors — caller must already hold mutex_ (shared or exclusive).
+    const FormulaNode& node_unlocked(FormulaId id) const;
+    std::string to_string_unlocked(FormulaId id) const;
+
+    mutable std::shared_mutex                                   mutex_;
+    std::deque<FormulaNode>                                     nodes_;
     std::unordered_map<FormulaNode, FormulaId, FormulaNodeHash> intern_;
 };
 

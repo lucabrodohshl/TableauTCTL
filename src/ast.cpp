@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <shared_mutex>
 #include <sstream>
 #include <stdexcept>
 
@@ -96,6 +97,7 @@ FormulaFactory::FormulaFactory() {
 }
 
 FormulaId FormulaFactory::intern(FormulaNode node) {
+    std::unique_lock lk(mutex_);
     // Check if a structurally identical node already exists.
     auto it = intern_.find(node);
     if (it != intern_.end()) {
@@ -412,7 +414,12 @@ FormulaId FormulaFactory::make_int_equal(FormulaId lhs, FormulaId rhs) {
 
 // ── Accessors ───────────────────────────────────────────────────────────────
 
+const FormulaNode& FormulaFactory::node_unlocked(FormulaId id) const {
+    return nodes_[id];
+}
+
 const FormulaNode& FormulaFactory::node(FormulaId id) const {
+    std::shared_lock lk(mutex_);
     if (id >= nodes_.size()) {
         throw std::out_of_range("FormulaFactory::node: invalid FormulaId");
     }
@@ -420,6 +427,7 @@ const FormulaNode& FormulaFactory::node(FormulaId id) const {
 }
 
 std::size_t FormulaFactory::size() const noexcept {
+    std::shared_lock lk(mutex_);
     return nodes_.size();
 }
 
@@ -427,7 +435,12 @@ std::size_t FormulaFactory::size() const noexcept {
 // Produces a fully parenthesised string for unambiguity.
 
 std::string FormulaFactory::to_string(FormulaId id) const {
-    const FormulaNode& n = node(id);
+    std::shared_lock lk(mutex_);
+    return to_string_unlocked(id);
+}
+
+std::string FormulaFactory::to_string_unlocked(FormulaId id) const {
+    const FormulaNode& n = node_unlocked(id);
 
     switch (n.kind) {
         case NodeKind::True:
@@ -437,101 +450,101 @@ std::string FormulaFactory::to_string(FormulaId id) const {
         case NodeKind::Atom:
             return n.atom_name;
         case NodeKind::Not:
-            return "(!" + to_string(n.children[0]) + ")";
+            return "(!" + to_string_unlocked(n.children[0]) + ")";
         case NodeKind::And:
-            return "(" + to_string(n.children[0]) + " & " + to_string(n.children[1]) + ")";
+            return "(" + to_string_unlocked(n.children[0]) + " & " + to_string_unlocked(n.children[1]) + ")";
         case NodeKind::Or:
-            return "(" + to_string(n.children[0]) + " | " + to_string(n.children[1]) + ")";
+            return "(" + to_string_unlocked(n.children[0]) + " | " + to_string_unlocked(n.children[1]) + ")";
         case NodeKind::Implies:
-            return "(" + to_string(n.children[0]) + " -> " + to_string(n.children[1]) + ")";
+            return "(" + to_string_unlocked(n.children[0]) + " -> " + to_string_unlocked(n.children[1]) + ")";
         case NodeKind::Iff:
-            return "(" + to_string(n.children[0]) + " <-> " + to_string(n.children[1]) + ")";
+            return "(" + to_string_unlocked(n.children[0]) + " <-> " + to_string_unlocked(n.children[1]) + ")";
         case NodeKind::EX:
-            return "EX " + to_string(n.children[0]);
+            return "EX " + to_string_unlocked(n.children[0]);
         case NodeKind::AX:
-            return "AX " + to_string(n.children[0]);
+            return "AX " + to_string_unlocked(n.children[0]);
         case NodeKind::EU:
-            return "E(" + to_string(n.children[0]) + " U " + to_string(n.children[1]) + ")";
+            return "E(" + to_string_unlocked(n.children[0]) + " U " + to_string_unlocked(n.children[1]) + ")";
         case NodeKind::AU:
-            return "A(" + to_string(n.children[0]) + " U " + to_string(n.children[1]) + ")";
+            return "A(" + to_string_unlocked(n.children[0]) + " U " + to_string_unlocked(n.children[1]) + ")";
         case NodeKind::ER:
-            return "E(" + to_string(n.children[0]) + " R " + to_string(n.children[1]) + ")";
+            return "E(" + to_string_unlocked(n.children[0]) + " R " + to_string_unlocked(n.children[1]) + ")";
         case NodeKind::AR:
-            return "A(" + to_string(n.children[0]) + " R " + to_string(n.children[1]) + ")";
+            return "A(" + to_string_unlocked(n.children[0]) + " R " + to_string_unlocked(n.children[1]) + ")";
         case NodeKind::EF:
-            return "EF " + to_string(n.children[0]);
+            return "EF " + to_string_unlocked(n.children[0]);
         case NodeKind::AF:
-            return "AF " + to_string(n.children[0]);
+            return "AF " + to_string_unlocked(n.children[0]);
         case NodeKind::EG:
-            return "EG " + to_string(n.children[0]);
+            return "EG " + to_string_unlocked(n.children[0]);
         case NodeKind::AG:
-            return "AG " + to_string(n.children[0]);
+            return "AG " + to_string_unlocked(n.children[0]);
         // TCTL timed operators (canonical)
         case NodeKind::TimedEU: {
             std::string interval = n.time_lower.to_string_lower() + "," + 
                                    n.time_upper.to_string_upper();
-            return "E(" + to_string(n.children[0]) + " U" + interval + " " + 
-                   to_string(n.children[1]) + ")";
+            return "E(" + to_string_unlocked(n.children[0]) + " U" + interval + " " + 
+                   to_string_unlocked(n.children[1]) + ")";
         }
         case NodeKind::TimedAU: {
             std::string interval = n.time_lower.to_string_lower() + "," + 
                                    n.time_upper.to_string_upper();
-            return "A(" + to_string(n.children[0]) + " U" + interval + " " + 
-                   to_string(n.children[1]) + ")";
+            return "A(" + to_string_unlocked(n.children[0]) + " U" + interval + " " + 
+                   to_string_unlocked(n.children[1]) + ")";
         }
         case NodeKind::TimedER: {
             std::string interval = n.time_lower.to_string_lower() + "," + 
                                    n.time_upper.to_string_upper();
-            return "E(" + to_string(n.children[0]) + " R" + interval + " " + 
-                   to_string(n.children[1]) + ")";
+            return "E(" + to_string_unlocked(n.children[0]) + " R" + interval + " " + 
+                   to_string_unlocked(n.children[1]) + ")";
         }
         case NodeKind::TimedAR: {
             std::string interval = n.time_lower.to_string_lower() + "," + 
                                    n.time_upper.to_string_upper();
-            return "A(" + to_string(n.children[0]) + " R" + interval + " " + 
-                   to_string(n.children[1]) + ")";
+            return "A(" + to_string_unlocked(n.children[0]) + " R" + interval + " " + 
+                   to_string_unlocked(n.children[1]) + ")";
         }
         // TCTL timed operators (sugar)
         case NodeKind::TimedEF: {
             std::string interval = n.time_lower.to_string_lower() + "," + 
                                    n.time_upper.to_string_upper();
-            return "EF" + interval + " " + to_string(n.children[0]);
+            return "EF" + interval + " " + to_string_unlocked(n.children[0]);
         }
         case NodeKind::TimedAF: {
             std::string interval = n.time_lower.to_string_lower() + "," + 
                                    n.time_upper.to_string_upper();
-            return "AF" + interval + " " + to_string(n.children[0]);
+            return "AF" + interval + " " + to_string_unlocked(n.children[0]);
         }
         case NodeKind::TimedEG: {
             std::string interval = n.time_lower.to_string_lower() + "," + 
                                    n.time_upper.to_string_upper();
-            return "EG" + interval + " " + to_string(n.children[0]);
+            return "EG" + interval + " " + to_string_unlocked(n.children[0]);
         }
         case NodeKind::TimedAG: {
             std::string interval = n.time_lower.to_string_lower() + "," + 
                                    n.time_upper.to_string_upper();
-            return "AG" + interval + " " + to_string(n.children[0]);
+            return "AG" + interval + " " + to_string_unlocked(n.children[0]);
         }
         case NodeKind::IntVar:
             return n.atom_name;
         case NodeKind::IntConst:
             return std::to_string(n.int_value);
         case NodeKind::IntPlus:
-            return "(" + to_string(n.children[0]) + " + " + to_string(n.children[1]) + ")";
+            return "(" + to_string_unlocked(n.children[0]) + " + " + to_string_unlocked(n.children[1]) + ")";
         case NodeKind::IntMinus:
-            return "(" + to_string(n.children[0]) + " - " + to_string(n.children[1]) + ")";
+            return "(" + to_string_unlocked(n.children[0]) + " - " + to_string_unlocked(n.children[1]) + ")";
         case NodeKind::IntTimes:
-            return "(" + to_string(n.children[0]) + " * " + to_string(n.children[1]) + ")";
+            return "(" + to_string_unlocked(n.children[0]) + " * " + to_string_unlocked(n.children[1]) + ")";
         case NodeKind::IntLessEq:
-            return "(" + to_string(n.children[0]) + " <= " + to_string(n.children[1]) + ")";
+            return "(" + to_string_unlocked(n.children[0]) + " <= " + to_string_unlocked(n.children[1]) + ")";
         case NodeKind::IntLess:
-            return "(" + to_string(n.children[0]) + " < " + to_string(n.children[1]) + ")";
+            return "(" + to_string_unlocked(n.children[0]) + " < " + to_string_unlocked(n.children[1]) + ")";
         case NodeKind::IntGreaterEq:
-            return "(" + to_string(n.children[0]) + " >= " + to_string(n.children[1]) + ")";
+            return "(" + to_string_unlocked(n.children[0]) + " >= " + to_string_unlocked(n.children[1]) + ")";
         case NodeKind::IntGreater:
-            return "(" + to_string(n.children[0]) + " > " + to_string(n.children[1]) + ")";
+            return "(" + to_string_unlocked(n.children[0]) + " > " + to_string_unlocked(n.children[1]) + ")";
         case NodeKind::IntEqual:
-            return "(" + to_string(n.children[0]) + " = " + to_string(n.children[1]) + ")";
+            return "(" + to_string_unlocked(n.children[0]) + " = " + to_string_unlocked(n.children[1]) + ")";
     }
     return "<?>";
 }

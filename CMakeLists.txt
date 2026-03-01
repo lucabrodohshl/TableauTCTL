@@ -131,28 +131,26 @@ target_include_directories(tctl_sat PRIVATE
 )
 target_link_libraries(tctl_sat PRIVATE ${UDBM_LIBRARIES} ${UUTILS_LIBRARIES})
 
-
-#OPENMP IS NOT SUPPOETED YET
-## ── OpenMP (optional parallelism) ────────────────────────────────────────────
-## Apple's clang doesn't bundle OpenMP, but Homebrew ships libomp separately.
-## Point CMake's FindOpenMP at /opt/homebrew/opt/libomp before searching.
-#if(APPLE AND EXISTS "/opt/homebrew/opt/libomp")
-#    set(OpenMP_C_FLAGS   "-Xclang -fopenmp" CACHE STRING "" FORCE)
-#    set(OpenMP_CXX_FLAGS "-Xclang -fopenmp" CACHE STRING "" FORCE)
-#    set(OpenMP_C_LIB_NAMES   "omp" CACHE STRING "" FORCE)
-#    set(OpenMP_CXX_LIB_NAMES "omp" CACHE STRING "" FORCE)
-#    set(OpenMP_omp_LIBRARY
-#        "/opt/homebrew/opt/libomp/lib/libomp.dylib" CACHE STRING "" FORCE)
-#    # Also expose the libomp headers to the compiler search path.
-#    target_include_directories(tctl_sat PRIVATE "/opt/homebrew/opt/libomp/include")
-#endif()
-#
-#find_package(OpenMP QUIET)
-#if(OpenMP_CXX_FOUND)
-#    target_link_libraries(tctl_sat PRIVATE OpenMP::OpenMP_CXX)
-#    target_compile_definitions(tctl_sat PRIVATE TCTL_USE_OPENMP)
-#    message(STATUS "OpenMP found — parallel tableau exploration enabled")
-#else()
-#    message(STATUS "OpenMP not found — building single-threaded")
-#endif()
-#
+##
+### ── OpenMP (optional parallelism) ────────────────────────────────────────────
+### Apple's clang doesn't bundle OpenMP, but Homebrew ships libomp separately.
+### Point CMake's FindOpenMP at /opt/homebrew/opt/libomp before searching.
+##if(APPLE AND EXISTS "/opt/homebrew/opt/libomp")
+##    set(OpenMP_C_FLAGS   "-Xclang -fopenmp" CACHE STRING "" FORCE)
+##    set(OpenMP_CXX_FLAGS "-Xclang -fopenmp" CACHE STRING "" FORCE)
+##    set(OpenMP_C_LIB_NAMES   "omp" CACHE STRING "" FORCE)
+##    set(OpenMP_CXX_LIB_NAMES "omp" CACHE STRING "" FORCE)
+##    set(OpenMP_omp_LIBRARY
+##        "/opt/homebrew/opt/libomp/lib/libomp.dylib" CACHE STRING "" FORCE)
+##    # Also expose the libomp headers to the compiler search path.
+##    target_include_directories(tctl_sat PRIVATE "/opt/homebrew/opt/libomp/include")
+##endif()
+##
+##find_package(OpenMP QUIET)
+##if(OpenMP_CXX_FOUND)
+##    target_link_libraries(tctl_sat PRIVATE OpenMP::OpenMP_CXX)
+##    target_compile_definitions(tctl_sat PRIVATE TCTL_USE_OPENMP)
+##    message(STATUS "OpenMP found — parallel tableau exploration enabled")
+##else()
+##    message(STATUS "OpenMP not found — building single-threaded")
+##endif()

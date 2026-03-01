@@ -28,6 +28,7 @@
 #include "tctl/tableau.hpp"
 #include "tctl/zone.hpp"
 
+
 #include <algorithm>
 #include <cassert>
 #include <functional>
@@ -118,6 +119,33 @@ bool TableauNode::is_ancestor_of(const TableauNode* other) const {
 // TableauStats implementation
 // ============================================================================
 
+// ── compute_memory_footprint() — direct allocation tracking ─────────────────
+
+std::uint64_t TableauEngine::compute_memory_footprint() const {
+    std::uint64_t total = 0;
+    for (const auto& n : nodes_) {
+        total += sizeof(TableauNode);
+        // Zone DBM heap: dim * dim entries of raw_t
+        std::size_t dim = n->zone.num_clocks();
+        if (dim > 0) {
+            total += dim * dim * sizeof(raw_t);
+        }
+        // Containers inside the node (rough but faithful estimate):
+        // std::set overhead ≈ 48 bytes per element (node + 3 pointers + color + value)
+        // std::vector heap = capacity * element_size
+        constexpr std::size_t SET_NODE_OVERHEAD = 48;
+        total += n->gamma.size() * SET_NODE_OVERHEAD;
+        total += n->active_eventualities.size() * SET_NODE_OVERHEAD;
+        total += n->active_timed.size() * SET_NODE_OVERHEAD;
+        total += n->committed_timed.size() * SET_NODE_OVERHEAD;
+        total += n->children.capacity() * sizeof(TableauNode*);
+        total += n->clock_resets.capacity() * sizeof(ClockId);
+    }
+    // nodes_ vector itself
+    total += nodes_.capacity() * sizeof(std::unique_ptr<TableauNode>);
+    return total;
+}
+
 std::string TableauStats::to_string() const {
     std::ostringstream oss;
     oss << "nodes=" << nodes_created.load()
@@ -126,7 +154,9 @@ std::string TableauStats::to_string() const {
         << " max_depth=" << max_depth.load()
         << " memo_hits=" << memo_hits.load()
         << " loop_checks=" << loop_checks.load()
-        << " distinct_zones=" << distinct_zones.load();
+        << " distinct_zones=" << distinct_zones.load()
+        << " peak_mem_kb=" << (peak_memory_bytes.load() / 1024)
+        << " avg_mem_per_node=" << avg_memory_per_node_bytes.load();
     return oss.str();
 }
 
@@ -408,6 +438,8 @@ Result TableauEngine::check(FormulaId normalized_formula) {
         root->zone = Zone::universe(num_clocks_);
     }
 
+
+
     // Set up deadline and start timer.
     timed_out_.store(false, std::memory_order_relaxed);
     const auto t_start = std::chrono::steady_clock::now();
@@ -436,6 +468,15 @@ Result TableauEngine::check(FormulaId normalized_formula) {
 #else
     sat = dfs(root, bs);
 #endif
+
+    // ── Compute memory footprint from allocated nodes ────────────────────
+    {
+        std::uint64_t mem = compute_memory_footprint();
+        stats_.peak_memory_bytes.store(mem, std::memory_order_relaxed);
+        auto nc = stats_.nodes_created.load(std::memory_order_relaxed);
+        stats_.avg_memory_per_node_bytes.store(
+            nc > 0 ? mem / nc : 0, std::memory_order_relaxed);
+    }
 
     const double elapsed = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - t_start).count();
@@ -531,11 +572,26 @@ bool TableauEngine::dfs(TableauNode* node, BranchState& bs) {
     std::string zone_key = compute_zone_key(node);
     NodeKey key{node->gamma, node->ctx, zone_key};
 
-    // ── Check memo (striped lock) ───────────────────────────────────────
-    std::size_t stripe = memo_stripe(key);
+    // Determine parallel mode.  parallel_mode controls memo policy;
+    // do_spawn (set later) controls OMP task creation.
+#ifdef TCTL_USE_OPENMP
+    const bool parallel_mode = (num_threads_ != 1);
+#else
+    const bool parallel_mode = false;
+#endif
+
+    // ── Check per-path UNSAT memo (parallel mode) ───────────────────────
+    if (parallel_mode && bs.local_closed.count(key)) {
+        stats_.memo_hits.fetch_add(1, std::memory_order_relaxed);
+        node->status = NodeStatus::Closed;
+        stats_.nodes_closed.fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
+
+    // ── Check global memo (shared lock for read) ──────────────────────────
     std::shared_ptr<MemoEntry> memo_entry;
     {
-        std::lock_guard<std::mutex> lk(memo_locks_[stripe]);
+        std::shared_lock<std::shared_mutex> lk(memo_mutex_);
         auto memo_it = memo_.find(key);
         if (memo_it != memo_.end()) {
             memo_entry = memo_it->second;
@@ -545,6 +601,9 @@ bool TableauEngine::dfs(TableauNode* node, BranchState& bs) {
     if (memo_entry) {
         int st = memo_entry->status.load(std::memory_order_acquire);
         if (st == MemoEntry::kClosed) {
+            // In the global memo, kClosed is written ONLY for expansion
+            // failures (contradictions / path-independent UNSAT).  Safe
+            // to trust in both sequential and parallel modes.
             stats_.memo_hits.fetch_add(1, std::memory_order_relaxed);
             node->status = NodeStatus::Closed;
             stats_.nodes_closed.fetch_add(1, std::memory_order_relaxed);
@@ -580,7 +639,7 @@ bool TableauEngine::dfs(TableauNode* node, BranchState& bs) {
     // ── Insert into memo as Unknown (in-progress) ───────────────────────
     if (!memo_entry) {
         memo_entry = std::make_shared<MemoEntry>();
-        std::lock_guard<std::mutex> lk(memo_locks_[stripe]);
+        std::unique_lock<std::shared_mutex> lk(memo_mutex_);
         // Double-check: another thread may have inserted between our
         // check above and now.
         auto [it, inserted] = memo_.emplace(key, memo_entry);
@@ -646,20 +705,30 @@ bool TableauEngine::dfs(TableauNode* node, BranchState& bs) {
     bool result = false;
     const std::size_t n_children = node->children.size();
 
+    // Per-path memo strategy for parallelism:
+    //   SAT (kOpen) results are globally valid — an open branch exists
+    //   regardless of the caller's ancestor context.  These go into the
+    //   global memo and are shared across all OMP tasks.
+    //
+    //   Subtree UNSAT (kClosed) results are path-sensitive — they may
+    //   depend on loop detection whose outcome varies with the ancestor
+    //   stack.  In parallel mode these go into BranchState::local_closed
+    //   (per-path memo), inherited by child tasks but NOT shared with
+    //   sibling tasks, preventing memo poisoning.
+    //
+    //   Contradiction-based UNSAT (expansion failure) is path-independent
+    //   and is always written to the global memo.
 #ifdef TCTL_USE_OPENMP
-    // Only parallelize when there are >= 2 children, depth is below
-    // the limit, and we are inside a parallel region.
-    const bool do_parallel = (n_children >= 2)
-                           && (static_cast<int>(node->depth) < par_depth_limit_)
-                           && (omp_get_num_threads() > 1)
-                           && (num_threads_ != 1);
+    const bool do_spawn = parallel_mode
+                          && (n_children > 1)
+                          && (node->depth < static_cast<std::uint32_t>(par_depth_limit_));
 #else
-    const bool do_parallel = false;
+    const bool do_spawn = false;
 #endif
 
     if (node->kind == TableauNodeKind::OR) {
         // OR node: need at least one open child.
-        if (do_parallel) {
+        if (do_spawn) {
 #ifdef TCTL_USE_OPENMP
             std::atomic<bool> any_sat{false};
             for (std::size_t ci = 0; ci < n_children; ++ci) {
@@ -689,7 +758,7 @@ bool TableauEngine::dfs(TableauNode* node, BranchState& bs) {
         }
     } else {
         // AND node: need all children open.
-        if (do_parallel) {
+        if (do_spawn) {
 #ifdef TCTL_USE_OPENMP
             std::atomic<bool> all_sat{true};
             for (std::size_t ci = 0; ci < n_children; ++ci) {
@@ -727,7 +796,14 @@ bool TableauEngine::dfs(TableauNode* node, BranchState& bs) {
     } else {
         node->status = NodeStatus::Closed;
         stats_.nodes_closed.fetch_add(1, std::memory_order_relaxed);
-        memo_entry->status.store(MemoEntry::kClosed, std::memory_order_release);
+        if (parallel_mode) {
+            // Subtree UNSAT is path-sensitive.  Store in per-path memo
+            // only; leave the global entry at kUnknown so sibling tasks
+            // are not poisoned.
+            bs.local_closed.insert(std::move(key));
+        } else {
+            memo_entry->status.store(MemoEntry::kClosed, std::memory_order_release);
+        }
     }
 
     // ── Pop from ancestor stack ─────────────────────────────────────────

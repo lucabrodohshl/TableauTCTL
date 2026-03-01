@@ -1,0 +1,331 @@
+{
+  "_meta": {
+    "description": "Publication-ready benchmark naming map for TCTL tableau solver evaluation",
+    "source_files": ["src/benchmark.cpp", "benchmark_analysis.py"],
+    "venue_target": "CAV / TACAS",
+    "generated": "2026-03-01"
+  },
+
+  "family_names": {
+    "A_depth":       "Depth Scaling",
+    "B_bounds_M":    "Max-Constant Sensitivity",
+    "C_obligations": "Concurrent Timed Obligations",
+    "D_until":       "Until Nesting",
+    "E_release":     "Release Nesting",
+    "DE_mixed":      "Mixed Until–Release",
+    "F_zeno":        "Zeno Rejection",
+    "G_clocks":      "Clock Dimensionality",
+    "H_chain":       "Eventuality Chain Length",
+    "I_alternation": "Fixpoint Alternation"
+  },
+
+  "benchmarks": {
+    "A1_untimed": {
+      "old_id": "A1_untimed",
+      "new_name": "Untimed Depth Baseline",
+      "short_label": "Untimed Baseline",
+      "family": "Depth Scaling",
+      "phenomenon": "Alternating AG/EF nesting without clocks, isolating structural depth cost from timed operations",
+      "source_location": "benchmark.cpp:96–101 (gen_depth_untimed); curves_depth.csv; plot2_depth_complexity",
+      "confidence": "high",
+      "rationale": "This benchmark provides an untimed control by alternating AG and EF operators around a single atom, measuring pure structural depth overhead without any zone operations."
+    },
+
+    "A2_overlap_sat": {
+      "old_id": "A2_overlap_sat",
+      "new_name": "Overlapping Timed Obligations (SAT)",
+      "short_label": "Overlap SAT",
+      "family": "Depth Scaling",
+      "phenomenon": "Conjunction of bounded EF obligations with overlapping timing windows and fresh atoms per conjunct",
+      "source_location": "benchmark.cpp:104–113 (gen_a2_overlap_sat); curves_depth.csv; plot2_depth_complexity",
+      "confidence": "high",
+      "rationale": "Each conjunct introduces a clock with an overlapping window, forcing zone interaction; fresh atoms prevent trivial zone collapse. The satisfiable verdict confirms a witness exists."
+    },
+
+    "A3_nested_eu": {
+      "old_id": "A3_nested_eu",
+      "new_name": "Nested Bounded Existential Until",
+      "short_label": "Nested EU",
+      "family": "Depth Scaling",
+      "phenomenon": "Deeply nested timed EU operators with fresh atoms per layer, forcing simultaneous clock tracking and eventuality checking",
+      "source_location": "benchmark.cpp:115–127 (gen_a3_nested_eu); curves_depth.csv; plot2_depth_complexity",
+      "confidence": "high",
+      "rationale": "Each nesting level allocates a fresh clock and requires eventuality fulfilment, preventing early closure and exercising the tableau's zone-eventuality interaction."
+    },
+
+    "A4_killed_unsat": {
+      "old_id": "A4_killed_unsat",
+      "new_name": "Unsatisfiable Killed Obligations",
+      "short_label": "Killed UNSAT",
+      "family": "Depth Scaling",
+      "phenomenon": "Overlapping EF obligations rendered unsatisfiable by a universally quantified AG negation of all target atoms",
+      "source_location": "benchmark.cpp:129–148 (gen_a4_killed_unsat); curves_depth.csv; plot2_depth_complexity",
+      "confidence": "high",
+      "rationale": "Layering a timed AG constraint that negates every obligation atom forces the solver to individually refute each EF, exercising exhaustive search and zone-contradiction detection."
+    },
+
+    "B1_EU_delay": {
+      "old_id": "B1_EU_delay",
+      "new_name": "Bounded Until with Mandatory Delay",
+      "short_label": "EU Delay",
+      "family": "Max-Constant Sensitivity",
+      "phenomenon": "Single bounded EU requiring symbolic time progression before satisfaction",
+      "source_location": "benchmark.cpp:150–153 (gen_b1_eu_delay); curves_bounds_M.csv; plot1_m_abstraction",
+      "confidence": "high",
+      "rationale": "The formula E(¬p₀ U[0,M] p₀) forces a non-trivial time advance before the target holds, measuring how growing M affects zone operations."
+    },
+
+    "B2_deadline_unsat": {
+      "old_id": "B2_deadline_unsat",
+      "new_name": "Deadline Conflict (UNSAT)",
+      "short_label": "Deadline UNSAT",
+      "family": "Max-Constant Sensitivity",
+      "phenomenon": "Contradictory timing constraints: a global prohibition AG[0,M] ¬p₀ versus a bounded reachability EF[1,M] p₀",
+      "source_location": "benchmark.cpp:155–164 (gen_b2_deadline_unsat); curves_bounds_M.csv; plot1_m_abstraction",
+      "confidence": "high",
+      "rationale": "The safety constraint globally forbids p₀ within the same window where an eventuality demands it, creating a structural contradiction the solver must detect across all zones."
+    },
+
+    "B3_negated_window": {
+      "old_id": "B3_negated_window",
+      "new_name": "Negated Timed Modality",
+      "short_label": "Negated Window",
+      "family": "Max-Constant Sensitivity",
+      "phenomenon": "Self-contradictory conjunction of a timed modality and its own negation, stressing normalization of negated bounded operators",
+      "source_location": "benchmark.cpp:166–170 (gen_b3_negated_window); curves_bounds_M.csv; plot1_m_abstraction",
+      "confidence": "high",
+      "rationale": "EF[0,M] p₀ ∧ ¬EF[0,M] p₀ is immediately contradictory; this tests the solver's ability to detect propositional-level timed contradictions efficiently."
+    },
+
+    "B4_chain_windows": {
+      "old_id": "B4_chain_windows",
+      "new_name": "Sequential Window Chain",
+      "short_label": "Window Chain",
+      "family": "Max-Constant Sensitivity",
+      "phenomenon": "Fixed-structure chain of consecutive EF windows whose endpoints scale with M, isolating the effect of growing interval constants",
+      "source_location": "benchmark.cpp:172–185 (gen_b4_chain_windows); curves_bounds_M.csv; plot1_m_abstraction",
+      "confidence": "high",
+      "rationale": "With fixed k=5 conjuncts and windows partitioning [0,M], only the numeric constants grow, tightening M-abstraction and forcing finer zone distinctions as M increases."
+    },
+
+    "B5_nested_chain": {
+      "old_id": "B5_nested_chain",
+      "new_name": "Nested Bounded Chain",
+      "short_label": "Nested Chain",
+      "family": "Max-Constant Sensitivity",
+      "phenomenon": "Fixed-depth nested EU chain where only the interval bound M varies, isolating max-constant impact on zone complexity",
+      "source_location": "benchmark.cpp:187–197 (gen_b5_nested_timed_chain); curves_bounds_M.csv; plot1_m_abstraction",
+      "confidence": "high",
+      "rationale": "Six nested EU operators with interval [0,M] keep the structural depth constant while raising max_constants_ per clock, stressing the extrapolation mechanism."
+    },
+
+    "B6_forced_delay": {
+      "old_id": "B6_forced_delay",
+      "new_name": "Forced Delay with Extrapolation",
+      "short_label": "Forced Delay",
+      "family": "Max-Constant Sensitivity",
+      "phenomenon": "Tight interval EF[M−1,M] p₀ requiring symbolic time advance to at least M−1, with zone extrapolation enabled",
+      "source_location": "benchmark.cpp:199–203 (gen_b6_forced_delay); curves_bounds_M.csv; plot1_m_abstraction",
+      "confidence": "high",
+      "rationale": "The narrow window forces time to reach M−1 before p₀ can hold; with extrapolation ON, M-abstraction keeps zone count bounded regardless of M's growth."
+    },
+
+    "B6_forced_delay_noextr": {
+      "old_id": "B6_forced_delay_noextr",
+      "new_name": "Forced Delay without Extrapolation",
+      "short_label": "No Extrapolation",
+      "family": "Max-Constant Sensitivity",
+      "phenomenon": "Same formula as B6 but with zone extrapolation disabled, measuring the ablation impact of M-abstraction",
+      "source_location": "benchmark.cpp:199–203 (gen_b6_forced_delay, extrapolation=false); curves_bounds_M.csv; plot1_m_abstraction",
+      "confidence": "high",
+      "rationale": "Disabling extrapolation removes the finiteness guarantee on zones, causing the zone count to grow with M and demonstrating the necessity of M-abstraction for termination."
+    },
+
+    "C1_staggered": {
+      "old_id": "C1_staggered",
+      "new_name": "Staggered Window Obligations",
+      "short_label": "Staggered",
+      "family": "Concurrent Timed Obligations",
+      "phenomenon": "k conjunctive EF obligations with staggered (non-overlapping) timing windows and fresh atoms",
+      "source_location": "benchmark.cpp:205–213 (gen_obligations_staggered); curves_obligations.csv; plot3_clock_dimensionality",
+      "confidence": "high",
+      "rationale": "Each obligation's window EF[i, i+2] uses a distinct interval, forcing the solver to track k independent clocks with non-overlapping timing constraints."
+    },
+
+    "C2_overlapping": {
+      "old_id": "C2_overlapping",
+      "new_name": "Identical Window Obligations",
+      "short_label": "Identical Windows",
+      "family": "Concurrent Timed Obligations",
+      "phenomenon": "k conjunctive EF obligations sharing the same timing window [1,3] but with distinct target atoms",
+      "source_location": "benchmark.cpp:215–222 (gen_obligations_overlapping); curves_obligations.csv; plot3_clock_dimensionality",
+      "confidence": "high",
+      "rationale": "Sharing the identical interval maximises zone overlap potential, testing whether the solver's zone operations can exploit structural redundancy when windows coincide."
+    },
+
+    "until_nested": {
+      "old_id": "until_nested",
+      "new_name": "Nested Timed Until",
+      "short_label": "Nested Until",
+      "family": "Until Nesting",
+      "phenomenon": "Progressive nesting of existential bounded-until operators with a fixed interval",
+      "source_location": "benchmark.cpp:224–231 (gen_until_nested); curves_until_release_mixed.csv; plot2_depth_complexity",
+      "confidence": "high",
+      "rationale": "Each additional nesting level allocates a clock and an eventuality obligation, measuring the cost of increasing until-depth while max-constant remains fixed."
+    },
+
+    "until_conjunctive": {
+      "old_id": "until_conjunctive",
+      "new_name": "Conjunctive Existential Until",
+      "short_label": "Conjunctive Until",
+      "family": "Until Nesting",
+      "phenomenon": "Conjunction of independent bounded-EU obligations, widening the formula rather than deepening it",
+      "source_location": "benchmark.cpp:1048–1054 (inline generator in Family D loop); curves_until_release_mixed.csv; plot2_depth_complexity",
+      "confidence": "high",
+      "rationale": "This variant grows formula width (distinct EU conjuncts) rather than depth, isolating the cost of concurrent eventuality tracking versus nested operator expansion."
+    },
+
+    "release_nested": {
+      "old_id": "release_nested",
+      "new_name": "Nested Timed Release",
+      "short_label": "Nested Release",
+      "family": "Release Nesting",
+      "phenomenon": "Progressive nesting of existential bounded-release operators, testing greatest-fixpoint handling at increasing depth",
+      "source_location": "benchmark.cpp:233–240 (gen_release_nested); curves_until_release_mixed.csv; plot2_depth_complexity",
+      "confidence": "high",
+      "rationale": "Release (greatest fixpoint) requires continuous preservation rather than eventuality fulfilment, creating a dual stress pattern to nested-until for the tableau's fixpoint handling."
+    },
+
+    "mixed": {
+      "old_id": "mixed",
+      "new_name": "Combined Until and Release",
+      "short_label": "Until + Release",
+      "family": "Mixed Until–Release",
+      "phenomenon": "Conjunction of nested-until and nested-release subformulas, forcing simultaneous least- and greatest-fixpoint resolution",
+      "source_location": "benchmark.cpp:242–246 (gen_mixed); curves_until_release_mixed.csv; plot2_depth_complexity",
+      "confidence": "high",
+      "rationale": "Combining both fixpoint types in a single formula creates the worst-case for the tableau, which must simultaneously satisfy eventuality obligations (until) and preservation requirements (release)."
+    },
+
+    "F1_ag_false": {
+      "old_id": "F1_ag_false",
+      "new_name": "Timed Safety Vacuity",
+      "short_label": "Safety Vacuity",
+      "family": "Zeno Rejection",
+      "phenomenon": "AG[1,M] false: vacuously satisfiable under Zeno semantics but correctly unsatisfiable under time-divergent acceptance",
+      "source_location": "benchmark.cpp:264–268 (gen_f1_ag_false); curves_zeno.csv; table_zeno_summary",
+      "confidence": "high",
+      "rationale": "Under Zeno semantics, time never reaches [1,M], making the AG vacuously true; the solver must detect that all non-Zeno runs falsify AG, correctly reporting UNSAT."
+    },
+
+    "F2_eg_conflict": {
+      "old_id": "F2_eg_conflict",
+      "new_name": "Zeno Path Conflict",
+      "short_label": "EG Conflict",
+      "family": "Zeno Rejection",
+      "phenomenon": "EG p₀ ∧ AG[1,M] ¬p₀: the infinite EG path with p₀ conflicts with the timed AG prohibiting p₀ in [1,M], detectable only under non-Zeno acceptance",
+      "source_location": "benchmark.cpp:270–283 (gen_f2_eg_conflict); curves_zeno.csv; table_zeno_summary",
+      "confidence": "high",
+      "rationale": "A Zeno loop keeps time below 1, avoiding the AG window; the solver must reject this loop and verify that all time-divergent paths lead to a contradiction between p₀ and ¬p₀."
+    },
+
+    "F3_stacked_zeno": {
+      "old_id": "F3_stacked_zeno",
+      "new_name": "Stacked Zeno Obligation Traps",
+      "short_label": "Stacked Traps",
+      "family": "Zeno Rejection",
+      "phenomenon": "k simultaneous AG/EG contradictions creating a multi-clock Zeno trap whose complexity grows with M",
+      "source_location": "benchmark.cpp:285–302 (gen_f3_stacked_zeno); curves_zeno.csv; table_zeno_summary",
+      "confidence": "high",
+      "rationale": "As M increases, k=M−1 obligations each allocate a clock, scaling both the zone dimension and the number of contradictions the anti-Zeno check must verify simultaneously."
+    },
+
+    "G1_conjunctive": {
+      "old_id": "G1_conjunctive",
+      "new_name": "Conjunctive Clock Scaling (SAT)",
+      "short_label": "Conjunctive SAT",
+      "family": "Clock Dimensionality",
+      "phenomenon": "k staggered EF obligations with fresh atoms, forcing k concurrent clocks and O(k²) zone operations per step",
+      "source_location": "benchmark.cpp:313–323 (gen_g1_conjunctive); curves_clocks.csv; plot3_clock_dimensionality",
+      "confidence": "high",
+      "rationale": "Staggered intervals prevent zone collapse and force the DBM dimension to k+1, measuring the quadratic cost of zone operations as clock count grows."
+    },
+
+    "G2_nested": {
+      "old_id": "G2_nested",
+      "new_name": "Nested Clock Scaling",
+      "short_label": "Nested Clocks",
+      "family": "Clock Dimensionality",
+      "phenomenon": "k-deep nested EU chain keeping all outer clocks active, preventing early clock deallocation",
+      "source_location": "benchmark.cpp:325–335 (gen_g2_nested); curves_clocks.csv; plot3_clock_dimensionality",
+      "confidence": "high",
+      "rationale": "Nesting prevents any clock from being freed until the innermost eventuality is resolved, maximising simultaneous active-clock count and stressing the zone engine."
+    },
+
+    "G3_killed": {
+      "old_id": "G3_killed",
+      "new_name": "Conjunctive Clock Scaling (UNSAT)",
+      "short_label": "Conjunctive UNSAT",
+      "family": "Clock Dimensionality",
+      "phenomenon": "Same k-clock structure as G1 but with a universal AG killer rendering all obligations unsatisfiable",
+      "source_location": "benchmark.cpp:337–354 (gen_g3_killed); curves_clocks.csv; plot3_clock_dimensionality",
+      "confidence": "high",
+      "rationale": "Adding AG[0, M+k](¬p₁ ∧ … ∧ ¬pₖ) forces full search-space exploration at each clock dimension, measuring UNSAT cost as k grows."
+    },
+
+    "H1_chain_eu": {
+      "old_id": "H1_chain_eu",
+      "new_name": "Existential Eventuality Chain (SAT)",
+      "short_label": "Chain SAT",
+      "family": "Eventuality Chain Length",
+      "phenomenon": "n-deep chain of existential bounded-until operators with fixed small M, isolating formula length from max-constant effects",
+      "source_location": "benchmark.cpp:365–373 (gen_h1_chain_eu); curves_chain.csv; plot4_structural_tests",
+      "confidence": "high",
+      "rationale": "Holding M=2 fixed, all growth comes from the chain length n; each level adds a fresh clock and atom, measuring how the number of simultaneous eventualities affects solver cost."
+    },
+
+    "H2_chain_killed": {
+      "old_id": "H2_chain_killed",
+      "new_name": "Blocked Eventuality Chain (UNSAT)",
+      "short_label": "Chain UNSAT",
+      "family": "Eventuality Chain Length",
+      "phenomenon": "Same EU chain as H1 but conjoined with AG ¬q, forcing exhaustive search since the terminal eventuality can never be fulfilled",
+      "source_location": "benchmark.cpp:375–381 (gen_h2_chain_killed); curves_chain.csv; plot4_structural_tests",
+      "confidence": "high",
+      "rationale": "The global AG ¬q prevents any EU chain from terminating successfully, forcing the solver to exhaust all branches and measuring worst-case search cost per chain length."
+    },
+
+    "I1_pure_safety": {
+      "old_id": "I1_pure_safety",
+      "new_name": "Pure Safety Nesting (Release)",
+      "short_label": "Pure Safety",
+      "family": "Fixpoint Alternation",
+      "phenomenon": "n nested universal timed release operators, testing greatest-fixpoint-only cost without eventuality overhead",
+      "source_location": "benchmark.cpp:395–402 (gen_i1_pure_safety); curves_alternation.csv; plot4_structural_tests",
+      "confidence": "high",
+      "rationale": "Using only AR (release/safety), no pending eventualities accumulate; this provides a baseline showing the cost of pure greatest-fixpoint nesting at depth n."
+    },
+
+    "I2_pure_liveness": {
+      "old_id": "I2_pure_liveness",
+      "new_name": "Pure Liveness Nesting (Until)",
+      "short_label": "Pure Liveness",
+      "family": "Fixpoint Alternation",
+      "phenomenon": "n nested universal timed until operators, requiring n simultaneous eventuality fulfilments",
+      "source_location": "benchmark.cpp:404–411 (gen_i2_pure_liveness); curves_alternation.csv; plot4_structural_tests",
+      "confidence": "high",
+      "rationale": "Using only AU (until/liveness), every nesting level creates an eventuality obligation the tableau must discharge, measuring the cost of accumulating least-fixpoint obligations."
+    },
+
+    "I3_alternating": {
+      "old_id": "I3_alternating",
+      "new_name": "Alternating Fixpoint Nesting",
+      "short_label": "Alternating",
+      "family": "Fixpoint Alternation",
+      "phenomenon": "Interleaved universal until and release operators, creating a worst-case alternation between least- and greatest-fixpoint obligations",
+      "source_location": "benchmark.cpp:413–422 (gen_i3_alternating); curves_alternation.csv; plot4_structural_tests",
+      "confidence": "high",
+      "rationale": "Alternating U/R forces the loop-acceptance check to handle competing eventualities and safety constraints simultaneously, representing the hardest case for fixpoint reasoning."
+    }
+  }
+}

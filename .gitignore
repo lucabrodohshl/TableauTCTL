@@ -8,3 +8,12 @@ doc/
 
 
 tctl_sat
+
+./venv/
+
+output_plots/
+
+
+.DS_Store
+benchmark_result_20260301_172217/
+outputs/

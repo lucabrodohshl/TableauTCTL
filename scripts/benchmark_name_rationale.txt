@@ -1,0 +1,301 @@
+============================================================
+Benchmark Renaming Rationale
+TCTL Tableau Solver — CAV Evaluation
+============================================================
+
+
+NAMING POLICY
+------------------------------------------------------------
+
+Internal benchmark identifiers such as "A2_overlap_sat", "B6_forced_delay_
+noextr", or "H2_chain_killed" are optimised for programmer readability
+during development: they are terse, use abbreviations, and embed
+implementation-level detail (e.g. "noextr" for "no extrapolation") that
+is opaque to a reader unfamiliar with the codebase.  For a publication
+targeting a formal-methods venue (CAV, TACAS), benchmark names appear in
+figure legends, table headers, captions, and running-text discussion.
+They must therefore be self-explanatory, scientifically precise, and
+consistent across families.
+
+The revised names follow four principles: (1) expose the *structural
+phenomenon* being tested rather than restating the raw code identifier;
+(2) preserve the SAT/UNSAT distinction when it is a defining property of
+the benchmark; (3) use standard temporal-logic terminology (until,
+release, fixpoint, eventuality, safety, liveness); and (4) maintain
+uniform capitalisation and phrasing across all families so that figures
+and tables read fluently.  Short labels (2–4 words) are provided for
+legend text where space is constrained; full names are used in captions,
+appendix tables, and discussion paragraphs.
+
+
+FAMILY-BY-FAMILY RATIONALE
+============================================================
+
+
+A — Depth Scaling
+------------------------------------------------------------
+
+This family measures how solver cost grows as the structural depth (or
+breadth) of the formula increases.  All four variants share the same
+parameterisation axis (depth d) but differ in modality mix, satisfiability
+status, and presence of clocks, providing a controlled comparison of
+timed versus untimed structural scaling.
+
+  Old:   A1_untimed
+  New:   Untimed Depth Baseline
+  Short: Untimed Baseline
+  Why:   The benchmark alternates AG/EF without any timed operators,
+         serving as a clock-free control.  "Baseline" conveys its role
+         as a reference point for the timed variants in the same family.
+
+  Old:   A2_overlap_sat
+  New:   Overlapping Timed Obligations (SAT)
+  Short: Overlap SAT
+  Why:   The formula is a conjunction of EF[i, i+M] obligations whose
+         windows overlap, forcing zone interaction.  The satisfiable
+         verdict is definitional: each obligation can be independently
+         scheduled.
+
+  Old:   A3_nested_eu
+  New:   Nested Bounded Existential Until
+  Short: Nested EU
+  Why:   Each nesting level wraps E(true U[1,M] ...) around fresh atoms,
+         creating simultaneous clock and eventuality obligations.
+         "Bounded Existential Until" is the standard temporal-logic
+         term for this operator.
+
+  Old:   A4_killed_unsat
+  New:   Unsatisfiable Killed Obligations
+  Short: Killed UNSAT
+  Why:   The formula adds a universal AG constraint that negates every
+         target atom, "killing" all EF obligations.  "Killed" is concise
+         and widely understood in the formal-methods community as
+         denoting a structurally blocked property.
+
+
+B — Max-Constant Sensitivity
+------------------------------------------------------------
+
+This family isolates the effect of the numeric constant M (max constant
+in timing intervals) on solver performance.  Formula structure remains
+fixed across M values; only interval endpoints grow, tightening zone
+abstraction and forcing finer zone distinctions.
+
+  Old:   B1_EU_delay
+  New:   Bounded Until with Mandatory Delay
+  Short: EU Delay
+  Why:   E(¬p₀ U[0,M] p₀) requires time to advance before satisfaction,
+         testing symbolic delay operations.
+
+  Old:   B2_deadline_unsat
+  New:   Deadline Conflict (UNSAT)
+  Short: Deadline UNSAT
+  Why:   The AG[0,M] ¬p₀ globally prevents p₀ within the same window
+         where EF[1,M] p₀ demands it.  "Deadline conflict" captures
+         the structural contradiction.
+
+  Old:   B3_negated_window
+  New:   Negated Timed Modality
+  Short: Negated Window
+  Why:   EF[0,M] p₀ ∧ ¬EF[0,M] p₀ is a propositional-level timed
+         contradiction, testing normalisation of negated bounded
+         modalities.
+
+  Old:   B4_chain_windows
+  New:   Sequential Window Chain
+  Short: Window Chain
+  Why:   k=5 EF windows partition [0,M] into consecutive segments.
+         Only the endpoints grow with M, isolating numeric-constant
+         sensitivity from structural effects.
+
+  Old:   B5_nested_chain
+  New:   Nested Bounded Chain
+  Short: Nested Chain
+  Why:   6-deep nested E(true U[0,M] ...) keeps structure fixed while
+         M raises max_constants_ per clock, stressing the extrapolation
+         mechanism.
+
+  Old:   B6_forced_delay
+  New:   Forced Delay with Extrapolation
+  Short: Forced Delay
+  Why:   EF[M−1, M] p₀ forces symbolic advance to M−1; with
+         extrapolation ON, M-abstraction bounds zone count.
+
+  Old:   B6_forced_delay_noextr
+  New:   Forced Delay without Extrapolation
+  Short: No Extrapolation
+  Why:   The ablation variant disables zone extrapolation, demonstrating
+         unbounded zone growth and the necessity of M-abstraction.
+
+
+C — Concurrent Timed Obligations
+------------------------------------------------------------
+
+This family grows the number k of simultaneous timed obligations while
+keeping interval constants small, isolating clock-pressure effects from
+max-constant sensitivity.
+
+  Old:   C1_staggered
+  New:   Staggered Window Obligations
+  Short: Staggered
+  Why:   Each EF[i, i+2] uses a distinct interval, preventing zone
+         overlap.  "Staggered" describes the non-overlapping timing
+         pattern.
+
+  Old:   C2_overlapping
+  New:   Identical Window Obligations
+  Short: Identical Windows
+  Why:   All obligations share EF[1,3], maximising zone overlap
+         potential.  "Identical" is more precise than "overlapping"
+         (which could imply partial overlap).
+
+
+D — Until Nesting
+------------------------------------------------------------
+
+This family increases the nesting depth of existential bounded-until
+operators, measuring eventuality-accumulation cost at fixed M.
+
+  Old:   until_nested
+  New:   Nested Timed Until
+  Short: Nested Until
+  Why:   Direct expansion of the abbreviation, using standard
+         temporal-logic terminology.
+
+  Old:   until_conjunctive
+  New:   Conjunctive Existential Until
+  Short: Conjunctive Until
+  Why:   This variant grows formula width (independent EU conjuncts)
+         rather than depth, providing a dual comparison axis.
+
+
+E — Release Nesting
+------------------------------------------------------------
+
+This family mirrors D but uses release (greatest fixpoint) operators,
+testing continuous-preservation obligations at increasing depth.
+
+  Old:   release_nested
+  New:   Nested Timed Release
+  Short: Nested Release
+  Why:   Direct dual of "Nested Timed Until" using the release
+         operator, maintaining terminological consistency.
+
+
+DE — Mixed Until–Release
+------------------------------------------------------------
+
+This family conjoins nested-until and nested-release subformulas,
+forcing simultaneous least- and greatest-fixpoint resolution.
+
+  Old:   mixed
+  New:   Combined Until and Release
+  Short: Until + Release
+  Why:   The formula is a conjunction of both fixpoint types,
+         creating the worst-case interaction for tableau loop
+         acceptance.
+
+
+F — Zeno Rejection
+------------------------------------------------------------
+
+These benchmarks are satisfiable under Zeno semantics but correctly
+unsatisfiable under time-divergent acceptance.  They validate the
+anti-Zeno loop-checking mechanism.
+
+  Old:   F1_ag_false
+  New:   Timed Safety Vacuity
+  Short: Safety Vacuity
+  Why:   AG[1,M] false is vacuously true only if time never enters
+         [1,M].  "Safety vacuity" describes the phenomenon: the
+         safety property holds vacuously in Zeno runs.
+
+  Old:   F2_eg_conflict
+  New:   Zeno Path Conflict
+  Short: EG Conflict
+  Why:   EG p₀ requires an infinite p₀ path; AG[1,M] ¬p₀ prohibits
+         p₀ within the timed window.  The conflict is detectable only
+         by rejecting Zeno loops.
+
+  Old:   F3_stacked_zeno
+  New:   Stacked Zeno Obligation Traps
+  Short: Stacked Traps
+  Why:   As M grows, k=M−1 AG/EG pairs each create an independent
+         Zeno trap, scaling both zone dimension and the number of
+         contradictions the anti-Zeno check must handle.
+
+
+G — Clock Dimensionality
+------------------------------------------------------------
+
+This family grows the number of simultaneously active clocks k while
+keeping M small, measuring the quadratic zone-operation cost
+(DBM dimension k+1).
+
+  Old:   G1_conjunctive
+  New:   Conjunctive Clock Scaling (SAT)
+  Short: Conjunctive SAT
+  Why:   k staggered EF obligations force k concurrent clocks; the
+         satisfiable result confirms zone operations succeed.
+
+  Old:   G2_nested
+  New:   Nested Clock Scaling
+  Short: Nested Clocks
+  Why:   k-deep nested EU prevents early clock deallocation, keeping
+         all k clocks simultaneously active.
+
+  Old:   G3_killed
+  New:   Conjunctive Clock Scaling (UNSAT)
+  Short: Conjunctive UNSAT
+  Why:   Adding an AG killer renders G1 unsatisfiable, forcing
+         exhaustive search at each clock dimension.
+
+
+H — Eventuality Chain Length
+------------------------------------------------------------
+
+This family isolates formula length (number of chained EU operators)
+from max-constant effects by holding M=2 fixed.
+
+  Old:   H1_chain_eu
+  New:   Existential Eventuality Chain (SAT)
+  Short: Chain SAT
+  Why:   n-deep E(pᵢ U[0,2] ...) chain where all growth comes from
+         chain length.
+
+  Old:   H2_chain_killed
+  New:   Blocked Eventuality Chain (UNSAT)
+  Short: Chain UNSAT
+  Why:   AG ¬q blocks the terminal eventuality, forcing exhaustive
+         search across the full chain.
+
+
+I — Fixpoint Alternation
+------------------------------------------------------------
+
+This family compares formulas of identical structure depth but different
+modality composition, all with fixed M=1 and universal quantification.
+
+  Old:   I1_pure_safety
+  New:   Pure Safety Nesting (Release)
+  Short: Pure Safety
+  Why:   n nested AR: only greatest-fixpoint (safety) obligations,
+         no eventualities to track.
+
+  Old:   I2_pure_liveness
+  New:   Pure Liveness Nesting (Until)
+  Short: Pure Liveness
+  Why:   n nested AU: every level creates an eventuality, measuring
+         pure least-fixpoint cost.
+
+  Old:   I3_alternating
+  New:   Alternating Fixpoint Nesting
+  Short: Alternating
+  Why:   Interleaved AU/AR creates the worst-case for loop acceptance,
+         as eventualities compete with safety constraints at every
+         other level.
+
+
+============================================================
+End of renaming rationale.
+============================================================

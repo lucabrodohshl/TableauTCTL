@@ -483,12 +483,15 @@ struct BenchRow {
     int         k;          // -1 = not applicable
     int         depth;      // -1 = not applicable
     std::string abstraction;
+    uint64_t    peak_memory_kb{0};
+    uint64_t    avg_memory_kb{0};
 };
 
 static void write_csv_header(std::ofstream& f) {
     f << "family,variant,param_name,param_value,formula,verdict,elapsed_s,"
          "timeout_s,nodes_generated,distinct_zones,loop_checks,seed,"
-         "num_threads,M,max_const_in_formula,k,depth,abstraction\n";
+         "num_threads,M,max_const_in_formula,k,depth,abstraction,"
+         "peak_memory_kb,avg_memory_kb\n";
 }
 
 static void write_csv_row(std::ofstream& f, const BenchRow& r) {
@@ -509,7 +512,9 @@ static void write_csv_row(std::ofstream& f, const BenchRow& r) {
       << r.max_const << ","
       << r.k << ","
       << r.depth << ","
-      << csv_esc(r.abstraction) << "\n";
+      << csv_esc(r.abstraction) << ","
+      << r.peak_memory_kb << ","
+      << r.avg_memory_kb << "\n";
 }
 
 /// Run a single benchmark instance: parse → normalize → check.
@@ -574,6 +579,10 @@ static BenchRow run_instance(const std::string& family,
         row.nodes_generated = st.nodes_created.load();
         row.distinct_zones  = st.distinct_zones.load();
         row.loop_checks     = st.loop_checks.load();
+        auto mem = st.peak_memory_bytes.load();
+        row.peak_memory_kb  = (mem + 1023) / 1024;  // ceiling
+        auto nc2 = st.nodes_created.load();
+        row.avg_memory_kb   = nc2 > 0 ? ((mem / nc2) + 1023) / 1024 : 0;
 
     } catch (const std::exception& e) {
         row.verdict         = "ERROR";
@@ -581,6 +590,8 @@ static BenchRow run_instance(const std::string& family,
         row.nodes_generated = 0;
         row.distinct_zones  = 0;
         row.loop_checks     = 0;
+        row.peak_memory_kb  = 0;
+        row.avg_memory_kb   = 0;
         std::cerr << "  [bench] ERROR on " << family << "/" << variant
                   << " param=" << param_value << ": " << e.what() << "\n";
     }

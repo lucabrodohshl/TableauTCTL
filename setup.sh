@@ -45,6 +45,21 @@ fi
 
 
 
+#create a python environment with venv 
+echo "=== Setting up Python environment ==="
+if [ ! -d "$SCRIPT_DIR/venv" ]; then
+    echo "Creating Python virtual environment..."
+    python3 -m venv "$SCRIPT_DIR/venv"
+    echo "Virtual environment created at $SCRIPT_DIR/venv"
+else
+    echo "Python virtual environment already exists."
+fi
+
+#activate the virtual environment and install required packages
+
+source "$SCRIPT_DIR/venv/bin/activate"
+pip install --upgrade pip
+pip install -r "$SCRIPT_DIR/requirements.txt"
 
 echo "=== Setup Complete ==="
 echo "Ready to build"
