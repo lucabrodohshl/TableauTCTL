@@ -19,17 +19,38 @@ message(STATUS "UDBM platform: ${UDBM_PLATFORM}")
 # ── Find Z3 ─────────────────────────────────────────────────────────────────
 # Try to find Z3 using find_package first, fallback to manual search
 find_package(Z3 QUIET)
-
 if(NOT Z3_FOUND)
-    # Manual Z3 configuration (for Homebrew on macOS)
-    set(Z3_PREFIX "/opt/homebrew/opt/z3")
-    if(EXISTS "${Z3_PREFIX}")
-        set(Z3_INCLUDE_DIRS "${Z3_PREFIX}/include")
-        set(Z3_LIBRARIES "${Z3_PREFIX}/lib/libz3.dylib")
-        message(STATUS "Found Z3 (manual): ${Z3_PREFIX}")
-    else()
-        message(FATAL_ERROR "Z3 not found. Please install via: brew install z3")
+
+    if(APPLE)
+        # Homebrew default location (Apple Silicon)
+        set(Z3_PREFIX "/opt/homebrew/opt/z3")
+
+        if(EXISTS "${Z3_PREFIX}")
+            set(Z3_INCLUDE_DIRS "${Z3_PREFIX}/include")
+            set(Z3_LIBRARIES "${Z3_PREFIX}/lib/libz3.dylib")
+            message(STATUS "Found Z3 (Homebrew macOS): ${Z3_PREFIX}")
+        else()
+            message(FATAL_ERROR "Z3 not found on macOS. Install with: brew install z3")
+        endif()
+
+    elseif(UNIX)
+        # Linux: try system paths
+        find_path(Z3_INCLUDE_DIRS z3.h
+            PATHS /usr/include /usr/local/include
+        )
+
+        find_library(Z3_LIBRARIES z3
+            PATHS /usr/lib /usr/local/lib /usr/lib/x86_64-linux-gnu
+        )
+
+        if(Z3_INCLUDE_DIRS AND Z3_LIBRARIES)
+            message(STATUS "Found Z3 (Linux system)")
+        else()
+            message(FATAL_ERROR "Z3 not found on Linux. Install with your package manager (e.g., sudo apt install z3 libz3-dev)")
+        endif()
+
     endif()
+
 endif()
 
 # ── UDBM Configuration (REQUIRED) ────────────────────────────────────────────
