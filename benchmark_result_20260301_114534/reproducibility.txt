@@ -1,0 +1,37 @@
+=== TCTL Benchmark Reproducibility Record ===
+
+timestamp: 2026-03-01 11:45:34
+command_line: --benchmark --bench-max-k 14
+
+git_commit: e1bf29d
+git_dirty: dirty
+
+compiler: Apple clang version 17.0.0 (clang-1700.3.19.1)
+clang_version: 17.0.0 (clang-1700.3.19.1)
+cpp_standard: 202002
+build_type: Release (NDEBUG defined)
+openmp: disabled
+
+uname: Darwin MacBook-Pro-di-Luca.local 25.3.0 Darwin Kernel Version 25.3.0: Wed Jan 28 20:48:41 PST 2026; root:xnu-12377.81.4~5/RELEASE_ARM64_T6041 arm64
+cpu_model: Apple M4 Pro
+cpu_cores: 12
+ram_total: 24.0 GB
+
+=== Benchmark Configuration ===
+seed: 1337
+threads: 1
+timeout_per_instance_s: 30
+warmup_runs: 2
+abstraction_mode: M
+run_ablation: yes
+memory_limit: not supported
+
+=== Parameter Ranges ===
+family_A_depth: 1..14
+family_B_M_values: 1 2 4 8 16 32 64 128 256 512 1024
+family_C_k: 1..14
+family_D_until_depth: 1..10
+family_E_release_depth: 1..10
+family_F_zeno_M: 2..16
+family_G_clocks_k: 1..10 (M=5 fixed)
+

@@ -4,6 +4,7 @@
 
 #include "tctl/cli.hpp"
 #include "tctl/ast.hpp"
+#include "tctl/benchmark.hpp"
 #include "tctl/lexer.hpp"
 #include "tctl/normalization.hpp"
 #include "tctl/parser.hpp"
@@ -31,6 +32,34 @@ Options parse_args(int argc, char* argv[]) {
 
         if (arg == "--selftest") {
             opts.selftest = true;
+        } else if (arg == "--benchmark") {
+            opts.benchmark = true;
+        } else if (arg == "--bench-timeout") {
+            if (i + 1 >= argc) throw std::runtime_error("--bench-timeout requires a number");
+            opts.bench_opts.timeout_s = std::stoi(argv[++i]);
+        } else if (arg == "--bench-seed") {
+            if (i + 1 >= argc) throw std::runtime_error("--bench-seed requires a number");
+            opts.bench_opts.seed = std::stoull(argv[++i]);
+        } else if (arg == "--bench-threads") {
+            if (i + 1 >= argc) throw std::runtime_error("--bench-threads requires a number");
+            opts.bench_opts.num_threads = std::stoi(argv[++i]);
+        } else if (arg == "--bench-max-depth") {
+            if (i + 1 >= argc) throw std::runtime_error("--bench-max-depth requires a number");
+            opts.bench_opts.max_depth = std::stoi(argv[++i]);
+        } else if (arg == "--bench-max-k") {
+            if (i + 1 >= argc) throw std::runtime_error("--bench-max-k requires a number");
+            opts.bench_opts.max_k = std::stoi(argv[++i]);
+        } else if (arg == "--bench-out") {
+            if (i + 1 >= argc) throw std::runtime_error("--bench-out requires a directory");
+            opts.bench_opts.out_dir_override = argv[++i];
+        } else if (arg == "--bench-no-ablation") {
+            opts.bench_opts.run_ablation = false;
+        } else if (arg == "--bench-abstraction") {
+            if (i + 1 >= argc) throw std::runtime_error("--bench-abstraction requires M|none|both");
+            std::string mode = argv[++i];
+            if (mode == "none") opts.bench_opts.abstraction_M_default = false;
+            else if (mode == "M" || mode == "both") opts.bench_opts.abstraction_M_default = true;
+            else throw std::runtime_error("--bench-abstraction must be M, none, or both");
         } else if (arg == "--model") {
             opts.show_model = true;
         } else if (arg == "--stats") {
@@ -77,8 +106,8 @@ Options parse_args(int argc, char* argv[]) {
         }
     }
 
-    // Validate: need either --selftest or an input file.
-    if (!opts.selftest && !opts.help && opts.input.empty()) {
+    // Validate: need either --selftest, --benchmark, or an input file.
+    if (!opts.selftest && !opts.benchmark && !opts.help && opts.input.empty()) {
         throw std::runtime_error("no input file specified (use --help for usage)");
     }
 
@@ -91,18 +120,30 @@ void print_usage(const char* program_name) {
     std::cerr
         << "Usage: " << program_name << " [OPTIONS] <input.txt>\n"
         << "       " << program_name << " --selftest\n"
+        << "       " << program_name << " --benchmark [bench-options]\n"
         << "\n"
         << "tctl satisfiability checker.\n"
         << "\n"
         << "Options:\n"
         << "  <Formula> | <input.txt>  Formula or  File with one tctl formula per line\n"
         << "  --selftest    Run built-in tests\n"
+        << "  --benchmark   Run benchmark suites (writes CSVs + reproducibility)\n"
         << "  --model       Extract Timed Automaton (UPPAAL style)\n"
         << "  --output <dir>  Directory to write extracted models (default: current)\n"
         << "  --stats       Show engine statistics\n"
         << "  --help, -h    Show this message\n"
         << "  --tot, --all, --all_formula  Conjoin all formulas in the input with AND and check as one formula\n"
         << "  --threads N, -j N  Set number of OpenMP threads (0 = auto, default)\n"
+        << "\n"
+        << "Benchmark options (use with --benchmark):\n"
+        << "  --bench-timeout <sec>     Per-instance timeout (default: 30)\n"
+        << "  --bench-seed <int>        Random seed (default: 1337)\n"
+        << "  --bench-threads <n>       Number of threads (default: 1)\n"
+        << "  --bench-max-depth <n>     Family A max depth (default: 14)\n"
+        << "  --bench-max-k <n>         Family C max k (default: 16)\n"
+        << "  --bench-out <dir>         Output directory (default: auto-timestamped)\n"
+        << "  --bench-no-ablation       Disable ablation runs\n"
+        << "  --bench-abstraction <M|none|both>  Abstraction mode (default: M)\n"
         << "\n"
         << "Input format:\n"
         << "  - One formula per line\n"
@@ -118,6 +159,11 @@ int run(const Options& opts) {
     // ── Handle --selftest ───────────────────────────────────────────────
     if (opts.selftest) {
         return run_selftests();
+    }
+
+    // ── Handle --benchmark ──────────────────────────────────────────────
+    if (opts.benchmark) {
+        return run_benchmarks(opts.bench_opts);
     }
 
     // ── Read input file ─────────────────────────────────────────────────

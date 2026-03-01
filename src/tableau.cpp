@@ -125,7 +125,8 @@ std::string TableauStats::to_string() const {
         << " closed=" << nodes_closed.load()
         << " max_depth=" << max_depth.load()
         << " memo_hits=" << memo_hits.load()
-        << " loop_checks=" << loop_checks.load();
+        << " loop_checks=" << loop_checks.load()
+        << " distinct_zones=" << distinct_zones.load();
     return oss.str();
 }
 
@@ -465,7 +466,9 @@ std::string TableauEngine::compute_zone_key(const TableauNode* node) const {
             key_zone.free(clk);
         }
     }
-    key_zone.extrapolate(max_constants_);
+    if (extrapolation_enabled_) {
+        key_zone.extrapolate(max_constants_);
+    }
     return zone_canonical_string(key_zone);
 }
 
@@ -581,6 +584,12 @@ bool TableauEngine::dfs(TableauNode* node, BranchState& bs) {
         // Double-check: another thread may have inserted between our
         // check above and now.
         auto [it, inserted] = memo_.emplace(key, memo_entry);
+        if (inserted) {
+            // Track distinct zone keys for statistics.
+            if (!zone_key.empty()) {
+                stats_.distinct_zones.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
         if (!inserted) {
             memo_entry = it->second;
             int st = memo_entry->status.load(std::memory_order_acquire);

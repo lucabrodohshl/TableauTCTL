@@ -106,6 +106,7 @@ set(SOURCES
     src/cli.cpp
     src/utils.cpp
     src/test.cpp
+    src/benchmark.cpp
     src/main.cpp
 )
 

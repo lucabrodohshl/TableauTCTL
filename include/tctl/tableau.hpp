@@ -226,12 +226,13 @@ struct TableauStats {
     std::atomic<std::uint32_t> memo_hits{0};
     std::atomic<std::uint32_t> loop_checks{0};
     std::atomic<std::uint32_t> eventualities_checked{0};
+    std::atomic<std::uint32_t> distinct_zones{0};
 
     /// Reset all counters to zero.
     void reset() noexcept {
         nodes_created = 0; nodes_closed = 0; nodes_open = 0;
         max_depth = 0; memo_hits = 0; loop_checks = 0;
-        eventualities_checked = 0;
+        eventualities_checked = 0; distinct_zones = 0;
     }
 
     /// Atomically update max_depth if d is larger.
@@ -310,6 +311,10 @@ public:
     /// Below this depth tasks are spawned; above, sequential.
     void set_par_depth_limit(int d) { par_depth_limit_ = d; }
 
+    /// Enable/disable zone extrapolation in compute_zone_key().
+    /// When disabled, increasing M produces finer zone distinctions.
+    void set_extrapolation(bool enable) { extrapolation_enabled_ = enable; }
+
     // ── TCTL clock allocation ───────────────────────────────────────────
     std::unordered_map<FormulaId, ClockId> clock_of_;
     std::size_t num_clocks_ = 1;  // including reference clock 0
@@ -320,6 +325,9 @@ public:
 
     /// Return statistics about the last run.
     std::string stats() const;
+
+    /// Expose raw statistics struct (for benchmark/CSV output).
+    const TableauStats& get_stats() const { return stats_; }
 
     /// Enable/disable model extraction.
     void set_extract_model(bool enable) { extract_model_ = enable; }
@@ -433,6 +441,9 @@ private:
     // OpenMP configuration.
     int num_threads_ = 0;        // 0 = OMP default
     int par_depth_limit_ = 64;   // only spawn tasks at depth < limit
+
+    // Zone extrapolation toggle (default: enabled).
+    bool extrapolation_enabled_ = true;
 };
 
 }  // namespace tctl
