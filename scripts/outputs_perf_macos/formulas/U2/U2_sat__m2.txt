@@ -1,0 +1,2 @@
+# U2/U2_sat  m=2  expected=SAT
+AG[0,4] (p1 | p2)

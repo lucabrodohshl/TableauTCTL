@@ -1,0 +1,15 @@
+\begin{table}[t]\centering
+\caption{\textbf{RQ2 practical envelope for flat \textsc{Uppaal}-shaped queries.} Worst-case resources across the entire size ($m$) and time-bound ($b$) sweep, per shape; all $217$ instances were solved, none timed out.}\label{tab:perf-rq2}
+\small\setlength{\tabcolsep}{5pt}
+\begin{tabular}{llllrrrr}
+\toprule
+Shape & TCTL form & $m$ & $b$ & max $t$(s) & max nodes & max zones & max mem(kB) \\
+\midrule
+Reachability (EF) & $\mathrm{EF}_{[0,b]}\,\Phi$ & 1--1024 & 1--1048576 & 6.66 & 2{,}049 & 1{,}025 & 800 \\
+Safety (AG) & $\mathrm{AG}_{[0,b]}\,\Phi$ & 1--1024 & 1--1048576 & 6.84 & 2{,}053 & 1{,}027 & 994 \\
+Bounded liveness (AF) & $\mathrm{AF}_{[1,b]}\,\Phi$ & 1--1024 & 2--1048576 & 19.12 & 4{,}101 & 3{,}074 & 1{,}602 \\
+Leads-to (AG$\to$AF) & $\mathrm{AG}(p\!\to\!\mathrm{AF}_{[1,b]}q)$ & 1--1024 & 2--1048576 & 7.28 & 444 & 317 & 366 \\
+E[\,] (EG) & $\mathrm{EG}_{[0,\infty)}\,\Phi$ & 1--1024 & -- & 6.97 & 7 & 4 & 147 \\
+\bottomrule
+\end{tabular}
+\end{table}

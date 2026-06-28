@@ -1,0 +1,2 @@
+# DEPTH/DEPTH_unsat  d=3  expected=UNSAT
+AG[0,2] (E(p U[1,3] (AG[0,2] (E(p U[1,3] (AG[0,2] (E(p U[1,3] (q))))))))) & AG[0,10] (!q)

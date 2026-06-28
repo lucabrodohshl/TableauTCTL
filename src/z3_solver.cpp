@@ -4,9 +4,27 @@
 
 #include "tctl/z3_solver.hpp"
 
+#include <set>
 #include <stdexcept>
 
 namespace tctl {
+
+// Variable names that are Real-sorted (clocks) rather than Int.  Populated once
+// from the CLI (--real-vars); read-only afterwards.
+static std::set<std::string> g_real_vars;
+
+void set_real_vars(const std::vector<std::string>& names) {
+    g_real_vars = std::set<std::string>(names.begin(), names.end());
+}
+
+// Coerce a numeric pair to a common sort: if either operand is Real, lift the
+// Int side(s) to Real (Z3 does not auto-coerce in the C++ operators).
+static void unify_real(z3::context& ctx, z3::expr& a, z3::expr& b) {
+    if (a.is_real() || b.is_real()) {
+        if (a.is_int()) a = z3::expr(ctx, Z3_mk_int2real(ctx, a));
+        if (b.is_int()) b = z3::expr(ctx, Z3_mk_int2real(ctx, b));
+    }
+}
 
 // ── Z3Checker ───────────────────────────────────────────────────────────────
 
@@ -26,8 +44,10 @@ z3::expr Z3Checker::get_int_var(const std::string& name) {
     if (it != int_vars_.end()) {
         return *it->second;
     }
-    // Create new integer variable
-    auto var = std::make_unique<z3::expr>(ctx_.int_const(name.c_str()));
+    // Create a new variable: Real-sorted if declared a clock, else Int.
+    auto var = std::make_unique<z3::expr>(
+        g_real_vars.count(name) ? ctx_.real_const(name.c_str())
+                                : ctx_.int_const(name.c_str()));
     z3::expr result = *var;
     int_vars_[name] = std::move(var);
     return result;
@@ -162,19 +182,22 @@ z3::expr Z3Checker::to_z3_expr(FormulaId id) {
         case NodeKind::IntPlus: {
             z3::expr lhs = to_z3_expr(n.children[0]);
             z3::expr rhs = to_z3_expr(n.children[1]);
-            return lhs + rhs;
+            unify_real(ctx_, lhs, rhs);
+        return lhs + rhs;
         }
 
         case NodeKind::IntMinus: {
             z3::expr lhs = to_z3_expr(n.children[0]);
             z3::expr rhs = to_z3_expr(n.children[1]);
-            return lhs - rhs;
+            unify_real(ctx_, lhs, rhs);
+        return lhs - rhs;
         }
 
         case NodeKind::IntTimes: {
             z3::expr lhs = to_z3_expr(n.children[0]);
             z3::expr rhs = to_z3_expr(n.children[1]);
-            return lhs * rhs;
+            unify_real(ctx_, lhs, rhs);
+        return lhs * rhs;
         }
 
         default:
@@ -190,31 +213,36 @@ z3::expr Z3Checker::to_z3_constraint(FormulaId id) {
         case NodeKind::IntLessEq: {
             z3::expr lhs = to_z3_expr(n.children[0]);
             z3::expr rhs = to_z3_expr(n.children[1]);
-            return lhs <= rhs;
+            unify_real(ctx_, lhs, rhs);
+        return lhs <= rhs;
         }
 
         case NodeKind::IntLess: {
             z3::expr lhs = to_z3_expr(n.children[0]);
             z3::expr rhs = to_z3_expr(n.children[1]);
-            return lhs < rhs;
+            unify_real(ctx_, lhs, rhs);
+        return lhs < rhs;
         }
 
         case NodeKind::IntGreaterEq: {
             z3::expr lhs = to_z3_expr(n.children[0]);
             z3::expr rhs = to_z3_expr(n.children[1]);
-            return lhs >= rhs;
+            unify_real(ctx_, lhs, rhs);
+        return lhs >= rhs;
         }
 
         case NodeKind::IntGreater: {
             z3::expr lhs = to_z3_expr(n.children[0]);
             z3::expr rhs = to_z3_expr(n.children[1]);
-            return lhs > rhs;
+            unify_real(ctx_, lhs, rhs);
+        return lhs > rhs;
         }
 
         case NodeKind::IntEqual: {
             z3::expr lhs = to_z3_expr(n.children[0]);
             z3::expr rhs = to_z3_expr(n.children[1]);
-            return lhs == rhs;
+            unify_real(ctx_, lhs, rhs);
+        return lhs == rhs;
         }
 
         default:

@@ -12,6 +12,7 @@
 #include "tctl/test.hpp"
 #include "tctl/timed_automaton.hpp"
 #include "tctl/utils.hpp"
+#include "tctl/z3_solver.hpp"
 
 #include <cstdlib>
 #include <filesystem>
@@ -19,6 +20,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace tctl {
 
@@ -64,6 +66,19 @@ Options parse_args(int argc, char* argv[]) {
             opts.show_model = true;
         } else if (arg == "--stats" || arg == "--show-stats") {
             opts.show_stats = true;
+        } else if (arg == "--real-vars") {
+            if (i + 1 >= argc) {
+                throw std::runtime_error("--real-vars requires a comma-separated list");
+            }
+            std::string list = argv[++i];
+            std::vector<std::string> names;
+            std::string cur;
+            for (char c : list) {
+                if (c == ',') { if (!cur.empty()) names.push_back(cur); cur.clear(); }
+                else if (c != ' ') cur.push_back(c);
+            }
+            if (!cur.empty()) names.push_back(cur);
+            set_real_vars(names);
         } else if (arg == "--help" || arg == "-h") {
             opts.help = true;
         } else if (arg == "--output") {

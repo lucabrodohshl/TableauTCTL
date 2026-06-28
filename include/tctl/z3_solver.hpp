@@ -33,6 +33,11 @@
 
 namespace tctl {
 
+// Declare which variable names are Real-sorted (clocks) rather than Int.
+// Set once (e.g. from the CLI --real-vars flag) before solving; read-only
+// afterwards, so concurrent reads from benchmark threads are safe.
+void set_real_vars(const std::vector<std::string>& names);
+
 // ── Z3Result ────────────────────────────────────────────────────────────────
 
 enum class Z3Result {

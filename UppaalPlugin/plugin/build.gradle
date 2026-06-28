@@ -1,0 +1,69 @@
+// ===========================================================================
+// TCTL "Check Satisfiability" — UPPAAL plugin build
+// Pattern follows UrPal (utwente-fmt/UrPal): flatDir on $UPPAAL_ROOT for the
+// UPPAAL jars (model.jar etc.), Java 8, a manifest naming the plugin class, and
+// deployLocal / runUppaal helper tasks.
+//
+//   export UPPAAL_ROOT=/path/to/uppaal        # the dir containing libs/model.jar
+//   ./gradlew deployLocal                     # build + copy jar to $UPPAAL_ROOT/plugins
+//   ./gradlew runUppaal                       # build + deploy + launch UPPAAL
+// ===========================================================================
+
+plugins {
+    id 'java-library'
+}
+
+// Target Java 11: UPPAAL 5.0.0's own classes are bytecode major 55 (Java 11), so
+// 11 is the safe ceiling for a plugin loaded into its JVM. Using
+// source/targetCompatibility (not a toolchain) lets the installed JDK compile
+// with --release 11 without trying to provision a separate JDK.
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+def uppaalRoot = System.env.UPPAAL_ROOT
+
+repositories {
+    mavenCentral()
+    // UPPAAL 5.x layout: uppaal.jar (the plugin API: com.uppaal.plugin.*) sits at
+    // $UPPAAL_ROOT, while model.jar (com.uppaal.model.*) and the rest are in
+    // $UPPAAL_ROOT/lib  (NB: 'lib', singular, on UPPAAL 5.0.0 for macOS).
+    flatDir { dirs "${uppaalRoot}", "${uppaalRoot}/lib" }
+}
+
+dependencies {
+    // Provided by the running UPPAAL GUI — compile against, do NOT bundle.
+    compileOnly name: 'uppaal'   // com.uppaal.plugin.{Plugin,PluginWorkspace,Registry}
+    compileOnly name: 'model'    // com.uppaal.model.*  (Document, queries, XML writer)
+    implementation 'commons-io:commons-io:2.11.0'
+}
+
+jar {
+    archiveBaseName = 'tctl-satcheck'
+    manifest {
+        // The UPPAAL plugin loader reads this attribute to find the entry class.
+        attributes('Uppaal-Plugin': 'tctl.uppaal.SatPlugin')
+    }
+    // The engine (uppaal2tctl.py, checksat.py, tctl_sat) lives under
+    // src/main/resources/engine/ and is bundled automatically by the Java plugin,
+    // landing at /engine/ in the jar (where SatRunner extracts it).
+}
+
+// Copy the built jar (and the engine resources) into $UPPAAL_ROOT/plugins.
+tasks.register('deployLocal', Copy) {
+    dependsOn jar
+    doFirst {
+        if (uppaalRoot == null) throw new GradleException('set UPPAAL_ROOT')
+        new File("${uppaalRoot}/plugins").mkdirs()
+    }
+    from jar.archiveFile
+    into "${uppaalRoot}/plugins"
+}
+
+// Build + deploy + launch UPPAAL (uppaal launcher script under $UPPAAL_ROOT).
+tasks.register('runUppaal', Exec) {
+    dependsOn 'deployLocal'
+    workingDir = "${uppaalRoot}"
+    commandLine 'sh', '-c', './uppaal || ./uppaal.sh'
+}

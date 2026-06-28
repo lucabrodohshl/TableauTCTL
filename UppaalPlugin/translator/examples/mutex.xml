@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE nta PUBLIC '-//Uppaal Team//DTD Flat System 1.6//EN' 'http://www.it.uu.se/research/group/darts/uppaal/flat-1_6.dtd'>
+<nta>
+<declaration>
+clock gclk;
+int[0,5] counter;
+const int MAX = 3;
+bool flag;
+</declaration>
+<template>
+  <name>Proc</name>
+  <declaration>clock x; int[0,10] v;</declaration>
+  <location id="id0"><name>idle</name></location>
+  <location id="id1"><name>wait</name></location>
+  <location id="id2"><name>crit</name></location>
+  <init ref="id0"/>
+</template>
+<system>
+p0 = Proc();
+p1 = Proc();
+system p0, p1;
+</system>
+</nta>

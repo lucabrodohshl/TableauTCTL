@@ -265,7 +265,7 @@ def fig_f2_drivers(df, plotdir):
     if rq1.empty:
         print("[plot] F2 skipped: no RQ1 rows")
         return
-    fig, axes = plt.subplots(2, 2, figsize=(10.5, 8.0))
+    fig, axes = plt.subplots(2, 2, figsize=(7.5, 5.0))
     (a, b), (c, d) = axes
 
     _panel_time(a, df, "DEPTH", False, "(a) depth $d$  [F1]", r"nesting depth $d$")
@@ -297,8 +297,7 @@ def fig_f2_drivers(df, plotdir):
     if drew:
         d.legend(frameon=True, edgecolor="0.7", fontsize=7)
 
-    fig.suptitle("F2  -  RQ1 drivers: depth & clocks are walls; $M$ and size are absorbed",
-                 fontsize=12)
+    #fig.suptitle("F2  -  RQ1 drivers: depth & clocks are walls; $M$ and size are absorbed",             fontsize=12)
     fig.tight_layout(rect=(0, 0, 1, 0.96))
     _save(fig, plotdir, "F2_drivers")
     print("[plot]   F2_drivers")

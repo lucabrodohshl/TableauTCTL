@@ -1,0 +1,2 @@
+# U1/U1_sat  m=8  expected=SAT
+EF[0,4] (q1 | q2 | q3 | q4 | q5 | q6 | q7 | q8)
