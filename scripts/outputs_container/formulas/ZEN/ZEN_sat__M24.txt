@@ -1,0 +1,2 @@
+# ZEN/ZEN_sat  M=24  expected=SAT
+EG p & AF[1,24] (q)

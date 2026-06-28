@@ -7,9 +7,12 @@
 // can point the user to the exact location of a problem.
 //
 // Recognised tokens:
-//   Identifiers  [A-Za-z_][A-Za-z0-9_]*   (includes "true", "false", "EX",
-//                                            "AX", "EF", "AF", "EG", "AG",
-//                                            "E", "A", "U" as keywords)
+//   Identifiers  [A-Za-z_][A-Za-z0-9_]*   (includes "true", "false", "EF",
+//                                            "AF", "EG", "AG", "E", "A", "U",
+//                                            "R" as keywords)
+//   Reserved     "EX", "AX"   — tokenised but rejected by the parser: TCTL
+//                              has no next operator (they survive only as
+//                              internal tableau markers, not object syntax).
 //   Symbols      !  &  |  (  )  ->  <->
 //   EOF          end-of-input sentinel
 //
@@ -47,8 +50,8 @@ enum class TokenKind : std::uint8_t {
     KwFalse,        // "false"
 
     // Temporal keywords
-    KwEX,           // "EX"
-    KwAX,           // "AX"
+    KwEX,           // "EX"  — reserved; rejected by parser (no next operator)
+    KwAX,           // "AX"  — reserved; rejected by parser (no next operator)
     KwEF,           // "EF"
     KwAF,           // "AF"
     KwEG,           // "EG"

@@ -1,0 +1,2 @@
+# DCM/DCM_unsat  M=2048  expected=UNSAT
+AG[0,4096] (E(p U[2048,4096] (q))) & AG[0,4097] (!q)

@@ -1,0 +1,2 @@
+# NRL/NRL_sat  depth=11  expected=SAT
+E(false R[1,3] (E(false R[1,3] (E(false R[1,3] (E(false R[1,3] (E(false R[1,3] (E(false R[1,3] (E(false R[1,3] (E(false R[1,3] (E(false R[1,3] (E(false R[1,3] (E(false R[1,3] (p))))))))))))))))))))))

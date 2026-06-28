@@ -1,0 +1,2 @@
+# U3/U3_sat  b=128  expected=SAT
+AF[1,128] (q1 | q2 | q3 | q4)

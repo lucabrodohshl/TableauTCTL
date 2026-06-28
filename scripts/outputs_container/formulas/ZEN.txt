@@ -1,0 +1,79 @@
+# Family ZEN - all generated formulas (one per line)
+# ZEN_unsat_eg  M=2  expected=UNSAT
+EG p & AG[1,2] (!p)
+# ZEN_unsat_eg  M=3  expected=UNSAT
+EG p & AG[1,3] (!p)
+# ZEN_unsat_eg  M=4  expected=UNSAT
+EG p & AG[1,4] (!p)
+# ZEN_unsat_eg  M=6  expected=UNSAT
+EG p & AG[1,6] (!p)
+# ZEN_unsat_eg  M=8  expected=UNSAT
+EG p & AG[1,8] (!p)
+# ZEN_unsat_eg  M=12  expected=UNSAT
+EG p & AG[1,12] (!p)
+# ZEN_unsat_eg  M=16  expected=UNSAT
+EG p & AG[1,16] (!p)
+# ZEN_unsat_eg  M=24  expected=UNSAT
+EG p & AG[1,24] (!p)
+# ZEN_unsat_eg  M=32  expected=UNSAT
+EG p & AG[1,32] (!p)
+# ZEN_unsat_eg  M=48  expected=UNSAT
+EG p & AG[1,48] (!p)
+# ZEN_unsat_eg  M=64  expected=UNSAT
+EG p & AG[1,64] (!p)
+# ZEN_unsat_eg  M=96  expected=UNSAT
+EG p & AG[1,96] (!p)
+# ZEN_unsat_eg  M=128  expected=UNSAT
+EG p & AG[1,128] (!p)
+# ZEN_unsat_false  M=2  expected=UNSAT
+AG[1,2] false
+# ZEN_unsat_false  M=3  expected=UNSAT
+AG[1,3] false
+# ZEN_unsat_false  M=4  expected=UNSAT
+AG[1,4] false
+# ZEN_unsat_false  M=6  expected=UNSAT
+AG[1,6] false
+# ZEN_unsat_false  M=8  expected=UNSAT
+AG[1,8] false
+# ZEN_unsat_false  M=12  expected=UNSAT
+AG[1,12] false
+# ZEN_unsat_false  M=16  expected=UNSAT
+AG[1,16] false
+# ZEN_unsat_false  M=24  expected=UNSAT
+AG[1,24] false
+# ZEN_unsat_false  M=32  expected=UNSAT
+AG[1,32] false
+# ZEN_unsat_false  M=48  expected=UNSAT
+AG[1,48] false
+# ZEN_unsat_false  M=64  expected=UNSAT
+AG[1,64] false
+# ZEN_unsat_false  M=96  expected=UNSAT
+AG[1,96] false
+# ZEN_unsat_false  M=128  expected=UNSAT
+AG[1,128] false
+# ZEN_sat  M=2  expected=SAT
+EG p & AF[1,2] (q)
+# ZEN_sat  M=3  expected=SAT
+EG p & AF[1,3] (q)
+# ZEN_sat  M=4  expected=SAT
+EG p & AF[1,4] (q)
+# ZEN_sat  M=6  expected=SAT
+EG p & AF[1,6] (q)
+# ZEN_sat  M=8  expected=SAT
+EG p & AF[1,8] (q)
+# ZEN_sat  M=12  expected=SAT
+EG p & AF[1,12] (q)
+# ZEN_sat  M=16  expected=SAT
+EG p & AF[1,16] (q)
+# ZEN_sat  M=24  expected=SAT
+EG p & AF[1,24] (q)
+# ZEN_sat  M=32  expected=SAT
+EG p & AF[1,32] (q)
+# ZEN_sat  M=48  expected=SAT
+EG p & AF[1,48] (q)
+# ZEN_sat  M=64  expected=SAT
+EG p & AF[1,64] (q)
+# ZEN_sat  M=96  expected=SAT
+EG p & AF[1,96] (q)
+# ZEN_sat  M=128  expected=SAT
+EG p & AF[1,128] (q)

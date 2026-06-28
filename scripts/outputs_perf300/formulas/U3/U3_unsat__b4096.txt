@@ -1,0 +1,2 @@
+# U3/U3_unsat  b=4096  expected=UNSAT
+AF[1,4096] (q) & AG[0,4096] (!q)

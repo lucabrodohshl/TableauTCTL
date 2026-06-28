@@ -1,0 +1,2 @@
+# NRL/NRL_unsat  depth=9  expected=UNSAT
+E(false R[1,3] (E(false R[1,3] (E(false R[1,3] (E(false R[1,3] (E(false R[1,3] (E(false R[1,3] (E(false R[1,3] (E(false R[1,3] (E(false R[1,3] (false))))))))))))))))))

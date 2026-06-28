@@ -1,0 +1,2 @@
+# MSC/MSC_sat  M=2048  expected=SAT
+E(true U[2047,2048] (E(true U[2047,2048] (E(true U[2047,2048] (p))))))

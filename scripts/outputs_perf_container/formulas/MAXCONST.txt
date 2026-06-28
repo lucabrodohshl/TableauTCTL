@@ -1,0 +1,55 @@
+# Family MAXCONST - all generated formulas (one per line)
+# MAXCONST_sat  M=2  expected=SAT
+AG[0,4] (E(p U[2,4] (q))) & AG[0,1] (!q)
+# MAXCONST_sat  M=4  expected=SAT
+AG[0,8] (E(p U[4,8] (q))) & AG[0,3] (!q)
+# MAXCONST_sat  M=8  expected=SAT
+AG[0,16] (E(p U[8,16] (q))) & AG[0,7] (!q)
+# MAXCONST_sat  M=16  expected=SAT
+AG[0,32] (E(p U[16,32] (q))) & AG[0,15] (!q)
+# MAXCONST_sat  M=32  expected=SAT
+AG[0,64] (E(p U[32,64] (q))) & AG[0,31] (!q)
+# MAXCONST_sat  M=64  expected=SAT
+AG[0,128] (E(p U[64,128] (q))) & AG[0,63] (!q)
+# MAXCONST_sat  M=128  expected=SAT
+AG[0,256] (E(p U[128,256] (q))) & AG[0,127] (!q)
+# MAXCONST_sat  M=256  expected=SAT
+AG[0,512] (E(p U[256,512] (q))) & AG[0,255] (!q)
+# MAXCONST_sat  M=512  expected=SAT
+AG[0,1024] (E(p U[512,1024] (q))) & AG[0,511] (!q)
+# MAXCONST_sat  M=1024  expected=SAT
+AG[0,2048] (E(p U[1024,2048] (q))) & AG[0,1023] (!q)
+# MAXCONST_sat  M=2048  expected=SAT
+AG[0,4096] (E(p U[2048,4096] (q))) & AG[0,2047] (!q)
+# MAXCONST_sat  M=4096  expected=SAT
+AG[0,8192] (E(p U[4096,8192] (q))) & AG[0,4095] (!q)
+# MAXCONST_sat  M=8192  expected=SAT
+AG[0,16384] (E(p U[8192,16384] (q))) & AG[0,8191] (!q)
+# MAXCONST_unsat  M=1  expected=UNSAT
+AG[0,2] (E(p U[1,2] (q))) & AG[0,3] (!q)
+# MAXCONST_unsat  M=2  expected=UNSAT
+AG[0,4] (E(p U[2,4] (q))) & AG[0,5] (!q)
+# MAXCONST_unsat  M=4  expected=UNSAT
+AG[0,8] (E(p U[4,8] (q))) & AG[0,9] (!q)
+# MAXCONST_unsat  M=8  expected=UNSAT
+AG[0,16] (E(p U[8,16] (q))) & AG[0,17] (!q)
+# MAXCONST_unsat  M=16  expected=UNSAT
+AG[0,32] (E(p U[16,32] (q))) & AG[0,33] (!q)
+# MAXCONST_unsat  M=32  expected=UNSAT
+AG[0,64] (E(p U[32,64] (q))) & AG[0,65] (!q)
+# MAXCONST_unsat  M=64  expected=UNSAT
+AG[0,128] (E(p U[64,128] (q))) & AG[0,129] (!q)
+# MAXCONST_unsat  M=128  expected=UNSAT
+AG[0,256] (E(p U[128,256] (q))) & AG[0,257] (!q)
+# MAXCONST_unsat  M=256  expected=UNSAT
+AG[0,512] (E(p U[256,512] (q))) & AG[0,513] (!q)
+# MAXCONST_unsat  M=512  expected=UNSAT
+AG[0,1024] (E(p U[512,1024] (q))) & AG[0,1025] (!q)
+# MAXCONST_unsat  M=1024  expected=UNSAT
+AG[0,2048] (E(p U[1024,2048] (q))) & AG[0,2049] (!q)
+# MAXCONST_unsat  M=2048  expected=UNSAT
+AG[0,4096] (E(p U[2048,4096] (q))) & AG[0,4097] (!q)
+# MAXCONST_unsat  M=4096  expected=UNSAT
+AG[0,8192] (E(p U[4096,8192] (q))) & AG[0,8193] (!q)
+# MAXCONST_unsat  M=8192  expected=UNSAT
+AG[0,16384] (E(p U[8192,16384] (q))) & AG[0,16385] (!q)

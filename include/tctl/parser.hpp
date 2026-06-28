@@ -10,20 +10,23 @@
 //   or_expr     ::= and_expr  ( '|'   and_expr )*         (left-assoc)
 //   and_expr    ::= unary     ( '&'   unary )*            (left-assoc)
 //   unary       ::= '!' unary
-//                  | 'EX' unary
-//                  | 'AX' unary
-//                  | 'EF' unary
-//                  | 'AF' unary
-//                  | 'EG' unary
-//                  | 'AG' unary
+//                  | 'EF' unary | 'EF' '[' interval ']' unary
+//                  | 'AF' unary | 'AF' '[' interval ']' unary
+//                  | 'EG' unary | 'EG' '[' interval ']' unary
+//                  | 'AG' unary | 'AG' '[' interval ']' unary
 //                  | primary
 //   primary     ::= 'true' | 'false' | IDENTIFIER
-//                  | 'E' '(' formula 'U' formula ')'
-//                  | 'A' '(' formula 'U' formula ')'
+//                  | 'E' '(' formula ('U'|'R') ['[' interval ']'] formula ')'
+//                  | 'A' '(' formula ('U'|'R') ['[' interval ']'] formula ')'
 //                  | '(' formula ')'
 //
+// NOTE: TCTL (as defined here) has NO next operator.  'EX' and 'AX' are NOT
+// object-language operators: they are reserved words the parser rejects, and
+// survive only as INTERNAL tableau markers (existential / universal "next"
+// produced by a pursuit and consumed by successor generation in tableau.cpp).
+//
 // Precedence (highest → lowest):
-//   1. !, EX, AX, EF, AF, EG, AG   (unary prefix)
+//   1. !, EF, AF, EG, AG            (unary prefix)
 //   2. &                            (left-assoc)
 //   3. |                            (left-assoc)
 //   4. ->                           (right-assoc)

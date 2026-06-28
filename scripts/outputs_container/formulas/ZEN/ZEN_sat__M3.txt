@@ -1,0 +1,2 @@
+# ZEN/ZEN_sat  M=3  expected=SAT
+EG p & AF[1,3] (q)

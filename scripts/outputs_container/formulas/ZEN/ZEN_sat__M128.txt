@@ -1,0 +1,2 @@
+# ZEN/ZEN_sat  M=128  expected=SAT
+EG p & AF[1,128] (q)

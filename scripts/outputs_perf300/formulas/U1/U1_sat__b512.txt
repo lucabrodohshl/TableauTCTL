@@ -1,0 +1,2 @@
+# U1/U1_sat  b=512  expected=SAT
+EF[0,512] (q1 | q2 | q3 | q4)

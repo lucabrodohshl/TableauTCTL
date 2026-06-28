@@ -1,0 +1,49 @@
+# Family NUN - all generated formulas (one per line)
+# NUN_sat  depth=1  expected=SAT
+E(true U[1,3] (p))
+# NUN_sat  depth=2  expected=SAT
+E(true U[1,3] (E(true U[1,3] (p))))
+# NUN_sat  depth=3  expected=SAT
+E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (p))))))
+# NUN_sat  depth=4  expected=SAT
+E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (p))))))))
+# NUN_sat  depth=5  expected=SAT
+E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (p))))))))))
+# NUN_sat  depth=6  expected=SAT
+E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (p))))))))))))
+# NUN_sat  depth=7  expected=SAT
+E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (p))))))))))))))
+# NUN_sat  depth=8  expected=SAT
+E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (p))))))))))))))))
+# NUN_sat  depth=9  expected=SAT
+E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (p))))))))))))))))))
+# NUN_sat  depth=10  expected=SAT
+E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (p))))))))))))))))))))
+# NUN_sat  depth=11  expected=SAT
+E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (p))))))))))))))))))))))
+# NUN_sat  depth=12  expected=SAT
+E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (p))))))))))))))))))))))))
+# NUN_unsat  depth=1  expected=UNSAT
+E(true U[1,3] (p)) & AG[0,4] (!p)
+# NUN_unsat  depth=2  expected=UNSAT
+E(true U[1,3] (E(true U[1,3] (p)))) & AG[0,7] (!p)
+# NUN_unsat  depth=3  expected=UNSAT
+E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (p)))))) & AG[0,10] (!p)
+# NUN_unsat  depth=4  expected=UNSAT
+E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (p)))))))) & AG[0,13] (!p)
+# NUN_unsat  depth=5  expected=UNSAT
+E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (p)))))))))) & AG[0,16] (!p)
+# NUN_unsat  depth=6  expected=UNSAT
+E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (p)))))))))))) & AG[0,19] (!p)
+# NUN_unsat  depth=7  expected=UNSAT
+E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (p)))))))))))))) & AG[0,22] (!p)
+# NUN_unsat  depth=8  expected=UNSAT
+E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (p)))))))))))))))) & AG[0,25] (!p)
+# NUN_unsat  depth=9  expected=UNSAT
+E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (p)))))))))))))))))) & AG[0,28] (!p)
+# NUN_unsat  depth=10  expected=UNSAT
+E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (p)))))))))))))))))))) & AG[0,31] (!p)
+# NUN_unsat  depth=11  expected=UNSAT
+E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (p)))))))))))))))))))))) & AG[0,34] (!p)
+# NUN_unsat  depth=12  expected=UNSAT
+E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (E(true U[1,3] (p)))))))))))))))))))))))) & AG[0,37] (!p)

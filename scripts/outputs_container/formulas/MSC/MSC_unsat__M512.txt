@@ -1,0 +1,2 @@
+# MSC/MSC_unsat  M=512  expected=UNSAT
+E(true U[511,512] (E(true U[511,512] (E(true U[511,512] (p)))))) & AG[0,1537] (!p)

@@ -1,0 +1,2 @@
+# OBL/OBL_unsat  k=13  expected=UNSAT
+E(true U[1,3] (q1)) & E(true U[2,4] (q2)) & E(true U[3,5] (q3)) & E(true U[4,6] (q4)) & E(true U[5,7] (q5)) & E(true U[6,8] (q6)) & E(true U[7,9] (q7)) & E(true U[8,10] (q8)) & E(true U[9,11] (q9)) & E(true U[10,12] (q10)) & E(true U[11,13] (q11)) & E(true U[12,14] (q12)) & E(true U[13,15] (q13)) & AG[0,15] (!q1 & !q2 & !q3 & !q4 & !q5 & !q6 & !q7 & !q8 & !q9 & !q10 & !q11 & !q12 & !q13)

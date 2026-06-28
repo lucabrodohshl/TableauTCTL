@@ -14,7 +14,8 @@
 //   parse_implies()   handles  ->   (right-associative via recursion).
 //   parse_or()        handles  |    (left-associative).
 //   parse_and()       handles  &    (left-associative).
-//   parse_unary()     handles  !, EX, AX, EF, AF, EG, AG  (prefix).
+//   parse_unary()     handles  !, EF, AF, EG, AG  (prefix).  EX/AX are
+//                     rejected here: TCTL has no next operator.
 //   parse_primary()   handles  atoms, true, false, E(…U…), A(…U…), parens.
 //
 // All error messages follow the required format:
@@ -125,7 +126,6 @@ FormulaId Parser::parse_and() {
 
 // ── parse_unary ─────────────────────────────────────────────────────────────
 // unary ::= '!' unary
-//         | 'EX' unary | 'AX' unary
 //         | 'EF' unary | 'AF' unary | 'EF' '[' interval ']' unary
 //         | 'EG' unary | 'AG' unary | 'EG' '[' interval ']' unary
 //         | primary
@@ -135,6 +135,10 @@ FormulaId Parser::parse_and() {
 // the recursive call.
 //
 // TCTL extension: EF[a,b], AF[a,b], EG[a,b], AG[a,b] with time intervals.
+//
+// NOTE: 'EX' and 'AX' are NOT object operators — TCTL has no next operator.
+// They are reserved tokens that this function rejects with a clear error;
+// EX/AX live on only as internal tableau markers (see tableau.cpp).
 
 FormulaId Parser::parse_unary() {
     const Token& t = lex_.peek();
@@ -144,13 +148,17 @@ FormulaId Parser::parse_unary() {
             lex_.next();
             return fac_.make_not(parse_unary());
         }
-        case TokenKind::KwEX: {
-            lex_.next();
-            return fac_.make_ex(parse_unary());
-        }
+        // ── EX / AX are NOT object-language operators ───────────────────
+        // TCTL (as defined here) has no next operator.  EX/AX exist only as
+        // internal proof-theoretic markers of the tableau (the existential /
+        // universal "next" produced by a pursuit and consumed by successor
+        // generation).  They are reserved at the lexer level solely so we can
+        // reject them here with a precise diagnostic.
+        case TokenKind::KwEX:
         case TokenKind::KwAX: {
-            lex_.next();
-            return fac_.make_ax(parse_unary());
+            error(t, "TCTL has no next operator; '" + std::string(t.text) +
+                     "' is not part of the object language "
+                     "(EX/AX exist only as internal tableau markers)");
         }
         case TokenKind::KwEF: {
             lex_.next();

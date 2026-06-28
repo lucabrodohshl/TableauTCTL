@@ -1,0 +1,2 @@
+# U4/U4_unsat  b=262144  expected=UNSAT
+EF[0,262144] (p) & AG[0,inf) ((p) -> AF[1,262144] (q)) & AG[0,524288] (!q)

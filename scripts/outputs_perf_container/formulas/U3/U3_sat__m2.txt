@@ -1,0 +1,2 @@
+# U3/U3_sat  m=2  expected=SAT
+AF[1,4] (q1 | q2)

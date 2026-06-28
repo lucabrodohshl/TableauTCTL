@@ -1,0 +1,32 @@
+\begin{table}[t]\centering
+\caption{Synthetic TCTL benchmark families: designed verdict, scaling range, peak cost, and fitted growth. $\alpha$ is the log--log slope (power-law exponent) for $M$-swept families and the $\log_{10}$-slope per unit parameter otherwise.}
+\label{tab:bench-family-summary}
+\small
+\begin{tabular}{llrrrrr}
+\toprule
+Family & Variant & Exp. & \#inst & param range & max $t$ (s) & $\alpha$ \\
+\midrule
+DCM & DCM\_sat & SAT & 13 & 2--8192 & 0.176 & 0.00 \\
+DCM & DCM\_unsat & UNSAT & 13 & 2--8192 & 0.301 & -0.00 \\
+\midrule
+DCN & DCN\_sat & SAT & 12 & 1--12 & 0.389 & 0.05 \\
+DCN & DCN\_unsat & UNSAT & 12 & 1--12 & 29.198 & 0.48 \\
+\midrule
+MSC & MSC\_sat & SAT & 13 & 2--8192 & 0.113 & -0.00 \\
+MSC & MSC\_unsat & UNSAT & 13 & 2--8192 & 0.294 & -0.00 \\
+\midrule
+NRL & NRL\_sat & SAT & 12 & 1--12 & 0.220 & 0.03 \\
+NRL & NRL\_unsat & UNSAT & 12 & 1--12 & 0.211 & 0.04 \\
+\midrule
+NUN & NUN\_sat & SAT & 12 & 1--12 & 0.195 & 0.02 \\
+NUN & NUN\_unsat & UNSAT & 12 & 1--12 & 0.974 & 0.06 \\
+\midrule
+OBL & OBL\_sat & SAT & 18 & 1--18 & 55.937 & 0.26 \\
+OBL & OBL\_unsat & UNSAT & 18 & 1--18 & 48.412 & 0.22 \\
+\midrule
+ZEN & ZEN\_sat & SAT & 13 & 2--128 & 0.155 & -0.00 \\
+ZEN & ZEN\_unsat\_eg & UNSAT & 13 & 2--128 & 0.143 & 0.00 \\
+ZEN & ZEN\_unsat\_false & UNSAT & 13 & 2--128 & 0.062 & 0.00 \\
+\bottomrule
+\end{tabular}
+\end{table}

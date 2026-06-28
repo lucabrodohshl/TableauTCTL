@@ -238,7 +238,7 @@ CB_PALETTE = [
     "#000000",  # black
 ]
 
-DIVERGING_PALETTE = {"SAT": "#2166AC", "UNSAT": "#B2182B"}
+DIVERGING_PALETTE = {"SAT": "#2166AC", "UNSAT": "#B2182B", "TIMEOUT": "#CCCCCC"}
 
 MARKERS = ["o", "s", "^", "D", "v", "P", "X", "*"]
 LINESTYLES = ["-", "--", "-.", ":", (0, (3, 1, 1, 1)), (0, (5, 2)), "-", "--"]

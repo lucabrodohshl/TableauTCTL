@@ -2,7 +2,10 @@
 # ======================
 #
 # This file demonstrates the TCTL syntax supported by the extended parser.
-# Run: ./ctl_sat --selftest  OR  ./ctl_sat examples/tctl_examples.txt
+# Run: ./tctl_sat --selftest  OR  ./tctl_sat examples/tctl_examples.txt
+#
+# NOTE: TCTL has no next operator — EX/AX are NOT object operators and are
+# rejected by the parser (they exist only as internal tableau markers).
 #
 
 # ============================================================================
@@ -16,9 +19,7 @@ p | q
 p -> q
 p <-> q
 
-# CTL temporal operators (untimed)
-EX p
-AX p
+# CTL temporal operators (untimed) — note: no EX/AX (TCTL has no next operator)
 EF p
 AF p
 EG p
@@ -38,7 +39,7 @@ A(p U E(q U r))
 # AF[a,b] φ — eventually φ within time [a,b] on all paths
 AF[1,5] p
 AF[0,10] (p & q)
-AF[2,100] EX r
+AF[2,100] r
 
 # EF[a,b] φ — eventually φ within time [a,b] on some path
 EF[1,5] p

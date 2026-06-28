@@ -1,0 +1,2 @@
+# ZEN/ZEN_unsat_eg  M=48  expected=UNSAT
+EG p & AG[1,48] (!p)

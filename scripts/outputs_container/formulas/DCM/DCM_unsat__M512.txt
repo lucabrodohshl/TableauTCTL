@@ -1,0 +1,2 @@
+# DCM/DCM_unsat  M=512  expected=UNSAT
+AG[0,1024] (E(p U[512,1024] (q))) & AG[0,1025] (!q)

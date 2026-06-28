@@ -1,0 +1,53 @@
+# Family MSC - all generated formulas (one per line)
+# MSC_sat  M=2  expected=SAT
+E(true U[1,2] (E(true U[1,2] (E(true U[1,2] (p))))))
+# MSC_sat  M=4  expected=SAT
+E(true U[3,4] (E(true U[3,4] (E(true U[3,4] (p))))))
+# MSC_sat  M=8  expected=SAT
+E(true U[7,8] (E(true U[7,8] (E(true U[7,8] (p))))))
+# MSC_sat  M=16  expected=SAT
+E(true U[15,16] (E(true U[15,16] (E(true U[15,16] (p))))))
+# MSC_sat  M=32  expected=SAT
+E(true U[31,32] (E(true U[31,32] (E(true U[31,32] (p))))))
+# MSC_sat  M=64  expected=SAT
+E(true U[63,64] (E(true U[63,64] (E(true U[63,64] (p))))))
+# MSC_sat  M=128  expected=SAT
+E(true U[127,128] (E(true U[127,128] (E(true U[127,128] (p))))))
+# MSC_sat  M=256  expected=SAT
+E(true U[255,256] (E(true U[255,256] (E(true U[255,256] (p))))))
+# MSC_sat  M=512  expected=SAT
+E(true U[511,512] (E(true U[511,512] (E(true U[511,512] (p))))))
+# MSC_sat  M=1024  expected=SAT
+E(true U[1023,1024] (E(true U[1023,1024] (E(true U[1023,1024] (p))))))
+# MSC_sat  M=2048  expected=SAT
+E(true U[2047,2048] (E(true U[2047,2048] (E(true U[2047,2048] (p))))))
+# MSC_sat  M=4096  expected=SAT
+E(true U[4095,4096] (E(true U[4095,4096] (E(true U[4095,4096] (p))))))
+# MSC_sat  M=8192  expected=SAT
+E(true U[8191,8192] (E(true U[8191,8192] (E(true U[8191,8192] (p))))))
+# MSC_unsat  M=2  expected=UNSAT
+E(true U[1,2] (E(true U[1,2] (E(true U[1,2] (p)))))) & AG[0,7] (!p)
+# MSC_unsat  M=4  expected=UNSAT
+E(true U[3,4] (E(true U[3,4] (E(true U[3,4] (p)))))) & AG[0,13] (!p)
+# MSC_unsat  M=8  expected=UNSAT
+E(true U[7,8] (E(true U[7,8] (E(true U[7,8] (p)))))) & AG[0,25] (!p)
+# MSC_unsat  M=16  expected=UNSAT
+E(true U[15,16] (E(true U[15,16] (E(true U[15,16] (p)))))) & AG[0,49] (!p)
+# MSC_unsat  M=32  expected=UNSAT
+E(true U[31,32] (E(true U[31,32] (E(true U[31,32] (p)))))) & AG[0,97] (!p)
+# MSC_unsat  M=64  expected=UNSAT
+E(true U[63,64] (E(true U[63,64] (E(true U[63,64] (p)))))) & AG[0,193] (!p)
+# MSC_unsat  M=128  expected=UNSAT
+E(true U[127,128] (E(true U[127,128] (E(true U[127,128] (p)))))) & AG[0,385] (!p)
+# MSC_unsat  M=256  expected=UNSAT
+E(true U[255,256] (E(true U[255,256] (E(true U[255,256] (p)))))) & AG[0,769] (!p)
+# MSC_unsat  M=512  expected=UNSAT
+E(true U[511,512] (E(true U[511,512] (E(true U[511,512] (p)))))) & AG[0,1537] (!p)
+# MSC_unsat  M=1024  expected=UNSAT
+E(true U[1023,1024] (E(true U[1023,1024] (E(true U[1023,1024] (p)))))) & AG[0,3073] (!p)
+# MSC_unsat  M=2048  expected=UNSAT
+E(true U[2047,2048] (E(true U[2047,2048] (E(true U[2047,2048] (p)))))) & AG[0,6145] (!p)
+# MSC_unsat  M=4096  expected=UNSAT
+E(true U[4095,4096] (E(true U[4095,4096] (E(true U[4095,4096] (p)))))) & AG[0,12289] (!p)
+# MSC_unsat  M=8192  expected=UNSAT
+E(true U[8191,8192] (E(true U[8191,8192] (E(true U[8191,8192] (p)))))) & AG[0,24577] (!p)

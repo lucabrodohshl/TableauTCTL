@@ -1,0 +1,2 @@
+# MAXCONST/MAXCONST_unsat  M=65536  expected=UNSAT
+AG[0,131072] (E(p U[65536,131072] (q))) & AG[0,131073] (!q)

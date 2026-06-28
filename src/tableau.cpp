@@ -99,6 +99,7 @@ std::size_t NodeKeyHash::operator()(const NodeKey& key) const noexcept {
         h ^= std::hash<FormulaId>{}(id) + 0x9e3779b9 + (h << 6) + (h >> 2);
     }
     h ^= ContextHash{}(key.ctx) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    h ^= std::hash<bool>{}(key.is_and_combinator) + 0x9e3779b9 + (h << 6) + (h >> 2);
     return h;
 }
 
@@ -570,7 +571,7 @@ bool TableauEngine::dfs(TableauNode* node, BranchState& bs) {
 
     // ── Compute normalized zone key ─────────────────────────────────────
     std::string zone_key = compute_zone_key(node);
-    NodeKey key{node->gamma, node->ctx, zone_key};
+    NodeKey key{node->gamma, node->ctx, zone_key, node->is_and_combinator};
 
     // Determine parallel mode.  parallel_mode controls memo policy;
     // do_spawn (set later) controls OMP task creation.
@@ -1962,6 +1963,7 @@ void TableauEngine::generate_successors(TableauNode* node) {
     // Guard: after up(), all active finite-upper deadlines must remain feasible.
     bool has_timed = (num_clocks_ > 1 && !node->active_timed.empty());
 
+    TableauNode* delay_succ = nullptr;
     if (has_timed) {
         Zone delayed_zone = node->zone;
         delayed_zone.up();
@@ -2022,8 +2024,10 @@ void TableauEngine::generate_successors(TableauNode* node) {
         }
 
         if (delay_ok) {
-            // Create a delay successor with the same Γ, ctx, activeTimed
-            TableauNode* delay_succ = alloc_node();
+            // Create a delay successor with the same Γ, ctx, activeTimed.
+            // Held aside (not pushed yet): the delay is a *disjunctive*
+            // alternative to taking the discrete successors now.
+            delay_succ = alloc_node();
             delay_succ->gamma = node->gamma;
             delay_succ->ctx = node->ctx;
             delay_succ->parent = node;
@@ -2034,23 +2038,17 @@ void TableauEngine::generate_successors(TableauNode* node) {
 
             delay_succ->committed_timed = node->committed_timed;
             delay_succ->is_delay_successor = true;
-            
-            node->children.push_back(delay_succ);
         }
     }
 
-    if (ex_formulas.empty() && universal.empty()) {
-        // No temporal successors needed (beyond possible delay above).
-        if (node->children.empty()) {
-            // leaf: no delay and no successors
-            return;
-        }
-        // Only has delay successor — OR-choose delay vs nothing
-        node->kind = TableauNodeKind::OR;
-        return;
-    }
+    // ── Build the discrete (one-step) successors ────────────────────────
+    // Per the paper (§Nodes): "successor generation emits one discrete child
+    // per demanded EXψ (a model must realise ALL of them, with Ctx holding
+    // at each)".  The discrete successors are therefore *conjunctive*; the
+    // delay successor (if any) is a disjunctive alternative to them.
+    std::vector<TableauNode*> disc;
 
-    if (ex_formulas.empty()) {
+    if (ex_formulas.empty() && !universal.empty()) {
         // No existential requirements, but we have universal obligations.
         // Create one successor (stutter) with just the universal obligations.
         TableauNode* succ = alloc_node();
@@ -2060,10 +2058,16 @@ void TableauEngine::generate_successors(TableauNode* node) {
         succ->ctx = Context{};  // Fresh context for successor.
         succ->parent = node;
         succ->depth = node->depth + 1;
-        succ->active_eventualities = node->active_eventualities;
         succ->zone = node->zone;  // Zone unchanged on discrete step
-        succ->active_eventualities = node->active_eventualities;
-        //succ->active_timed = node->active_timed;
+        // Clean active_eventualities: a postponed eventuality is an obligation
+        // only on the successor that actually carries it (its EX/AX residual is
+        // in this successor's Γ).  Copying it onto a sibling successor would
+        // wrongly demand its fulfilment on an unrelated branch.
+        for (FormulaId ev : node->active_eventualities) {
+            if (succ->gamma.contains(ev)) {
+                succ->active_eventualities.insert(ev);
+            }
+        }
         // Clean active_timed: keep if formula or its negation is in Γ
         for (FormulaId at : node->active_timed) {
             if (succ->gamma.contains(at) ||
@@ -2075,17 +2079,8 @@ void TableauEngine::generate_successors(TableauNode* node) {
                 }
             }
         }
-                
-
-        node->children.push_back(succ);
-
-        if (has_timed && node->children.size() > 1) {
-            // OR-choose between delay and discrete step
-            node->kind = TableauNodeKind::OR;
-        } else {
-            node->kind = TableauNodeKind::AND;
-        }
-    } else {
+        disc.push_back(succ);
+    } else if (!ex_formulas.empty()) {
         // We have EX formulas. Create one successor per EX formula.
         for (FormulaId ex_id : ex_formulas) {
             const FormulaNode& ex_node = factory_.node(ex_id);
@@ -2100,9 +2095,17 @@ void TableauEngine::generate_successors(TableauNode* node) {
             succ->parent = node;
             succ->depth = node->depth + 1;
             succ->zone = node->zone;  // Zone unchanged on discrete step
-            
-            //succ->active_timed = node->active_timed;
-            succ->active_eventualities = node->active_eventualities;
+            // Clean active_eventualities: a postponed eventuality is an
+            // obligation only on the successor that actually carries it (its
+            // EX/AX residual is in this successor's Γ).  Copying it onto a
+            // sibling successor would wrongly demand its fulfilment on an
+            // unrelated branch (e.g. an E-until's goal demanded on the branch
+            // that pursues a nested EG/release instead).
+            for (FormulaId ev : node->active_eventualities) {
+                if (succ->gamma.contains(ev)) {
+                    succ->active_eventualities.insert(ev);
+                }
+            }
             // Clean active_timed: keep if formula or its negation is in Γ
             for (FormulaId at : node->active_timed) {
                 if (succ->gamma.contains(at) ||
@@ -2114,16 +2117,68 @@ void TableauEngine::generate_successors(TableauNode* node) {
                     }
                 }
             }
-            node->children.push_back(succ);
-        }
-
-        if (has_timed && node->children.size() > ex_formulas.size()) {
-            // We have both delay and discrete successors — OR among all
-            node->kind = TableauNodeKind::OR;
-        } else {
-            node->kind = TableauNodeKind::AND;
+            disc.push_back(succ);
         }
     }
+
+    // ── Assemble children ───────────────────────────────────────────────
+    if (disc.empty()) {
+        // No discrete successors.
+        if (delay_succ) {
+            // Only a delay successor — OR-choose delay vs nothing.
+            node->children.push_back(delay_succ);
+            node->kind = TableauNodeKind::OR;
+        }
+        // else: leaf (no temporal obligations).
+        return;
+    }
+
+    if (!delay_succ) {
+        // No delay alternative: every demanded EXψ must be realised, so the
+        // discrete successors are conjunctive (AND).
+        for (TableauNode* d : disc) {
+            node->children.push_back(d);  // parent already == node
+        }
+        node->kind = TableauNodeKind::AND;
+        return;
+    }
+
+    // Delay present.  The discrete successors are mutually conjunctive, and
+    // delay is a disjunctive alternative to taking them now:
+    //     OR( delay , AND(discrete...) ).
+    if (disc.size() == 1) {
+        // A single AND-child collapses to itself; no wrapper needed.
+        node->children.push_back(delay_succ);
+        node->children.push_back(disc[0]);
+        node->kind = TableauNodeKind::OR;
+        return;
+    }
+
+    // Multiple discrete successors: wrap them in an AND-combinator so that a
+    // single existential witness cannot discharge the node while a sibling
+    // existential obligation (e.g. a nested timed modality's pursuit) is left
+    // unrealised.  Without this grouping the flat OR over [delay, d1, d2, …]
+    // would accept d1 alone and silently drop d2 — the nested-modality
+    // soundness bug.
+    TableauNode* andc = alloc_node();
+    andc->gamma = node->gamma;           // same configuration ⇒ no re-expansion
+    andc->ctx = node->ctx;
+    andc->parent = node;
+    andc->depth = node->depth + 1;
+    andc->active_eventualities = node->active_eventualities;
+    andc->zone = node->zone;
+    andc->active_timed = node->active_timed;
+    andc->committed_timed = node->committed_timed;
+    andc->is_and_combinator = true;
+    andc->kind = TableauNodeKind::AND;
+    for (TableauNode* d : disc) {
+        d->parent = andc;
+        andc->children.push_back(d);
+    }
+
+    node->children.push_back(delay_succ);
+    node->children.push_back(andc);
+    node->kind = TableauNodeKind::OR;
 }
 
 // ============================================================================
@@ -2136,13 +2191,14 @@ TableauNode* TableauEngine::find_loop_ancestor(TableauNode* node,
     // branch-local ancestor chain.  Uses the same normalized zone key as
     // dfs() memoization — free inactive clocks and extrapolate active ones.
     std::string nz = compute_zone_key(node);
-    NodeKey node_key{node->gamma, node->ctx, nz};
+    NodeKey node_key{node->gamma, node->ctx, nz, node->is_and_combinator};
 
     for (TableauNode* ancestor : bs.stack) {
         if (ancestor == node) continue;
 
         std::string az = compute_zone_key(ancestor);
-        NodeKey ancestor_key{ancestor->gamma, ancestor->ctx, az};
+        NodeKey ancestor_key{ancestor->gamma, ancestor->ctx, az,
+                             ancestor->is_and_combinator};
         if (node_key == ancestor_key) {
             return ancestor;
         }
@@ -2185,18 +2241,33 @@ bool TableauEngine::check_eventuality_coverage(TableauNode* loop_start,
         return false;
     }
 
-    // Collect all active eventualities in the loop.
+    // Collect the eventualities that are perpetually postponed by the loop.
+    // These are precisely the eventualities still pending at the loop-back
+    // node (loop_end ≡ loop_start): they are carried unchanged into the next
+    // iteration, so the cycle would postpone them forever unless one of them
+    // is fulfilled on the segment.  An eventuality that was demanded inside
+    // the loop but is NOT pending at the loop-back point has either been
+    // fulfilled in the loop or been *launched onto a side branch* (the
+    // existential pursuit of a nested timed modality, whose own branch — an
+    // AND-sibling — discharges it); per the paper's loop condition such a
+    // "discharged until cannot stall a cycle", so it must not be collected
+    // here.  Using the union over all loop nodes would wrongly re-impose a
+    // launched-off-spine eventuality on the spine and reject valid models
+    // (e.g. EG(EF_I q), AG(EF_I (…))).
+    //
     // ONLY use active_eventualities tracking (maintained by EU/AU STOP/GO
-    // branches).  Do NOT scan intermediate branching-node gammas for EU/AU
-    // formulas: those gammas still contain the EU/AU that was expanded into
-    // STOP/GO children, but non-branching rules (AND, AX) may have already
-    // decomposed the goal formula ψ, making it impossible to find ψ in any
-    // saturated gamma.  active_eventualities only includes eventualities
-    // that were actually POSTPONED (GO branch), which is the correct set.
-    std::set<FormulaId> all_eventualities;
-    for (TableauNode* n : loop_nodes) {
-        for (FormulaId ev : n->active_eventualities) {
-            all_eventualities.insert(ev);
+    // branches) PLUS any until-eventuality still demanded *raw* at the
+    // loop-back node (in its Γ, top level, not yet unfolded): such a goal
+    // is pending on the spine and must be discharged on the cycle.  A nested
+    // until buried inside a release (e.g. E(false R E(p U_I q)) — the spine
+    // of an EG/AG) is NOT top-level, so it is correctly excluded: that nested
+    // pursuit is launched onto, and verified by, its own AND-sibling branch.
+    std::set<FormulaId> all_eventualities = loop_end->active_eventualities;
+    for (FormulaId id : loop_end->gamma.elements()) {
+        const FormulaNode& fn = factory_.node(id);
+        if (fn.kind == NodeKind::EU  || fn.kind == NodeKind::AU ||
+            fn.kind == NodeKind::TimedEU || fn.kind == NodeKind::TimedAU) {
+            all_eventualities.insert(id);
         }
     }
 
@@ -2402,11 +2473,13 @@ void TableauEngine::extract_model_from_branch(TableauNode* leaf) {
         return;  // Another thread already set the model.
     }
 
-    // Collect the path from root to leaf.
+    // Collect the path from root to leaf.  AND-combinator wrappers carry no
+    // configuration of their own (they only group conjunctive discrete
+    // successors), so they are not model states.
     std::vector<TableauNode*> path;
     TableauNode* curr = leaf;
     while (curr != nullptr) {
-        path.push_back(curr);
+        if (!curr->is_and_combinator) path.push_back(curr);
         curr = curr->parent;
     }
     std::reverse(path.begin(), path.end());

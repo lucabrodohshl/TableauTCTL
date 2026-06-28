@@ -1,0 +1,2 @@
+# ZEN/ZEN_sat  M=4  expected=SAT
+EG p & AF[1,4] (q)

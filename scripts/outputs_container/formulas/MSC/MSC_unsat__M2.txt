@@ -1,0 +1,2 @@
+# MSC/MSC_unsat  M=2  expected=UNSAT
+E(true U[1,2] (E(true U[1,2] (E(true U[1,2] (p)))))) & AG[0,7] (!p)

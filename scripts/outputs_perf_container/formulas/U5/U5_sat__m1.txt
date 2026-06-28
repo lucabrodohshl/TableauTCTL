@@ -1,0 +1,2 @@
+# U5/U5_sat  m=1  expected=SAT
+EG[0,inf) (p1)

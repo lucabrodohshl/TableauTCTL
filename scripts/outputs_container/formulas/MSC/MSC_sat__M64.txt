@@ -1,0 +1,2 @@
+# MSC/MSC_sat  M=64  expected=SAT
+E(true U[63,64] (E(true U[63,64] (E(true U[63,64] (p))))))

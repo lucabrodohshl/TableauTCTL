@@ -1,0 +1,23 @@
+TCTL satisfiability tableau -- performance evaluation (PERF_EVAL_PLAN.md)
+Generated: 2026-06-27T20:01:01Z (UTC)
+
+== Procedure ==
+Decision procedure : TCTL satisfiability tableau (La Torre-Napoli style), UDBM zones
+Binary             : /work/Implementation/tctl_sat  (md5 5401015216400709c88265e3c909b104)
+Source git commit  : n/a
+Stats flag         : --stats   (nodes/distinct_zones/peak_mem_kb/...)
+
+== Environment ==
+Container          : 503ec3ccfbbb (image sha256:66460d557b25769b102175144d538d88219c077c678a49af4afca6fbfc1b5252)
+OS                 : Ubuntu 24.04.3 LTS
+Kernel / arch      : Linux 6.10.14-linuxkit / x86_64   (logical CPUs: 12)
+Compiler           : g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+Python             : Python 3.12.3  (numpy/pandas/matplotlib in-container)
+
+== Protocol ==
+Repetitions        : R = 5 timed + 1 discarded warm-up per instance; report MEDIAN time_s (also min/max/IQR)
+Search-space stats : deterministic; taken from run 1, asserted identical across reps (0 mismatches)
+Timeout            : 60 s per instance (coreutils timeout -k 5 + Python backstop); right-censored, short-circuited
+Threads            : single-threaded (OMP_NUM_THREADS=1; solver default --threads auto overridden)
+Instances          : 237 (RQ1 F1-F4 + RQ2 U1-U5); 7 degenerate b=1/M=1 punctual corners skipped at generation
+Pipeline           : bench_generate.py --families-module perf_families  ->  bench_run.py --reps 5  ->  perf_plot.py

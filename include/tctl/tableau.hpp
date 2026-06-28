@@ -163,6 +163,9 @@ struct TableauNode {
 
     // ── Edge metadata for TA extraction ─────────────────────────────────
     bool                    is_delay_successor = false;  // true if created by delay rule
+    bool                    is_and_combinator  = false;  // AND-grouping wrapper over
+                                                         // discrete successors (no own
+                                                         // configuration; not a model state)
     std::vector<ClockId>    clock_resets;                 // clocks reset when creating this node
 
     // Check if this node is an ancestor of another (for loop detection).
@@ -176,9 +179,12 @@ struct NodeKey {
     FormulaSet gamma;
     Context    ctx;
     std::string zone_canonical;  // canonical zone string for TCTL
+    bool        is_and_combinator = false;  // AND-grouping node (delay vs discrete)
 
     bool operator==(const NodeKey& o) const noexcept {
-        return gamma == o.gamma && ctx == o.ctx && zone_canonical == o.zone_canonical;
+        return gamma == o.gamma && ctx == o.ctx &&
+               zone_canonical == o.zone_canonical &&
+               is_and_combinator == o.is_and_combinator;
     }
 
     bool operator<(const NodeKey& o) const noexcept {
@@ -186,7 +192,9 @@ struct NodeKey {
         if (o.gamma < gamma) return false;
         if (ctx < o.ctx) return true;
         if (o.ctx < ctx) return false;
-        return zone_canonical < o.zone_canonical;
+        if (zone_canonical < o.zone_canonical) return true;
+        if (o.zone_canonical < zone_canonical) return false;
+        return is_and_combinator < o.is_and_combinator;
     }
 };
 

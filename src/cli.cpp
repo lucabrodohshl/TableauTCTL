@@ -60,9 +60,9 @@ Options parse_args(int argc, char* argv[]) {
             if (mode == "none") opts.bench_opts.abstraction_M_default = false;
             else if (mode == "M" || mode == "both") opts.bench_opts.abstraction_M_default = true;
             else throw std::runtime_error("--bench-abstraction must be M, none, or both");
-        } else if (arg == "--model") {
+        } else if (arg == "--model" || arg == "--show-model") {
             opts.show_model = true;
-        } else if (arg == "--stats") {
+        } else if (arg == "--stats" || arg == "--show-stats") {
             opts.show_stats = true;
         } else if (arg == "--help" || arg == "-h") {
             opts.help = true;
@@ -128,9 +128,9 @@ void print_usage(const char* program_name) {
         << "  <Formula> | <input.txt>  Formula or  File with one tctl formula per line\n"
         << "  --selftest    Run built-in tests\n"
         << "  --benchmark   Run benchmark suites (writes CSVs + reproducibility)\n"
-        << "  --model       Extract Timed Automaton (UPPAAL style)\n"
+        << "  --model, --show-model   Extract Timed Automaton (UPPAAL style)\n"
         << "  --output <dir>  Directory to write extracted models (default: current)\n"
-        << "  --stats       Show engine statistics\n"
+        << "  --stats, --show-stats   Show engine statistics\n"
         << "  --help, -h    Show this message\n"
         << "  --tot, --all, --all_formula  Conjoin all formulas in the input with AND and check as one formula\n"
         << "  --threads N, -j N  Set number of OpenMP threads (0 = auto, default)\n"

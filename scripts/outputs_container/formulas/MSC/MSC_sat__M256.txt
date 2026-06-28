@@ -1,0 +1,2 @@
+# MSC/MSC_sat  M=256  expected=SAT
+E(true U[255,256] (E(true U[255,256] (E(true U[255,256] (p))))))

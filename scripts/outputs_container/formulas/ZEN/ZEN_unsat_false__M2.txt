@@ -1,0 +1,2 @@
+# ZEN/ZEN_unsat_false  M=2  expected=UNSAT
+AG[1,2] false

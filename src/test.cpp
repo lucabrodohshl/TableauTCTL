@@ -194,9 +194,13 @@ static void test_lexer_comparison_ops(TestContext& ctx) {
 }
 
 static void test_lexer_tctl_keywords(TestContext& ctx) {
+    // EX/AX remain RESERVED tokens at the lexer level so the parser can emit a
+    // precise diagnostic — TCTL has no next operator, and EX/AX exist only as
+    // internal tableau markers.  They are rejected by the parser (see
+    // test_parse_rejects_next_operator), never built into the object AST.
     auto toks = tokenise("EX AX EF AF EG AG E A U true false");
-    ctx.check(toks[0].kind == TokenKind::KwEX, "EX keyword");
-    ctx.check(toks[1].kind == TokenKind::KwAX, "AX keyword");
+    ctx.check(toks[0].kind == TokenKind::KwEX, "EX reserved token");
+    ctx.check(toks[1].kind == TokenKind::KwAX, "AX reserved token");
     ctx.check(toks[2].kind == TokenKind::KwEF, "EF keyword");
     ctx.check(toks[3].kind == TokenKind::KwAF, "AF keyword");
     ctx.check(toks[4].kind == TokenKind::KwEG, "EG keyword");
@@ -211,6 +215,22 @@ static void test_lexer_tctl_keywords(TestContext& ctx) {
 // ============================================================================
 // TCTL Parser Tests
 // ============================================================================
+
+// EX/AX are NOT object-language operators in TCTL (there is no next operator);
+// they exist only as internal tableau markers.  The parser must reject any
+// attempt to use them as input operators.
+static void test_parse_rejects_next_operator(TestContext& ctx) {
+    ctx.check(parse_fails("EX p"),        "EX p rejected (no next operator)");
+    ctx.check(parse_fails("AX p"),        "AX p rejected (no next operator)");
+    ctx.check(parse_fails("EX true"),     "EX true rejected");
+    ctx.check(parse_fails("AX (p & q)"),  "AX (p & q) rejected");
+    ctx.check(parse_fails("EF EX p"),     "nested EX rejected");
+    ctx.check(parse_fails("AG[0,4] AX p"),"AX under timed AG rejected");
+    // Sanity: the surviving timed/path operators still parse.
+    ctx.check(!parse_fails("EF p"),       "EF p still parses");
+    ctx.check(!parse_fails("AG[0,4] (E(p U[1,2] q))"),
+              "worked-example formula still parses");
+}
 
 static void test_parse_atoms(TestContext& ctx) {
     ctx.check_eq(pp("p"), "p", "parse atom p");
@@ -592,10 +612,10 @@ static void test_tctl_sat2_strict_lower(TestContext& ctx) {
 }
 
 // ── SAT-3: Upper bound non-strict allows at boundary ────────────────────────
-// E(true U_[0,2] p) & EX p — can satisfy p at some time ≤2, possibly immediately.
+// E(true U_[0,2] p) — can satisfy p at some time ≤2, possibly immediately.
 static void test_tctl_sat3_upper_bound_boundary(TestContext& ctx) {
-    Result r = check_sat("E(true U[0,2] p) & EX p");
-    ctx.check(r == Result::Satisfiable, "E(true U[0,2] p) & EX p should be SAT");
+    Result r = check_sat("E(true U[0,2] p)");
+    ctx.check(r == Result::Satisfiable, "E(true U[0,2] p) should be SAT");
 }
 
 // ── SAT-4: Two timed untils in conjunction ──────────────────────────────────
@@ -606,10 +626,10 @@ static void test_tctl_sat4_two_timed_untils(TestContext& ctx) {
 }
 
 // ── SAT-5: Universal timed until with achievable p ──────────────────────────
-// A(true U_[1,3] p) & AX p — since next-state makes p true universally.
+// A(true U_[1,3] p) — every path can reach p within the window [1,3].
 static void test_tctl_sat5_universal_timed(TestContext& ctx) {
-    Result r = check_sat("A(true U[1,3] p) & AX p");
-    ctx.check(r == Result::Satisfiable, "A(true U[1,3] p) & AX p should be SAT");
+    Result r = check_sat("A(true U[1,3] p)");
+    ctx.check(r == Result::Satisfiable, "A(true U[1,3] p) should be SAT");
 }
 
 // ── UNSAT-1: Invariant ¬p contradicts timed until ───────────────────────────
@@ -1199,28 +1219,18 @@ std::vector<TestCase> generate_tctl_edge_tests_100() {
         { "EF(1,2] p & AG[0,1] !p", true },         // must be >1, consistent
 
         // force both a delay successor and a discrete successor obligation
-        { "EX p & EF>1 q", true },
-        { "AX !p & EF>1 p", true },                 // AX only constrains immediate next; 2+ steps away can have p at t>1
 
         // ================================================================
         // 4) Context propagation (AX) + timed negations (15)
         // ================================================================
 
         // AX + ¬EF should propagate universally: all successors must keep avoiding
-        { "AX !EF[1,3] p & EF[1,3] p", true },  // SAT: EF via delay (p persists), AX constrains discrete successors only
-        { "AX !EF[1,3] p & EF[4,6] p", true },      // can satisfy EF later outside forbidden window if avoidance is only for [1,3]
 
         // Two-step propagation
-        { "AX AX !p & EX EX p", false },            // after 2 steps, must have !p universally but EX path wants p
-        { "AX AX !p & EX EX !p", true },
 
         // Mix AX and timed until
-        { "AX AG[0,2] !p & EF[0,1] p", true },      // p at initial state (t=0) satisfies EF[0,1]; AX only constrains successors
-        { "AX AG[0,2] !p & EF[3,4] p", true },
 
         // AX with delayed negation: pressure on your delay-guard
-        { "AX !EF[1,3] p & p", true },              // avoidance obligation starts next state
-        { "AX !EF[1,3] p & AF>=1 true & p", true }, // AX pushes !EF to successors; initial p is fine; successor can have !p
 
         // ================================================================
         // 5) Multi-clock interactions (nested timed ops) (15)
@@ -1298,8 +1308,6 @@ std::vector<TestCase> generate_tctl_edge_tests_100() {
         { "AG[0,5] p & EF[1,4] !p", false },
         { "AG[0,5] p & EF(5,8] !p", true },          // conflict starts after 5
 
-        { "AX AG[0,3] p & EX EF[1,2] !p", false },   // next state forces p in [0,3], but EX wants !p soon
-        { "AX AG[0,1] p & EX EF[2,3] !p", true },
 
         { "!EF[1,3] p & EF[4,6] p", true },
         { "!EF[1,3] p & EF[2,4] p", true },          // p at t∈(3,4] satisfies EF[2,4] without violating !EF[1,3]
@@ -1352,16 +1360,6 @@ std::vector<TestCase> generate_comprehensive_200() {
         // ================================================================
         // §3  Untimed EX / AX  (10 tests: 5 SAT, 5 UNSAT)
         // ================================================================
-        /* 019 */ { "EX true", true },
-        /* 020 */ { "EX false", false },
-        /* 021 */ { "AX true", true },
-        /* 022 */ { "AX false", false },
-        /* 023 */ { "EX p", true },
-        /* 024 */ { "AX p", true },
-        /* 025 */ { "EX p & AX !p", false },
-        /* 026 */ { "AX p & AX !p", false },
-        /* 027 */ { "EX (p & q)", true },
-        /* 028 */ { "EX (p & !p)", false },
 
         // ================================================================
         // §4  Untimed EU / AU / EF / AF / EG / AG  (16 tests: 8 SAT, 8 UNSAT)
@@ -1514,16 +1512,6 @@ std::vector<TestCase> generate_comprehensive_200() {
         // ================================================================
         // §14  EX / AX wrapping temporal  (10 tests: 5 SAT, 5 UNSAT)
         // ================================================================
-        /* 137 */ { "EX EG p", true },
-        /* 138 */ { "EX AG p", true },
-        /* 139 */ { "AX EG p", true },
-        /* 140 */ { "EX (p & EG q)", true },
-        /* 141 */ { "EX AF[1,3] p", true },
-        /* 142 */ { "EX (p & !p)", false },
-        /* 143 */ { "EX EG false", false },
-        /* 144 */ { "AX AG false", false },
-        /* 145 */ { "EX false & AX false", false },
-        /* 146 */ { "EX EF false", false },
         // XFAIL: EX + existential timed → UNSAT (engine bug: clock mgmt
         //        in generate_successors drops existential timed constraints)
         // { "EX EF[1,3] p", true },
@@ -1562,26 +1550,14 @@ std::vector<TestCase> generate_comprehensive_200() {
         // ================================================================
         // §17  AX/EX + timed conjunctions  (8 tests: 4 SAT, 4 UNSAT)
         // ================================================================
-        /* 167 */ { "AX AG[0,3] p & EX EF[1,2] !p", false },
-        /* 168 */ { "AX AG[0,1] p & EX EF[2,3] !p", true },
-        /* 169 */ { "EX (p & EG[0,2] q)", true },
-        /* 170 */ { "AX EG[0,2] p", true },
-        /* 171 */ { "EX AG[0,2] p", true },
-        /* 172 */ { "EX (EG[0,2] p & EG[0,2] !p)", false },
-        /* 173 */ { "AX (p & !p)", false },
-        /* 174 */ { "AX AG[0,2] false", false },
 
         // ================================================================
         // §18  Deep nesting ≥ 8 levels  (8 tests: 4 SAT, 4 UNSAT)
         // ================================================================
         /* 175 */ { "EF EG EF EG EF EG EF EG p", true },
         /* 176 */ { "AG EF AG EF AG EF AG EF p", true },
-        /* 177 */ { "EX EX EX EX EX EX EX EX p", true },
-        /* 178 */ { "AX AX AX AX AX AX AX AX p", true },
-        /* 179 */ { "EX EX EX EX EX EX EX EX false", false },
         /* 180 */ { "EF EG EF EG EF EG EF EG false", false },
         /* 181 */ { "AG EF AG EF AG EF AG EF false", false },
-        /* 182 */ { "AX AX AX AX AX AX AX AX false", false },
 
         // ================================================================
         // §19  Loop detection & eventuality  (8 tests: 4 SAT, 4 UNSAT)
@@ -1591,7 +1567,6 @@ std::vector<TestCase> generate_comprehensive_200() {
         /* 185 */ { "E(p U q) & EG p", true },
         /* 186 */ { "EG (p | q)", true },
         /* 187 */ { "EG p & AF !p", false },
-        /* 188 */ { "EG p & AX !p", false },
         /* 189 */ { "AG p & EF !p", false },
         /* 190 */ { "AG p & AG !p", false },
 
@@ -1704,9 +1679,7 @@ std::vector<TestCase> generate_stress_200() {
     // 004: EG-AF depth-10 chain — SAT: p on self-loop
     /* 004 */ { "EG (AF (EG (AF (EG (AF (EG (AF (EG (AF p)))))))))", true },
     // 005: deep EX chain depth-12 — SAT: chain of 12 successors then p
-    /* 005 */ { "EX (EX (EX (EX (EX (EX (EX (EX (EX (EX (EX (EX p)))))))))))", true },
     // 006: deep AX chain depth-12 — SAT: all successors 12 steps reach p
-    /* 006 */ { "AX (AX (AX (AX (AX (AX (AX (AX (AX (AX (AX (AX p)))))))))))", true },
     // 007: deep nesting with boolean forcing: AG(EF(AG(EF(p & q & r)))) — SAT: self-loop with p,q,r
     /* 007 */ { "AG (EF (AG (EF (AG (EF (p & q & r))))))", true },
     // 008: deep nesting with boolean forcing + contradiction at leaf — UNSAT
@@ -1716,9 +1689,7 @@ std::vector<TestCase> generate_stress_200() {
     // 010: nested AG chains — SAT: all props hold on self-loop
     /* 010 */ { "AG (p | AG (q | AG (r | AG (s | AG (t | AG (u | AG v))))))", true },
     // 011: mixed EX-AX chain depth-12 — SAT
-    /* 011 */ { "EX (AX (EX (AX (EX (AX (EX (AX (EX (AX (EX (AX p)))))))))))", true },
     // 012: nested AG->EX chain — SAT: AG requires EX at each step
-    /* 012 */ { "AG (p -> EX (q & EX (r & EX (s & EX (t & EX (u & EX v))))))", true },
     // 013: deeply nested until — SAT: chain of EU's
     /* 013 */ { "E(p U (E(q U (E(r U (E(s U (E(t U (E(u U v)))))))))))", true },
     // 014: dual nested until chains A's — SAT
@@ -1730,7 +1701,6 @@ std::vector<TestCase> generate_stress_200() {
     // 017: AG nested underneath timed EU with inner timed — SAT
     /* 017 */ { "AG (p -> E(q U[1,3] (r & A(s R[2,5] (t & EG u)))))", true },
     // 018: boolean precedence: p | q & r parsed as p | (q & r) under AG/EF — SAT
-    /* 018 */ { "AG (EF (p | q & r & EX (s | t & u)))", true },
     // 019: EG with nested EF and boolean splits deep — SAT
     /* 019 */ { "EG (p & EF (q | AG (r & EF (s | AG (t & EF u)))))", true },
     // 020: AG with nested AF and boolean structure — SAT
@@ -1746,9 +1716,7 @@ std::vector<TestCase> generate_stress_200() {
     // 025: depth-12 AG/EF with contradiction via timed globally — UNSAT
     /* 025 */ { "AG (EF (AG (EF (AG (EF[1,3] p))))) & AG[0,inf) (!p)", false },
     // 026: deep EX chain + EG — SAT: path exists then loop
-    /* 026 */ { "EX (EX (EX (EX (EX (EX (EX (EX (EG p))))))))", true },
     // 027: deep AX chain + AF — SAT: all paths reach p
-    /* 027 */ { "AX (AX (AX (AX (AX (AX (AX (AX (AF p))))))))", true },
     // 028: nested releases inside nested untils — SAT
     /* 028 */ { "E(p U (q & E(r R (s & E(t U (u & E(v R w)))))))", true },
     // 029: deep AG(EF(...)) + release combo — SAT
@@ -1785,7 +1753,6 @@ std::vector<TestCase> generate_stress_200() {
     // 042: alternation + timed release inside — SAT
     /* 042 */ { "EG (AF (EG (AF (A(p R[1,3] q)))))", true },
     // 043: alternation + timed until under EX/AX — SAT
-    /* 043 */ { "AG (EX (AF (EX (AG (EX (AF (EX p)))))))", true },
     // 044: alternation + contradiction at deep level — UNSAT
     /* 044 */ { "AG (AF (EG (AF (EG (AF (p & (!p)))))))", false },
     // 045: alternation: A(EU).A(ER) nested — SAT
@@ -1811,7 +1778,6 @@ std::vector<TestCase> generate_stress_200() {
     // 055: alternation with AG blocking EG loop — UNSAT
     /* 055 */ { "AG (EF p) & AG (!p)", false },
     // 056: deep alternation mix EX/AX/EF/AF/EG/AG all different — SAT
-    /* 056 */ { "EX (AG (AF (EX (AG (EF (AX (EG p)))))))", true },
     // 057: deep alternation all forall then all exists — SAT
     /* 057 */ { "AG (AF (AG (AF (EG (EF (EG (EF p)))))))", true },
     // 058: alternation with timed + release contradiction — UNSAT
@@ -1826,9 +1792,7 @@ std::vector<TestCase> generate_stress_200() {
     // ====================================================================
 
     // 061: EG p with self-loop — SAT: trivial loop
-    /* 061 */ { "EG (p & EX p) & AG (p -> EX p)", true },
     // 062: EG (p & EX(!p)) with AG(!p -> EX p) — alternation loop SAT
-    /* 062 */ { "EG (p & EX q) & AG (q -> EX p) & AG (p -> EX q)", true },
     // 063: EG with eventuality EF — loop must fulfil EF — SAT
     /* 063 */ { "EG (EF q & p)", true },
     // 064: AG(AF p) — loop eventuality must be fulfilled — SAT: self-loop with p
@@ -1838,7 +1802,6 @@ std::vector<TestCase> generate_stress_200() {
     // 066: AG p & EF(!p) — same contradiction — UNSAT
     /* 066 */ { "AG p & EF (!p)", false },
     // 067: EG(p | q) with forced alternation, loop acceptance — SAT
-    /* 067 */ { "EG (p | q) & AG (p -> AX q) & AG (q -> AX p)", true },
     // 068: EG(p & q) + EG(!p & !q) forced everywhere same — UNSAT
     /* 068 */ { "EG (p & q) & EG ((!p) & (!q)) & AG ((p & q) | ((!p) & (!q)))", false },
     // 069: E(p U q) & AG p — q must eventually hold + p always — SAT: p&q at some point
@@ -1858,13 +1821,10 @@ std::vector<TestCase> generate_stress_200() {
     // 076: AG(AF p & AF q) — must repeatedly see both — SAT: self-loop with p & q
     /* 076 */ { "AG (AF p & AF q)", true },
     // 077: E(false R p) — EG p equivalent — SAT: self-loop
-    /* 077 */ { "E(false R (p & EX p))", true },
     // 078: A(false R p) — AG p equivalent — SAT: all states have p
     /* 078 */ { "A(false R (p & q))", true },
     // 079: EG p with AX forcing loop — SAT
-    /* 079 */ { "EG (p & AX p)", true },
     // 080: AG(p->EXp) & AG(!p->EX!p) & EF(p&!p) — contradiction in EF — UNSAT
-    /* 080 */ { "AG (p -> EX p) & AG ((!p) -> EX (!p)) & EF (p & (!p))", false },
     // 081: EG with timed EU inside loop — eventuality must be fulfilled — SAT
     /* 081 */ { "EG (p & E(q U[1,3] r)) & AG (r -> AG r)", true },
     // 082: AG with timed AU inside — SAT
@@ -2051,11 +2011,8 @@ std::vector<TestCase> generate_stress_200() {
     // 165: release with complex ψ + AG contradiction — UNSAT
     /* 165 */ { "E(p R (q & r & s)) & AG ((!q) | (!r) | (!s))", false },
     // 166: release with boolean inside — SAT
-    /* 166 */ { "E(p R (q & EX r))", true },
     // 167: release nested inside release — SAT
-    /* 167 */ { "E(p R (q & E(r R (s & EX t))))", true },
     // 168: release nested inside release (universal) — SAT
-    /* 168 */ { "A(p R (q & A(r R (s & AX t))))", true },
     // 169: timed release inside untimed release — SAT
     /* 169 */ { "E(p R (q & E(r R[1,3] s)))", true },
     // 170: untimed release inside timed release — SAT
@@ -2222,9 +2179,7 @@ std::vector<TestCase> generate_propositional_100() {
     // 033: two variables, consistent — SAT
     /* 033 */ { "{x <= 5} & {y <= 5} & {x >= 0} & {y >= 0}", true },
     // 034: arithmetic under EX — SAT
-    /* 034 */ { "EX {x <= 10}", true },
     // 035: arithmetic under AX — SAT
-    /* 035 */ { "AX {x <= 10}", true },
     // 036: multiple constraints in conjunction — SAT
     /* 036 */ { "{x <= 10} & {x >= 0} & {y <= 20} & {y >= 0}", true },
     // 037: impossible range — UNSAT
@@ -2482,6 +2437,7 @@ int run_selftests() {
     runner.run("lexer_tctl_keywords",        test_lexer_tctl_keywords);
 
     // Basic parser tests
+    runner.run("parse_rejects_next_operator", test_parse_rejects_next_operator);
     runner.run("parse_atoms",                test_parse_atoms);
 
     // Time interval tests

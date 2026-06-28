@@ -115,8 +115,10 @@ Token Lexer::read_identifier_or_keyword() {
     std::string text(src_.substr(begin, idx_ - begin));
 
     // ── keyword classification ──────────────────────────────────────────
-    // Two-letter temporal keywords: EX, AX, EF, AF, EG, AG
-    // One-letter temporal: E, A, U
+    // Two-letter temporal keywords: EF, AF, EG, AG
+    // One-letter temporal: E, A, U, R
+    // Reserved (tokenised but rejected by the parser): EX, AX — TCTL has no
+    //   next operator; these survive only as internal tableau markers.
     // Constants: true, false
     // Everything else is an atom identifier.
 

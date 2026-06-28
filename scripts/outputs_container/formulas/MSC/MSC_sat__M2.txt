@@ -1,0 +1,2 @@
+# MSC/MSC_sat  M=2  expected=SAT
+E(true U[1,2] (E(true U[1,2] (E(true U[1,2] (p))))))

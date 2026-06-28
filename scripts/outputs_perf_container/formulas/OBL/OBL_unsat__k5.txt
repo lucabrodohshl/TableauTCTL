@@ -1,0 +1,2 @@
+# OBL/OBL_unsat  k=5  expected=UNSAT
+E(true U[1,3] (q1)) & E(true U[2,4] (q2)) & E(true U[3,5] (q3)) & E(true U[4,6] (q4)) & E(true U[5,7] (q5)) & AG[0,7] (!q1 & !q2 & !q3 & !q4 & !q5)
