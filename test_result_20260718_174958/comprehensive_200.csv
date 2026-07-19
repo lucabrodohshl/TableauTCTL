@@ -1,0 +1,168 @@
+formula,result,test_passed,time_taken_s
+"true",SATISFIABLE,true,0.000671
+"false",UNSATISFIABLE,true,0.000380
+"p",SATISFIABLE,true,0.000469
+"p & q",SATISFIABLE,true,0.001346
+"p | q",SATISFIABLE,true,0.000899
+"p & !p",UNSATISFIABLE,true,0.000364
+"!false",SATISFIABLE,true,0.000639
+"!true",UNSATISFIABLE,true,0.000357
+"(p | q) & (!p & !q)",UNSATISFIABLE,true,0.000438
+"p & q & r & s",SATISFIABLE,true,0.001726
+"p -> q",SATISFIABLE,true,0.000852
+"p -> p",SATISFIABLE,true,0.000790
+"p <-> p",SATISFIABLE,true,0.001205
+"p <-> !p",UNSATISFIABLE,true,0.000375
+"(p -> q) & p & !q",UNSATISFIABLE,true,0.000425
+"(p -> q) & (q -> r) & p",SATISFIABLE,true,0.003438
+"p -> EF p",SATISFIABLE,true,0.000706
+"(!p -> EF q) & !p",SATISFIABLE,true,0.001922
+"EF p",SATISFIABLE,true,0.000698
+"AF p",SATISFIABLE,true,0.000698
+"EG p",SATISFIABLE,true,0.001079
+"AG p",SATISFIABLE,true,0.001520
+"E(p U q)",SATISFIABLE,true,0.001011
+"A(p U q)",SATISFIABLE,true,0.000874
+"E(true U q)",SATISFIABLE,true,0.000739
+"E(p U true)",SATISFIABLE,true,0.000918
+"EF false",UNSATISFIABLE,true,0.001284
+"EG false",UNSATISFIABLE,true,0.000991
+"AG false",UNSATISFIABLE,true,0.000987
+"E(false U false)",UNSATISFIABLE,true,0.000993
+"A(false U false)",UNSATISFIABLE,true,0.001031
+"E(p U q) & !q & !p",UNSATISFIABLE,true,0.002309
+"EF p & !EF p",UNSATISFIABLE,true,0.003342
+"EG p & EG !p",UNSATISFIABLE,true,0.002094
+"E(p R q)",SATISFIABLE,true,0.000702
+"A(p R q)",SATISFIABLE,true,0.000745
+"E(p R true)",SATISFIABLE,true,0.001192
+"E(true R p)",SATISFIABLE,true,0.001167
+"E(p R q) & q",SATISFIABLE,true,0.001638
+"A(p R q) & q",SATISFIABLE,true,0.001208
+"E(p R false)",UNSATISFIABLE,true,0.000999
+"E(false R false)",UNSATISFIABLE,true,0.001013
+"A(p R false)",UNSATISFIABLE,true,0.000995
+"A(false R false)",UNSATISFIABLE,true,0.000997
+"E(p R q) & !q & !p",UNSATISFIABLE,true,0.002017
+"A(p R q) & !q",UNSATISFIABLE,true,0.001781
+"E(true U[1,3] p)",SATISFIABLE,true,0.002796
+"A(true U[1,3] p)",SATISFIABLE,true,0.002855
+"E(true U[0,5] p)",SATISFIABLE,true,0.000978
+"E(true U(1,3] p)",SATISFIABLE,true,0.002709
+"E(true U[1,3) p)",SATISFIABLE,true,0.003110
+"E(true U(1,3) p)",SATISFIABLE,true,0.002647
+"EF[1,3] p & AG[0,inf) !p",UNSATISFIABLE,true,0.007355
+"AF[1,3] p & AG[0,inf) !p",UNSATISFIABLE,true,0.007906
+"E(true U[1,2] p) & AG[0,3] !p",UNSATISFIABLE,true,0.008685
+"E(true U[1,3] p) & E(true U[1,3] !p) & AG p",UNSATISFIABLE,true,0.021318
+"E(true U[1,3] p) & AG[0,4] !p",UNSATISFIABLE,true,0.008596
+"A(true U[1,3] p) & AG[0,4] !p",UNSATISFIABLE,true,0.009982
+"EF[1,3] p",SATISFIABLE,true,0.003763
+"AF[1,3] p",SATISFIABLE,true,0.002687
+"EG[0,2] p",SATISFIABLE,true,0.001868
+"AG[0,2] p",SATISFIABLE,true,0.002624
+"AG[0,inf) true",SATISFIABLE,true,0.002043
+"EF[1,3] false",UNSATISFIABLE,true,0.003103
+"AF[1,3] false",UNSATISFIABLE,true,0.003115
+"EG[0,3] (p & !p)",UNSATISFIABLE,true,0.001290
+"EG[0,2] p & EG[0,2] !p",UNSATISFIABLE,true,0.003039
+"AG[0,2] p & EF[0,2] !p",UNSATISFIABLE,true,0.009574
+"E(p R[1,3] q)",SATISFIABLE,true,0.002390
+"A(p R[1,3] q)",SATISFIABLE,true,0.003529
+"E(false R[1,3] p)",SATISFIABLE,true,0.003901
+"E(p R[1,3] q) & !q",SATISFIABLE,true,0.003591
+"A(p R[1,3] q) & !q",SATISFIABLE,true,0.005551
+"E(p R[1,3] false)",UNSATISFIABLE,true,0.001386
+"A(p R[1,3] false)",UNSATISFIABLE,true,0.002247
+"E(false R[1,3] false)",UNSATISFIABLE,true,0.001420
+"E(p R[1,3] q) & AG[0,inf) !q & AG[0,inf) !p",UNSATISFIABLE,true,0.008784
+"E(p R q) & !q & !p",UNSATISFIABLE,true,0.002009
+"EF[1,3] p & AG[0,1] !p",SATISFIABLE,true,0.005261
+"EF(1,3] p & AG[0,1] !p",SATISFIABLE,true,0.004709
+"EF[1,3] p & AG[0,2] !p",SATISFIABLE,true,0.005317
+"EF[1,2] p & AG[0,2) !p",SATISFIABLE,true,0.004724
+"AF[1,2] p & AG[0,2) !p",SATISFIABLE,true,0.005503
+"AG[0,2) p & AG(2,5] !p",SATISFIABLE,true,0.008369
+"EF[1,2) p & AG[0,2] !p",UNSATISFIABLE,true,0.008836
+"EF[1,2) p & AG[0,2) !p",UNSATISFIABLE,true,0.009225
+"EF[1,2] p & AG[0,2] !p",UNSATISFIABLE,true,0.009076
+"AF[1,2] p & AG[0,2] !p",UNSATISFIABLE,true,0.009729
+"AF(1,2) p & AG[0,2) !p",UNSATISFIABLE,true,0.009922
+"AG[0,2] p & AG[2,5] !p",UNSATISFIABLE,true,0.006524
+"!EF[1,3] p",SATISFIABLE,true,0.004771
+"!AF[1,3] p",SATISFIABLE,true,0.003780
+"!E(true U[1,3] p)",SATISFIABLE,true,0.004767
+"!EF[1,3] p & EF[4,6] p",SATISFIABLE,true,0.004379
+"E(true U[2,3] p) & !E(true U[0,2) p)",SATISFIABLE,true,0.004749
+"!EF[0,inf) p & p",UNSATISFIABLE,true,0.002400
+"!EF[0,inf) p & EF p",UNSATISFIABLE,true,0.006409
+"E(true U[0,1] p) & !E(true U[0,2) p)",UNSATISFIABLE,true,0.009393
+"E(true U(2,3] p) & !E(true U(2,5] p)",UNSATISFIABLE,true,0.012034
+"!EF[1,3] p & EF[2,4] p & AG[0,1] !p & AG(4,inf) !p",SATISFIABLE,true,0.025006
+"EF>2 p",SATISFIABLE,true,0.002632
+"EF>=1 p",SATISFIABLE,true,0.002603
+"EF<=5 p",SATISFIABLE,true,0.001020
+"EF>2 p & AG[0,2] !p",SATISFIABLE,true,0.005589
+"EF<0 p",UNSATISFIABLE,true,0.001607
+"EF>2 p & AG>2 !p",UNSATISFIABLE,true,0.009669
+"EF<=2 p & AG[0,2] !p",UNSATISFIABLE,true,0.009640
+"AF>0 p & AG>0 !p",UNSATISFIABLE,true,0.009660
+"{x <= 5}",SATISFIABLE,true,0.001024
+"{x >= 0}",SATISFIABLE,true,0.000886
+"{x <= 5} & {x >= 3}",SATISFIABLE,true,0.003530
+"EF[1,3] {x <= 10}",SATISFIABLE,true,0.003617
+"{x + 1 <= 6} & {x >= 4}",SATISFIABLE,true,0.001669
+"{x > 3} & {x < 2}",UNSATISFIABLE,true,0.005487
+"{x + 1 <= 5} & {x >= 5}",UNSATISFIABLE,true,0.001208
+"{x <= 0} & {x > 0}",UNSATISFIABLE,true,0.000389
+"{x >= 10} & {x <= 5}",UNSATISFIABLE,true,0.001038
+"EF[1,3] ({x > 5} & {x < 3})",UNSATISFIABLE,true,0.004496
+"E(true U[1,2] p) & E(true U[3,5] q)",SATISFIABLE,true,0.006792
+"E(true U[0,2] p) & EF[1,3] q",SATISFIABLE,true,0.004058
+"A(true U[1,3] p) & EG[0,2] p",SATISFIABLE,true,0.004016
+"E(true U[1,3] p) & E(true U[2,4] q)",SATISFIABLE,true,0.007422
+"E(true U[1,2] p) & E(true U[1,2] !p) & AG p",UNSATISFIABLE,true,0.023197
+"AF[1,3] p & AF[1,3] !p & EG p",UNSATISFIABLE,true,0.016168
+"E(true U[1,2] p) & AG[0,3] !p",UNSATISFIABLE,true,0.008866
+"EF[1,3] p & EF[1,3] !p & AG p & AG !p",UNSATISFIABLE,true,0.003742
+"EF EG p",SATISFIABLE,true,0.001457
+"AG EF p",SATISFIABLE,true,0.001982
+"EG AG p",SATISFIABLE,true,0.002780
+"EF AG p",SATISFIABLE,true,0.002331
+"EF (p & EG q)",SATISFIABLE,true,0.002867
+"AG AF false",UNSATISFIABLE,true,0.005482
+"EF (p & !p)",UNSATISFIABLE,true,0.001666
+"EG (p & !p)",UNSATISFIABLE,true,0.001075
+"EF EG false",UNSATISFIABLE,true,0.002055
+"EF (EG p & EG !p)",UNSATISFIABLE,true,0.003131
+"EF[1,3] EG p",SATISFIABLE,true,0.004574
+"EF[1,3] (p & EG q)",SATISFIABLE,true,0.005846
+"AG[0,2] EF p",SATISFIABLE,true,0.002648
+"EG[0,3] (p | EF q)",SATISFIABLE,true,0.002526
+"EF[1,3] AG p",SATISFIABLE,true,0.005315
+"EF[1,3] (p & !p)",UNSATISFIABLE,true,0.003608
+"AG[0,2] EF false",UNSATISFIABLE,true,0.012256
+"AG[0,2] (p & !p)",UNSATISFIABLE,true,0.001266
+"EF[1,3] EG false",UNSATISFIABLE,true,0.004426
+"AG[0,2] false",UNSATISFIABLE,true,0.001302
+"EF EG EF EG EF EG EF EG p",SATISFIABLE,true,0.010570
+"AG EF AG EF AG EF AG EF p",SATISFIABLE,true,0.024093
+"EF EG EF EG EF EG EF EG false",UNSATISFIABLE,true,0.018748
+"AG EF AG EF AG EF AG EF false",UNSATISFIABLE,true,0.147284
+"EG p & EF q",SATISFIABLE,true,0.002989
+"AG (p -> EF q)",SATISFIABLE,true,0.001654
+"E(p U q) & EG p",SATISFIABLE,true,0.003580
+"EG (p | q)",SATISFIABLE,true,0.001525
+"EG p & AF !p",UNSATISFIABLE,true,0.003141
+"AG p & EF !p",UNSATISFIABLE,true,0.003321
+"AG p & AG !p",UNSATISFIABLE,true,0.002933
+"p & !p & EF q",UNSATISFIABLE,true,0.000641
+"EF (p & !p) & EG q",UNSATISFIABLE,true,0.003330
+"(p | !p) & false",UNSATISFIABLE,true,0.000360
+"EF[1,3] p & AG[0,inf) !p & EG q",UNSATISFIABLE,true,0.017833
+"AG p & EF !p & EG q",UNSATISFIABLE,true,0.009236
+"{x > 5} & {x < 3} & EF p",UNSATISFIABLE,true,0.001767
+"E(p U false) & EG q",UNSATISFIABLE,true,0.003414
+"AF false & EG p",UNSATISFIABLE,true,0.002793
+"EG false | EG (p & !p)",UNSATISFIABLE,true,0.002456
+"AG false | (p & !p)",UNSATISFIABLE,true,0.001636

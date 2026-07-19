@@ -1,0 +1,183 @@
+formula,result,test_passed,time_taken_s
+"AG (EF (AG (EF (AG (EF (AG (EF (AG (EF (AG (EF p)))))))))))",SATISFIABLE,true,0.045680
+"EG (AF (EG (AF (EG (AF (EG (AF (EG (AF (EG (AF p)))))))))))",SATISFIABLE,true,0.023607
+"AG (EF (AG (EF (AG (EF (AG (EF (AG (EF p)))))))))",SATISFIABLE,true,0.032251
+"EG (AF (EG (AF (EG (AF (EG (AF (EG (AF p)))))))))",SATISFIABLE,true,0.016896
+"AG (EF (AG (EF (AG (EF (p & q & r))))))",SATISFIABLE,true,0.018748
+"AG (EF (AG (EF (AG (EF (p & (!p)))))))",UNSATISFIABLE,true,0.061941
+"EG (p & EG (q & EG (r & EG (s & EG (t & EG (u & EG v))))))",SATISFIABLE,true,0.035114
+"AG (p | AG (q | AG (r | AG (s | AG (t | AG (u | AG v))))))",SATISFIABLE,true,0.002065
+"E(p U (E(q U (E(r U (E(s U (E(t U (E(u U v)))))))))))",SATISFIABLE,true,0.002112
+"A(p U (A(q U (A(r U (A(s U (A(t U (A(u U v)))))))))))",SATISFIABLE,true,0.002076
+"E(p R (E(q R (E(r R (E(s R (E(t R (E(u R v)))))))))))",SATISFIABLE,true,0.003316
+"A(p R (A(q R (A(r R (A(s R (A(t R (A(u R v)))))))))))",SATISFIABLE,true,0.002959
+"AG (p -> E(q U[1,3] (r & A(s R[2,5] (t & EG u)))))",SATISFIABLE,true,0.001641
+"EG (p & EF (q | AG (r & EF (s | AG (t & EF u)))))",SATISFIABLE,true,0.002191
+"AG (p -> AF (q -> AG (r -> AF (s -> AG t))))",SATISFIABLE,true,0.001668
+"AG (p -> (q -> (r -> (s -> (t -> (u -> v))))))",SATISFIABLE,true,0.002502
+"EG (AF (EG (AF (EG (AF (EG (AF (EG p))))))))",SATISFIABLE,true,0.015555
+"AG (AF (EG (AF (EG (AF (EG (AF false)))))))",UNSATISFIABLE,true,0.388676
+"AG (EF[1,3] (AG (EF[4,6] (AG (EF[7,9] p)))))",SATISFIABLE,true,0.068730
+"AG (EF (AG (EF (AG (EF[1,3] p))))) & AG[0,inf) (!p)",UNSATISFIABLE,true,0.185197
+"E(p U (q & E(r R (s & E(t U (u & E(v R w)))))))",SATISFIABLE,true,0.003614
+"AG (EF (A(p R (q & EF (A(r R (s & EF t)))))))",SATISFIABLE,true,0.004041
+"EG (EF (EG (EF (EG (EF (EG (EF (EG (EF false)))))))))",UNSATISFIABLE,true,0.031685
+"A(p U (E(q U (A(r U (E(s U (A(t U (E(u U v)))))))))))",SATISFIABLE,true,0.002576
+"E(p U (A(q U (E(r U (A(s U (E(t U (A(u U v)))))))))))",SATISFIABLE,true,0.002110
+"A(p R (E(q R (A(r R (E(s R (A(t R (E(u R v)))))))))))",SATISFIABLE,true,0.002883
+"E(p R (A(q R (E(r R (A(s R (E(t R (A(u R v)))))))))))",SATISFIABLE,true,0.002926
+"A(p U (E(q R (A(r U (E(s R (A(t U (E(u R v)))))))))))",SATISFIABLE,true,0.003191
+"E(p R (A(q U (E(r R (A(s U (E(t R (A(u U v)))))))))))",SATISFIABLE,true,0.002877
+"AG (AF (EG (AF (EG (AF (EG p))))))",SATISFIABLE,true,0.021627
+"EG (AF (EG (AF (EG (AF p)))))",SATISFIABLE,true,0.007437
+"AG (EF (AG (EF (AG (EF (AG (EF p)))))))",SATISFIABLE,true,0.022391
+"EG (AG (EF (AG (EF (AG (EF (AG p)))))))",SATISFIABLE,true,0.023545
+"AG (EF (AG (EF (E(p U[1,3] q)))))",SATISFIABLE,true,0.009972
+"EG (AF (EG (AF (A(p R[1,3] q)))))",SATISFIABLE,true,0.063982
+"AG (AF (EG (AF (EG (AF (p & (!p)))))))",UNSATISFIABLE,true,0.102612
+"A(p U (q & E(r R (s & A(t U (u & E(v R w)))))))",SATISFIABLE,true,0.003756
+"AG (p -> EF (q & AF (r -> EG (s | AF t))))",SATISFIABLE,true,0.001713
+"EG (AG (EF (AG (EF p)))) & E(q U[1,3] r)",SATISFIABLE,true,0.023177
+"AG (AF (EG (AF (EG (AF (EG p)))))) & AG (!p)",UNSATISFIABLE,true,0.262140
+"A((p & q) U (E((r | s) U (A((t & u) U (E((v | w) U x)))))))",SATISFIABLE,true,0.001568
+"AG (p -> EF (q -> AG (r -> EF (s -> AG (t -> EF u)))))",SATISFIABLE,true,0.002149
+"EG (AF (EG (AF (EG (AF false)))))",UNSATISFIABLE,true,0.100532
+"A(p U[1,3] (E(q R[2,5] (A(r U[3,6] (E(s R[4,7] t)))))))",SATISFIABLE,true,0.010724
+"AF (EG (AF (EG (AF (EG p)))))",SATISFIABLE,true,0.006258
+"AG (EF (AG (EF (AG (EF (AG (EF (AG (EF p)))))))))",SATISFIABLE,true,0.033723
+"AG (EF p) & AG (!p)",UNSATISFIABLE,true,0.010926
+"AG (AF (AG (AF (EG (EF (EG (EF p)))))))",SATISFIABLE,true,0.020745
+"E(p U[1,3] q) & A((!p) U[1,3] (!q)) & AG[0,inf) ((p | (!q)) & ((!p) | q))",UNSATISFIABLE,true,0.004573
+"AG (AF (AG (AF (EG (EF (EG (EF (AG (AF p)))))))))",SATISFIABLE,true,0.028660
+"AG (AF p) & EG (!p)",UNSATISFIABLE,true,0.010021
+"EG (EF q & p)",SATISFIABLE,true,0.002343
+"AG (AF p) & EG p",SATISFIABLE,true,0.003347
+"EG p & AF (!p)",UNSATISFIABLE,true,0.003178
+"AG p & EF (!p)",UNSATISFIABLE,true,0.004023
+"EG (p & q) & EG ((!p) & (!q)) & AG ((p & q) | ((!p) & (!q)))",UNSATISFIABLE,true,0.002789
+"E(p U q) & AG p",SATISFIABLE,true,0.003718
+"E(p U q) & AG (!q)",UNSATISFIABLE,true,0.004051
+"A(p U q) & AG (!q) & AG (!p)",UNSATISFIABLE,true,0.004903
+"E(p U q) & E(q U r) & E(r U p)",SATISFIABLE,true,0.002174
+"E(p U q) & E(q U r) & E(r U p) & AG ((!p) & (!q) & (!r))",UNSATISFIABLE,true,0.014245
+"EG p & EG q",SATISFIABLE,true,0.004258
+"EG p & EG (!p)",UNSATISFIABLE,true,0.002794
+"AG (AF p & AF q)",SATISFIABLE,true,0.002409
+"A(false R (p & q))",SATISFIABLE,true,0.001924
+"EG (p & E(q U[1,3] r)) & AG (r -> AG r)",SATISFIABLE,true,0.015135
+"AG (p & A(q U[1,3] r)) & EG (r -> EG r)",SATISFIABLE,true,0.019001
+"EG (AF p & AG (!p))",UNSATISFIABLE,true,0.012328
+"AG (AF p & EG (!p))",UNSATISFIABLE,true,0.010762
+"EG (E(p R (q & EF r)))",SATISFIABLE,true,0.002212
+"AG (A(p R q) | EF r)",SATISFIABLE,true,0.001898
+"EG (EF p & EF q & EF r)",SATISFIABLE,true,0.002771
+"AF (AG p)",SATISFIABLE,true,0.002241
+"EF (EG p)",SATISFIABLE,true,0.001360
+"EG true",SATISFIABLE,true,0.001274
+"E(true U[0,1] p)",SATISFIABLE,true,0.000985
+"A(true U[0,1] p)",SATISFIABLE,true,0.000977
+"EF[0,1] false",UNSATISFIABLE,true,0.002801
+"AF[0,1] false",UNSATISFIABLE,true,0.003220
+"E(true U[1,2] p)",SATISFIABLE,true,0.002631
+"E(true U[1,3] false)",UNSATISFIABLE,true,0.003130
+"A(true U[1,3] false)",UNSATISFIABLE,true,0.003538
+"EF[1,3] p & AG[1,3] (!p)",UNSATISFIABLE,true,0.012042
+"AG[1,3] p & EF[1,3] (!p)",UNSATISFIABLE,true,0.011956
+"AF[1,3] p & AG[0,3] (!p)",UNSATISFIABLE,true,0.010052
+"EF[1,3] p & AG[0,1] (!p)",SATISFIABLE,true,0.004832
+"AG[0,2] p & EF[3,5] q",SATISFIABLE,true,0.005271
+"EF[1,3] p & EF[2,4] q",SATISFIABLE,true,0.006981
+"EF[1,3] p & AG[4,inf) p",SATISFIABLE,true,0.008629
+"EF[1,3] p & AG[0,inf) (!p)",UNSATISFIABLE,true,0.006787
+"AF[1,3] p & AG[0,inf) (!p)",UNSATISFIABLE,true,0.007757
+"E(p U[1,3] q) & AG[0,inf) (!q)",UNSATISFIABLE,true,0.007509
+"A(p U[1,3] q) & AG[0,inf) (!q)",UNSATISFIABLE,true,0.008162
+"E(p R[1,3] q) & AG[0,inf) (!q)",UNSATISFIABLE,true,0.004780
+"A(p R[1,3] q) & AG[0,inf) (!q)",UNSATISFIABLE,true,0.006177
+"EF[1,3] p & EF[4,6] q",SATISFIABLE,true,0.006315
+"E(p U[1,3] q) & E(q U[2,5] r)",SATISFIABLE,true,0.006641
+"E(p U[1,3] q) & E(q U[4,6] r) & AG[0,1] (!q)",UNSATISFIABLE,true,0.005568
+"EF[1,3] (p & q) & AG[0,inf) ((!p) | (!q))",UNSATISFIABLE,true,0.010015
+"AG[0,2] p & AF[3,5] p",SATISFIABLE,true,0.003993
+"E(p U(1,3) q)",SATISFIABLE,true,0.002543
+"E(p U[1,3) q)",SATISFIABLE,true,0.002890
+"E(p U(1,3] q)",SATISFIABLE,true,0.003121
+"AG[0,3] p & AF[0,3] (!p)",UNSATISFIABLE,true,0.010458
+"EG[1,3] p & EF[0,inf) (!p)",SATISFIABLE,true,0.004864
+"E(p U[1,3] q) & E(r U[2,4] s)",SATISFIABLE,true,0.007969
+"E(p U[1,3] q) & E(r U[2,4] s) & E(t U[3,5] u)",SATISFIABLE,true,0.011193
+"A(p U[1,3] q) & A(r U[2,4] s) & A(t U[3,5] u)",SATISFIABLE,true,0.012770
+"E(p U[1,3] q) & E(r U[2,4] s) & AG[0,inf) (!q) & AG[0,inf) (!s)",UNSATISFIABLE,true,0.017852
+"A(p U[1,3] q) & A(r U[2,4] s) & AG[0,inf) (!q) & AG[0,inf) (!s)",UNSATISFIABLE,true,0.019968
+"E(p U[1,3] (E(q U[4,6] r)))",SATISFIABLE,true,0.005053
+"A(p U[1,3] (A(q U[4,6] r)))",SATISFIABLE,true,0.005399
+"E(p U[1,3] q) & E(r R[2,5] s)",SATISFIABLE,true,0.005790
+"A(p U[1,3] q) & A(r R[2,5] s)",SATISFIABLE,true,0.008578
+"E(p R[1,3] (E(q U[2,4] r)))",SATISFIABLE,true,0.004929
+"A(p R[1,3] (A(q U[2,4] r)))",SATISFIABLE,true,0.007096
+"E(p U[1,3] (E(q R[2,4] r)))",SATISFIABLE,true,0.004586
+"A(p U[1,3] (A(q R[2,4] r)))",SATISFIABLE,true,0.006448
+"EG (E(p U[1,3] q) & A(r R[2,5] s))",SATISFIABLE,true,0.019111
+"AG (E(p U[1,3] q) | A(r R[2,5] s))",SATISFIABLE,true,0.005496
+"E(p U[1,3] q) & E(p U[4,6] r) & AG[0,1] (!q) & AG[0,4] (!r)",SATISFIABLE,true,0.013531
+"A(p U[1,3] q) & A(p U[4,6] r) & AG[3,4] (!q) & AG[6,inf) (!r)",SATISFIABLE,true,0.024666
+"E(p R[1,3] q) & E(r R[2,4] s)",SATISFIABLE,true,0.006181
+"A(p R[1,3] q) & A(r R[2,4] s)",SATISFIABLE,true,0.010353
+"E(p R[1,3] q) & E(r R[2,4] s) & E(t R[3,5] u)",SATISFIABLE,true,0.008712
+"A(p R[1,3] q) & A(r R[2,4] s) & A(t R[3,5] u)",SATISFIABLE,true,0.019246
+"AG[0,2] (EF[3,5] (AG[6,8] p))",SATISFIABLE,true,0.009170
+"EG[1,5] (EF[2,4] (EG[6,8] p))",SATISFIABLE,true,0.009168
+"E(p R[1,3] q) & E(r R[2,4] s) & AG[0,inf) (!q) & AG[0,inf) (!s)",UNSATISFIABLE,true,0.014238
+"A(p R[1,3] q) & A(r R[2,4] s) & AG[0,inf) (!q) & AG[0,inf) (!s)",UNSATISFIABLE,true,0.012162
+"E(p U[1,3] q) & A(r R[4,6] s) & EF[7,9] t",SATISFIABLE,true,0.013895
+"A(p U[1,3] q) & E(r R[4,6] s) & AG[7,9] t",SATISFIABLE,true,0.014922
+"EG (AG[0,2] p & EF[3,5] q & AG[6,8] r)",SATISFIABLE,true,0.106461
+"E(p U[1,3] q) & E(r U[1,3] (!q))",SATISFIABLE,true,0.006661
+"E(p U[1,3] q) & E(r R[1,3] s)",SATISFIABLE,true,0.005561
+"E(false R p) & EG p",SATISFIABLE,true,0.001374
+"A(false R p) & AG p",SATISFIABLE,true,0.001834
+"E(p R true)",SATISFIABLE,true,0.001704
+"A(p R true)",SATISFIABLE,true,0.001156
+"E(p R false)",UNSATISFIABLE,true,0.001002
+"A(p R false)",UNSATISFIABLE,true,0.001007
+"E(p R[1,3] false)",UNSATISFIABLE,true,0.001382
+"A(p R[1,3] false)",UNSATISFIABLE,true,0.002222
+"E(false R[1,3] false)",UNSATISFIABLE,true,0.002057
+"A(false R[1,3] false)",UNSATISFIABLE,true,0.002246
+"E(false R[1,3] q)",SATISFIABLE,true,0.003247
+"A(false R[1,3] q)",SATISFIABLE,true,0.005474
+"E(p R (q & r & s))",SATISFIABLE,true,0.001644
+"A(p R (q & r & s))",SATISFIABLE,true,0.001608
+"E(p R (q & r & s)) & AG ((!q) | (!r) | (!s))",UNSATISFIABLE,true,0.004775
+"E(p R (q & E(r R[1,3] s)))",SATISFIABLE,true,0.004614
+"E(p R[1,3] (q & E(r R s)))",SATISFIABLE,true,0.003260
+"A(p R (EF q & r))",SATISFIABLE,true,0.001618
+"E(EG p R (q & r))",SATISFIABLE,true,0.003575
+"A(AF p R q)",SATISFIABLE,true,0.001208
+"E(EF p R q)",SATISFIABLE,true,0.001195
+"E(p R[1,3] q) & E(r U[2,5] s)",SATISFIABLE,true,0.006045
+"A(p R[1,3] q) & A(r U[2,5] s)",SATISFIABLE,true,0.005007
+"!(E(p U q))",SATISFIABLE,true,0.000712
+"!(A(p R q))",SATISFIABLE,true,0.000702
+"AG (p & q & r) & EF ((!p) | (!q) | (!r))",UNSATISFIABLE,true,0.007938
+"E(p R (E(q R (E(r R (s & t & u))))))",SATISFIABLE,true,0.002437
+"!(EF[1,3] p)",SATISFIABLE,true,0.005461
+"!(AF[1,3] p)",SATISFIABLE,true,0.003197
+"!(EG[1,3] p)",SATISFIABLE,true,0.002682
+"!(AG[1,3] p)",SATISFIABLE,true,0.003176
+"!(E(p U[1,3] q))",SATISFIABLE,true,0.003562
+"!(A(p U[1,3] q))",SATISFIABLE,true,0.002416
+"!(E(p R[1,3] q))",SATISFIABLE,true,0.003616
+"!(A(p R[1,3] q))",SATISFIABLE,true,0.002574
+"!!(EG (EF p))",SATISFIABLE,true,0.001360
+"!(EF[1,3] p & EF[2,4] q)",SATISFIABLE,true,0.005535
+"!(AG[0,2] p | AG[3,5] q)",SATISFIABLE,true,0.003998
+"!(EG (E(p U[1,3] q) & A(r R[2,5] s)))",SATISFIABLE,true,0.004143
+"!(AG (E(p U[1,3] q) | A(r R[2,5] s)))",SATISFIABLE,true,0.005271
+"!(AG (EF (AG (EF p))))",SATISFIABLE,true,0.001462
+"!(EG (AF (EG (AF p))))",SATISFIABLE,true,0.001183
+"!(E(p U (q & E(r U s))))",SATISFIABLE,true,0.001198
+"!(A(p R (q | A(r R s))))",SATISFIABLE,true,0.001844
+"AG (p <-> q) & EG p",SATISFIABLE,true,0.004824
+"EG (p <-> q) & EG p & EG (!q)",UNSATISFIABLE,true,0.003258
+"!(AG (p -> AF q) & EG p & EG (!q))",SATISFIABLE,true,0.004007
