@@ -442,14 +442,16 @@ private:
             for (ClockId c : path_[k].node.just_reset)
                 if (c < nc_) reset[c] = 1;
         }
-        if (nc_ == 1) return has_delay || true;  // no clocks ⇒ time diverges freely
-        // Every clock with a finite upper bound in rep.Z must be reset on segment.
+        if (!has_delay) return false;   // no positive elapse on the segment
+        // A clock only *pins* time (Zeno) when it is held below a finite bound
+        // that persists — i.e. an active deadline (Inv(N), from an A-until) that
+        // is never reset on the segment.  A mere window bound in the zone does
+        // not pin: the run can always delay out of the window and lapse.
         const Node& rep = path_[a].node;
-        for (ClockId c = 1; c < nc_; ++c) {
-            Bound b = rep.Z.get_bound(c, kReferenceClock);  // c - 0 ≤ b
-            if (!b.is_infinity() && !reset[c]) return false;  // bounded & never reset
+        for (const Deadline& d : rep.D) {
+            if (d.x_mu < nc_ && !reset[d.x_mu]) return false;
         }
-        return has_delay;
+        return true;
     }
 
     // ── DFS ─────────────────────────────────────────────────────────────
