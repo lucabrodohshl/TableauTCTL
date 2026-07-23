@@ -7,18 +7,76 @@
 // general, a finite union of ~=_M-zones (a Knaster–Tarski least fixpoint for
 // until, greatest for release) and is represented as a ZoneSet.
 //
-// Content is added task-by-task:
-//   Task 1 — sat_leaf (leaf/boolean regions via Z3) + node_closed.
-//   Task 2 — satisfaction_set(mu, ...) fixpoint (until/release).
+// Clock model.  For a self-contained S_X computation we work in a fixed clock
+// space whose dimension is 1 (reference clock) + one formula-clock per distinct
+// modality subformula of the input.  `assign_clocks(mu, f)` builds that map; the
+// public satisfaction_set() wrapper allocates it and the extrapolation bound M.
+//
+// Z3 decides the *propositional/arithmetic* consistency of leaves jointly; the
+// clock constraints (windows x_mu ∈ I, guards) stay in the ZoneSet layer.
 // ============================================================================
 
 #ifndef TCTL_SATISFACTION_SET_HPP
 #define TCTL_SATISFACTION_SET_HPP
 
 #include "tctl/ast.hpp"
+#include "tctl/zone.hpp"
+#include "tctl/zoneset.hpp"
+
+#include <cstdint>
+#include <map>
+#include <vector>
 
 namespace tctl {
-// Declarations land in Task 1.
+
+// A distinct clock index per modality subformula (clock 0 = reference).
+using ClockMap = std::map<FormulaId, ClockId>;
+
+// ── Task 1: leaf region + node closure ──────────────────────────────────────
+
+/// Clock-valuation region where a *modality-free* state predicate psi holds
+/// under the propositional part of context X.  Returns the full universe (over
+/// num_clocks) when {X_prop ∧ psi} is Z3-consistent, else the empty set.
+/// (The modality-aware generalisation is holds_region(), below.)
+ZoneSet sat_leaf(FormulaId psi, const FormulaSet& X, FormulaFactory& f,
+                 std::size_t num_clocks);
+
+/// A node is (propositionally) closed when the conjunction of its state-predicate
+/// leaves Gamma_prop is Z3-UNSAT.  Temporal formulas in gamma are ignored.
+bool node_closed(const FormulaSet& gamma, FormulaFactory& f);
+
+// ── Task 2: satisfaction set S_X(mu) ────────────────────────────────────────
+
+/// S_X(mu) over a fixed clock space (num_clocks dims, extrapolation vector max),
+/// with `cmap` assigning a clock to mu and to every modality inside it.  Least
+/// fixpoint for until, greatest for release; recursion on FL(phi,psi).
+ZoneSet satisfaction_set(FormulaId mu, const FormulaSet& X, const ClockMap& cmap,
+                         std::size_t num_clocks,
+                         const std::vector<std::int32_t>& max, FormulaFactory& f);
+
+/// Region (over num_clocks) at which state formula psi holds under X, evaluating
+/// each top-level sub-modality via its S_X at "demanded now" (its clock = 0).
+ZoneSet holds_region(FormulaId psi, const FormulaSet& X, const ClockMap& cmap,
+                     std::size_t num_clocks,
+                     const std::vector<std::int32_t>& max, FormulaFactory& f);
+
+/// Convenience wrapper: assign clocks over mu's subtree, pick M = largest
+/// constant, and return S_X(mu) over the resulting space.  `out_x_mu` (if not
+/// null) receives mu's own formula-clock index; `out_num_clocks` the dimension.
+ZoneSet satisfaction_set(FormulaId mu, const FormulaSet& X, FormulaFactory& f,
+                         ClockId* out_x_mu = nullptr,
+                         std::size_t* out_num_clocks = nullptr);
+
+// ── Small helpers exposed for testing / reuse ───────────────────────────────
+
+/// True for the temporal modalities of the paper's fragment (EU/AU/ER/AR and
+/// their timed forms).  After normalisation no sugar / object next remains.
+bool is_modality(NodeKind k) noexcept;
+
+/// Assign a distinct clock index (starting at 1) to every modality subformula
+/// of `root`; returns the map.  Clock 0 stays the reference clock.
+ClockMap assign_clocks(FormulaId root, FormulaFactory& f);
+
 }  // namespace tctl
 
 #endif  // TCTL_SATISFACTION_SET_HPP

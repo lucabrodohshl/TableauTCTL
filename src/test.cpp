@@ -20,8 +20,10 @@
 #include "tctl/normalization.hpp"
 #include "tctl/parser.hpp"
 #include "tctl/paper_tableau.hpp"
+#include "tctl/satisfaction_set.hpp"
 #include "tctl/utils.hpp"
 #include "tctl/zone.hpp"
+#include "tctl/zoneset.hpp"
 
 #include <chrono>
 #include <cstring>
@@ -2478,11 +2480,129 @@ static void test_tctl_coverage_suite(TestContext& ctx) {
 // Test Entry Point
 // ============================================================================
 
+// ── Satisfaction-set unit tests (Tasks 1 & 2) ───────────────────────────────
+// These validate S_X / sat_X in ISOLATION against hand-computed regions.  The
+// full Fig.1 graph interaction (q meeting time-windowed ¬q) is a Task-7 gate.
+
+// onset ∈ S_X(mu):  is the all-zero valuation (x_mu = 0) in the satisfaction set?
+static bool onset_in_sx(FormulaId mu, const FormulaSet& X, FormulaFactory& f) {
+    ClockId x = 0; std::size_t nc = 0;
+    ZoneSet s = satisfaction_set(mu, X, f, &x, &nc);
+    Zone onset = Zone::zero(nc);  // all clocks 0 ⇒ x_mu = 0
+    return s.contains(onset);
+}
+
+static void test_satisfaction_set(TestContext& ctx) {
+    // ── Task 1: node closure via Z3 (arithmetic + propositional) ─────────
+    {   FormulaFactory f;
+        FormulaId c = normalize(parse_formula("(x<=2) & (x>=5)", f), f);
+        FormulaSet g; g.insert(c);
+        ctx.check(node_closed(g, f), "node_closed: x<=2 & x>=5 is inconsistent");
+    }
+    {   FormulaFactory f; FormulaId p = f.make_atom("p");
+        FormulaSet g; g.insert(p);
+        ctx.check(!node_closed(g, f), "node_closed: p alone is consistent");
+    }
+    {   FormulaFactory f; FormulaId p = f.make_atom("p"), np = f.make_not(p);
+        FormulaSet g; g.insert(p); g.insert(np);
+        ctx.check(node_closed(g, f), "node_closed: p & !p is inconsistent");
+    }
+
+    // ── Task 1: sat_leaf (jointly Z3-consistent ⇒ universe, else empty) ──
+    {   FormulaFactory f; FormulaId p = f.make_atom("p"); FormulaSet X;
+        ctx.check(!sat_leaf(p, X, f, 1).is_empty(), "sat_leaf(p) is non-empty");
+    }
+    {   FormulaFactory f; FormulaId p = f.make_atom("p"), np = f.make_not(p);
+        FormulaId conj = f.make_and(p, np); FormulaSet X;
+        ctx.check(sat_leaf(conj, X, f, 1).is_empty(), "sat_leaf(p & !p) is empty");
+    }
+
+    // ── Task 2: S_X onset membership (hand-computed) ─────────────────────
+    // From the onset you can delay to x_mu ∈ [1,2] and satisfy q.
+    {   FormulaFactory f; FormulaSet X;
+        FormulaId mu = normalize(parse_formula("E(true U[1,2] q)", f), f);
+        ctx.check(onset_in_sx(mu, X, f), "onset in S_X(E(true U[1,2] q))");
+    }
+    // Under a flat context ¬q, q is never labelable ⇒ base empty ⇒ onset out.
+    {   FormulaFactory f; FormulaSet X; X.insert(f.make_not(f.make_atom("q")));
+        FormulaId mu = normalize(parse_formula("E(true U[1,2] q)", f), f);
+        ctx.check(!onset_in_sx(mu, X, f),
+                  "flat ¬q context ⇒ onset NOT in S_X(E(true U[1,2] q))");
+    }
+    // Punctual window [2,2]: reachable at exactly t=2.
+    {   FormulaFactory f; FormulaSet X;
+        FormulaId mu = normalize(parse_formula("EF[2,2] q", f), f);
+        ctx.check(onset_in_sx(mu, X, f), "onset in S_X(EF[2,2] q)");
+    }
+    // Release AG[0,3] !q: ¬q freely labelled ⇒ holds everywhere ⇒ onset in.
+    {   FormulaFactory f; FormulaSet X;
+        FormulaId mu = normalize(parse_formula("AG[0,3] (!q)", f), f);
+        ctx.check(onset_in_sx(mu, X, f), "onset in S_X(AG[0,3] !q)");
+    }
+}
+
+// ── Cover-rule unit tests (Task 3) ──────────────────────────────────────────
+
+// A node demanding `mu` at the onset (Z = all clocks zero over S_X's space).
+static Node make_demand_node(FormulaId mu, const FormulaSet& X, FormulaFactory& f) {
+    ClockMap cm = assign_clocks(mu, f);
+    std::size_t nc = 1 + cm.size();
+    Node n;
+    n.Gamma.insert(mu);
+    n.X = X;
+    n.Z = Zone::zero(nc);
+    return n;
+}
+
+static void test_cover_rule(TestContext& ctx) {
+    // Full cover: onset ∈ S_X ⇒ Cov with {discharge, launch}.
+    {   FormulaFactory f; FormulaSet X;
+        FormulaId mu = normalize(parse_formula("E(true U[1,2] q)", f), f);
+        Node n = make_demand_node(mu, X, f);
+        CoverResult r = apply_cover(n, mu, f);
+        ctx.check(r.kind == CoverResult::Kind::Cover, "cover: onset fully covered");
+        ctx.check(r.children.size() == 2, "cover: two children (discharge+launch)");
+        ctx.check(r.children.size() == 2 && !r.children[1].pursuits.empty(),
+                  "cover: launch child carries a pursuit mu•");
+        ctx.check(r.children.size() == 2 && r.children[0].pursuits.size() ==
+                  n.pursuits.size(),
+                  "cover: discharge child adds no pursuit");
+    }
+    // Close: S_X empty (¬q context) ⇒ demand fails.
+    {   FormulaFactory f; FormulaSet X; X.insert(f.make_not(f.make_atom("q")));
+        FormulaId mu = normalize(parse_formula("E(true U[1,2] q)", f), f);
+        Node n = make_demand_node(mu, X, f);
+        CoverResult r = apply_cover(n, mu, f);
+        ctx.check(r.kind == CoverResult::Kind::Close, "close: empty S_X ⇒ close");
+    }
+    // A-until: launch child receives a deadline D_mu = {(x_mu, sup I)}.
+    {   FormulaFactory f; FormulaSet X;
+        FormulaId mu = normalize(parse_formula("AF[1,2] q", f), f);
+        Node n = make_demand_node(mu, X, f);
+        CoverResult r = apply_cover(n, mu, f);
+        ctx.check(r.kind == CoverResult::Kind::Cover, "A-until: cover");
+        ctx.check(r.children.size() == 2 && !r.children[1].D.empty(),
+                  "A-until: launch child has a deadline");
+    }
+    // E-until: launch child receives NO deadline.
+    {   FormulaFactory f; FormulaSet X;
+        FormulaId mu = normalize(parse_formula("EF[1,2] q", f), f);
+        Node n = make_demand_node(mu, X, f);
+        CoverResult r = apply_cover(n, mu, f);
+        ctx.check(r.children.size() == 2 && r.children[1].D.empty(),
+                  "E-until: launch child has no deadline");
+    }
+}
+
 int run_selftests() {
     // Create timestamped output folder for CSV results.
     init_results_dir();
 
     TestRunner runner;
+
+    // Engine core (paper construction) — satisfaction sets + cover rule.
+    runner.run("satisfaction_set",           test_satisfaction_set);
+    runner.run("cover_rule",                 test_cover_rule);
 
     // Lexer tests
     runner.run("lexer_brackets_braces",      test_lexer_brackets_braces);

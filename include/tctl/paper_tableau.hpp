@@ -28,12 +28,86 @@
 #define TCTL_PAPER_TABLEAU_HPP
 
 #include "tctl/ast.hpp"
+#include "tctl/zone.hpp"
 
 #include <chrono>
 #include <cstdint>
+#include <map>
 #include <string>
+#include <vector>
 
 namespace tctl {
+
+// ── Node model (paper §4.1) ──────────────────────────────────────────────────
+// N = <Gamma, X, Z, O, D> plus the pursuit state.
+
+// A deadline (x_mu, bound, strict) contributes  x_mu <= bound  (strict: <) to
+// Inv(N) = AND over D.  Applied only for a universal until (paper §4.2 p.6).
+struct Deadline {
+    ClockId       x_mu;
+    std::int64_t  bound;
+    bool          strict;
+
+    bool operator==(const Deadline& o) const noexcept {
+        return x_mu == o.x_mu && bound == o.bound && strict == o.strict;
+    }
+    bool operator<(const Deadline& o) const noexcept {
+        if (x_mu != o.x_mu)   return x_mu < o.x_mu;
+        if (bound != o.bound) return bound < o.bound;
+        return strict < o.strict;
+    }
+};
+
+// A launched pursuit mu•.  `stage` is the current proof-theoretic marker
+// (mu• here / EXmu• / AXmu•); `part` is the R^split region being pursued
+// (Whole for an until).  Condition (i) of acceptance applies to until pursuits.
+struct Pursuit {
+    FormulaId mu;           // launched modality Q(phi o_I psi)
+    ClockId   x_mu;         // its formula-clock (also a key in O)
+    enum class Stage : std::uint8_t { Here, DeferEX, DeferAX } stage = Stage::Here;
+    enum class Part  : std::uint8_t { Whole, BeforeI, InI }   part  = Part::Whole;
+    bool      is_until = true;   // true → until (acceptance condition (i) applies)
+
+    bool operator==(const Pursuit& o) const noexcept {
+        return mu == o.mu && x_mu == o.x_mu && stage == o.stage &&
+               part == o.part && is_until == o.is_until;
+    }
+    bool operator<(const Pursuit& o) const noexcept {
+        if (mu != o.mu)       return mu < o.mu;
+        if (x_mu != o.x_mu)   return x_mu < o.x_mu;
+        if (stage != o.stage) return stage < o.stage;
+        if (part != o.part)   return part < o.part;
+        return is_until < o.is_until;
+    }
+};
+
+// A tableau node.  Pursuit markers live in `pursuits` (not as synthetic AST
+// nodes in Gamma) so the EX/AX residual and R-region stay explicit.
+struct Node {
+    FormulaSet                    Gamma;     // goal formulas + literals
+    FormulaSet                    X;         // universal context (AX obligations)
+    Zone                          Z;         // canonical ~=_M-extrapolated DBM
+    std::map<FormulaId, ClockId>  O;         // launched mu ↦ x_mu
+    std::vector<Deadline>         D;         // ⇒ Inv(N) = AND x_mu </<= bound
+    std::vector<Pursuit>          pursuits;  // active mu• (stage / part)
+};
+
+// ── Cover rule result (paper §4.2) ──────────────────────────────────────────
+// Classifying a demanded modality mu against S_X(mu):
+//   Cover        — Z ⊆ S_X(mu): children = {discharge, launch} (an AND).
+//   PartialCover — Z ∩ S_X(mu) ≠ ∅ but ⊄: children = one narrowed OR-child per
+//                  convex component of Z ∩ S_X(mu).
+//   Close        — Z ∩ S_X(mu) = ∅: no children.
+struct CoverResult {
+    enum class Kind { Cover, PartialCover, Close };
+    Kind              kind = Kind::Close;
+    std::vector<Node> children;
+};
+
+// Apply the cover rule to node `n` for the demanded modality `mu`.  `n.Z` must
+// be expressed over S_X(mu)'s clock space (the graph task arranges this); the
+// onset is taken at x_mu = 0.
+CoverResult apply_cover(const Node& n, FormulaId mu, FormulaFactory& f);
 
 // ── Result ───────────────────────────────────────────────────────────────────
 // Verdict + wall-clock time.  Same public shape as the retired engine's Result
