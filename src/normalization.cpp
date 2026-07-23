@@ -697,14 +697,19 @@ static FormulaId negate_nnf(FormulaId id, FormulaFactory& f) {
         case NodeKind::AX:
             return f.make_ex(negate_nnf(child0, f));
 
-        // ¬E(φ U ψ) — leave as ¬E(φ U ψ) for the tableau engine.
-        // The children are already in NNF, so we just wrap in Not.
-        case NodeKind::EU:
-            return f.make_not(id);
+        // ¬E(φ U ψ) = A(¬φ R ¬ψ) — Until/Release duality (untimed)
+        case NodeKind::EU: {
+            auto c0 = negate_nnf(child0, f);
+            auto c1 = negate_nnf(child1, f);
+            return f.make_ar(c0, c1);
+        }
 
-        // ¬A(φ U ψ) — leave as ¬A(φ U ψ) for the tableau engine.
-        case NodeKind::AU:
-            return f.make_not(id);
+        // ¬A(φ U ψ) = E(¬φ R ¬ψ) — Until/Release duality (untimed)
+        case NodeKind::AU: {
+            auto c0 = negate_nnf(child0, f);
+            auto c1 = negate_nnf(child1, f);
+            return f.make_er(c0, c1);
+        }
 
         // ¬E(φ R ψ) = A(¬φ U ¬ψ)  — Release/Until duality
         case NodeKind::ER: {
