@@ -180,12 +180,44 @@ ZoneSet sat_leaf(FormulaId psi, const FormulaSet& X, FormulaFactory& f,
                                        : ZoneSet::empty(num_clocks);
 }
 
+// Fast propositional closure: a saturated node's leaves are atoms, ¬atoms,
+// True/False, or arithmetic constraints.  When no arithmetic is present we can
+// decide consistency by a complementary-literal scan and skip Z3 entirely —
+// Z3 context construction per node is otherwise the dominant cost.
 bool node_closed(const FormulaSet& gamma, FormulaFactory& f) {
+    std::vector<std::string> pos, neg;
+    bool has_arith = false;
+    for (FormulaId g : gamma.elements()) {
+        const FormulaNode& n = f.node(g);
+        switch (n.kind) {
+            case NodeKind::False: return true;
+            case NodeKind::True:  break;
+            case NodeKind::Atom:  pos.push_back(n.atom_name); break;
+            case NodeKind::Not: {
+                const FormulaNode& c = f.node(n.children[0]);
+                if (c.kind == NodeKind::Atom) neg.push_back(c.atom_name);
+                else if (c.kind != NodeKind::True && c.kind != NodeKind::False)
+                    has_arith = true;   // ¬(arithmetic) — let Z3 handle
+                else if (c.kind == NodeKind::True) return true;  // ¬true
+                break;
+            }
+            default:
+                if (is_modality(n.kind)) break;   // covered elsewhere, not a leaf clash
+                has_arith = true;                 // arithmetic / other predicate
+        }
+    }
+    if (!has_arith) {
+        for (const std::string& a : pos)
+            for (const std::string& b : neg)
+                if (a == b) return true;          // p ∧ ¬p
+        return false;
+    }
+    // Arithmetic present: fall back to the Z3 theory oracle.
     Z3Checker z3(f);
     bool any = false;
     for (FormulaId g : gamma.elements())
         if (z3.add_state_formula(g)) any = true;
-    if (!any) return false;  // no propositional content to be inconsistent
+    if (!any) return false;
     return z3.check() == Z3Result::UNSAT;
 }
 
@@ -234,18 +266,27 @@ ZoneSet release_region(const ZoneSet& phiR, const ZoneSet& psiR, const Interval&
 
 }  // namespace
 
-ZoneSet holds_region(FormulaId psi, const FormulaSet& X, const ClockMap& cmap,
-                     std::size_t num_clocks,
-                     const std::vector<std::int32_t>& max, FormulaFactory& f) {
+namespace {
+// Cache key for S_X(mu, X): mu plus the sorted context formula ids.
+std::string sat_key(FormulaId mu, const FormulaSet& X) {
+    std::string k = std::to_string(mu);
+    k += '#';
+    for (FormulaId x : X.elements()) { k += std::to_string(x); k += ','; }
+    return k;
+}
+
+// holds_region threaded with the S_X cache.
+ZoneSet holds_region_cached(FormulaId psi, const FormulaSet& X, const ClockMap& cmap,
+                            std::size_t num_clocks,
+                            const std::vector<std::int32_t>& max, FormulaFactory& f,
+                            SatCache& cache) {
     std::vector<Clause> clauses = to_dnf(psi, f);
     ZoneSet result = ZoneSet::empty(num_clocks);
     for (const Clause& cl : clauses) {
         if (!lits_consistent(cl.lits, X, f)) continue;  // clause impossible
         ZoneSet region = ZoneSet::universe(num_clocks);
         for (FormulaId m : cl.mods) {
-            ZoneSet mr = satisfaction_set(m, X, cmap, num_clocks, max, f);
-            // Sub-modality demanded now: pin its formula-clock to 0, then project
-            // it out so it does not constrain the ambient clock space.
+            ZoneSet mr = satisfaction_set(m, X, cmap, num_clocks, max, f, cache);
             ClockId xm = cmap.at(m);
             mr.constrain_lower(xm, 0, false);
             mr.constrain_upper(xm, 0, false);
@@ -258,22 +299,43 @@ ZoneSet holds_region(FormulaId psi, const FormulaSet& X, const ClockMap& cmap,
     result.reduce();
     return result;
 }
+}  // namespace
+
+ZoneSet holds_region(FormulaId psi, const FormulaSet& X, const ClockMap& cmap,
+                     std::size_t num_clocks,
+                     const std::vector<std::int32_t>& max, FormulaFactory& f) {
+    SatCache cache;
+    return holds_region_cached(psi, X, cmap, num_clocks, max, f, cache);
+}
 
 ZoneSet satisfaction_set(FormulaId mu, const FormulaSet& X, const ClockMap& cmap,
                          std::size_t num_clocks,
-                         const std::vector<std::int32_t>& max, FormulaFactory& f) {
+                         const std::vector<std::int32_t>& max, FormulaFactory& f,
+                         SatCache& cache) {
+    const std::string key = sat_key(mu, X);
+    if (auto it = cache.find(key); it != cache.end()) return it->second;
+
     const FormulaNode& n = f.node(mu);
     FormulaId phi = n.children[0];
     FormulaId psi = n.children[1];
     ClockId   x_mu = cmap.at(mu);
     Interval  I = interval_of(mu, f);
 
-    ZoneSet phiR = holds_region(phi, X, cmap, num_clocks, max, f);
-    ZoneSet psiR = holds_region(psi, X, cmap, num_clocks, max, f);
+    ZoneSet phiR = holds_region_cached(phi, X, cmap, num_clocks, max, f, cache);
+    ZoneSet psiR = holds_region_cached(psi, X, cmap, num_clocks, max, f, cache);
 
-    if (is_until_kind(n.kind))
-        return until_region(phiR, psiR, I, x_mu, max);
-    return release_region(phiR, psiR, I, x_mu, num_clocks, max);
+    ZoneSet res = is_until_kind(n.kind)
+        ? until_region(phiR, psiR, I, x_mu, max)
+        : release_region(phiR, psiR, I, x_mu, num_clocks, max);
+    cache.emplace(key, res);
+    return res;
+}
+
+ZoneSet satisfaction_set(FormulaId mu, const FormulaSet& X, const ClockMap& cmap,
+                         std::size_t num_clocks,
+                         const std::vector<std::int32_t>& max, FormulaFactory& f) {
+    SatCache cache;
+    return satisfaction_set(mu, X, cmap, num_clocks, max, f, cache);
 }
 
 ZoneSet satisfaction_set(FormulaId mu, const FormulaSet& X, FormulaFactory& f,

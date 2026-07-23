@@ -2560,7 +2560,8 @@ static CoverResult cover_of(const Node& n, FormulaId mu, FormulaFactory& f) {
     std::size_t nc = 1 + cm.size();
     std::vector<std::int32_t> max(nc, max_constant(mu, f));
     max[0] = 0;
-    return apply_cover(n, mu, cm, nc, max, f);
+    SatCache sx;
+    return apply_cover(n, mu, cm, nc, max, f, sx);
 }
 
 static void test_cover_rule(TestContext& ctx) {

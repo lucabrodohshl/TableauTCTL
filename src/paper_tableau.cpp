@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -85,8 +86,9 @@ std::vector<Deadline> drop_deadline(const std::vector<Deadline>& D, ClockId x) {
 CoverResult apply_cover(const Node& n, FormulaId mu,
                         const std::map<FormulaId, ClockId>& cmap,
                         std::size_t num_clocks,
-                        const std::vector<std::int32_t>& max, FormulaFactory& f) {
-    ZoneSet SX = satisfaction_set(mu, n.X, cmap, num_clocks, max, f);
+                        const std::vector<std::int32_t>& max, FormulaFactory& f,
+                        SatCache& sx_cache) {
+    ZoneSet SX = satisfaction_set(mu, n.X, cmap, num_clocks, max, f, sx_cache);
     const ClockId x_mu = cmap.at(mu);
 
     // Onset: the launch resets x_mu, so start measuring the window now by
@@ -153,16 +155,49 @@ struct Expansion {
 
 class Engine {
 public:
-    Engine(FormulaFactory& f, FormulaId root)
+    Engine(FormulaFactory& f, FormulaId root, double timeout_s)
         : f_(f) {
+        if (timeout_s > 0) {
+            deadline_ = std::chrono::steady_clock::now() +
+                        std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                            std::chrono::duration<double>(timeout_s));
+            has_deadline_ = true;
+        }
         cmap_ = assign_clocks(root, f);
         nc_ = 1 + cmap_.size();
         std::int32_t M = max_constant(root, f);
         max_.assign(nc_, M);
         max_[0] = 0;
+        collect_boundaries(root, f);
         debug_ = std::getenv("TCTL_DEBUG") != nullptr;
     }
 
+    // The only clock values where a formula's truth can flip are the integer
+    // constants appearing in its intervals.  Region-splitting against just these
+    // (not every integer up to M) keeps the search flat in the magnitude of M.
+    void collect_boundaries(FormulaId id, FormulaFactory& f) {
+        std::vector<std::int32_t> bs = {0};
+        std::function<void(FormulaId)> walk = [&](FormulaId x) {
+            if (x == kInvalidId) return;
+            const FormulaNode& n = f.node(x);
+            if (n.kind == NodeKind::TimedEU || n.kind == NodeKind::TimedAU ||
+                n.kind == NodeKind::TimedER || n.kind == NodeKind::TimedAR) {
+                bs.push_back(static_cast<std::int32_t>(n.time_lower.value));
+                if (!n.time_upper.is_infinity)
+                    bs.push_back(static_cast<std::int32_t>(n.time_upper.value));
+            }
+            walk(n.children[0]); walk(n.children[1]);
+        };
+        walk(id);
+        std::sort(bs.begin(), bs.end());
+        bs.erase(std::unique(bs.begin(), bs.end()), bs.end());
+        bounds_ = std::move(bs);
+    }
+
+    // Memoisation + boundary-region abstraction keep the search shallow.  The
+    // process runs with an enlarged main-thread stack (set via a linker option,
+    // see CMakeLists.txt) so deep-but-finite runs do not overflow — no per-check
+    // thread and no artificial depth limit.
     bool decide(FormulaId root) {
         Node n;
         n.Gamma.insert(root);
@@ -243,7 +278,7 @@ private:
         // Demanded modality in Gamma → cover.
         for (FormulaId id : n.Gamma.elements()) {
             if (is_modality(f_.node(id).kind)) {
-                CoverResult cr = apply_cover(n, id, cmap_, nc_, max_, f_);
+                CoverResult cr = apply_cover(n, id, cmap_, nc_, max_, f_, sx_cache_);
                 switch (cr.kind) {
                     case CoverResult::Kind::Close:
                         return {Expansion::Kind::Closed, {}};
@@ -277,7 +312,7 @@ private:
             Zone stopZ = n.Z;
             constrain_in_window(stopZ, p.x_mu, w);
             if (!stopZ.is_empty()) {
-                for (const Zone& r : integer_regions(stopZ)) {
+                for (const Zone& r : integer_regions(stopZ, p.x_mu)) {
                     Node stop = n;
                     stop.Gamma.insert(psi);
                     stop.Z = r;
@@ -340,31 +375,28 @@ private:
         return {Expansion::Kind::Or, {stop, go}};
     }
 
-    // Integer-region split of a delayed zone (paper's Δ°/Δ^∂ generalised): every
-    // maximal sub-zone is either on an integer hyperplane or inside an open unit
-    // cell, so no zone straddles a boundary where a formula's truth flips.
-    std::vector<Zone> integer_regions(const Zone& Zup) const {
-        std::vector<Zone> regs = {Zup};
-        const std::int32_t M = max_.empty() ? 0 : *std::max_element(max_.begin(), max_.end());
-        for (ClockId c = 1; c < nc_; ++c) {
-            std::vector<Zone> nx;
-            for (const Zone& z : regs) {
-                for (std::int32_t k = 0; k <= M; ++k) {
-                    Zone pt = z;                       // c = k
-                    pt.add_lower_bound(c, k, false); pt.add_upper_bound(c, k, false);
-                    if (!pt.is_empty()) nx.push_back(pt);
-                    if (k < M) {                       // c ∈ (k, k+1)
-                        Zone op = z;
-                        op.add_lower_bound(c, k, true); op.add_upper_bound(c, k + 1, true);
-                        if (!op.is_empty()) nx.push_back(op);
-                    }
-                }
-                Zone hi = z;                           // c > M
-                hi.add_lower_bound(c, M, true);
-                if (!hi.is_empty()) nx.push_back(hi);
+    // Integer-region split of a zone along ONE clock `c` (paper's Δ°/Δ^∂): the
+    // sub-zones are the integer points c=k and open cells c∈(k,k+1) up to M, plus
+    // c>M.  Splitting only the clock whose window boundary matters (not every
+    // clock) avoids a Cartesian blow-up while still separating a boundary point
+    // from the open interval where a co-present formula's truth flips.
+    std::vector<Zone> integer_regions(const Zone& z, ClockId c) const {
+        std::vector<Zone> regs;
+        for (std::size_t i = 0; i < bounds_.size(); ++i) {
+            const std::int32_t b = bounds_[i];
+            Zone pt = z;                       // c = b
+            pt.add_lower_bound(c, b, false); pt.add_upper_bound(c, b, false);
+            if (!pt.is_empty()) regs.push_back(std::move(pt));
+            if (i + 1 < bounds_.size()) {      // c ∈ (b, next)
+                Zone op = z;
+                op.add_lower_bound(c, b, true);
+                op.add_upper_bound(c, bounds_[i + 1], true);
+                if (!op.is_empty()) regs.push_back(std::move(op));
             }
-            regs = std::move(nx);
         }
+        Zone hi = z;                           // c > last boundary
+        hi.add_lower_bound(c, bounds_.back(), true);
+        if (!hi.is_empty()) regs.push_back(std::move(hi));
         return regs;
     }
 
@@ -454,38 +486,74 @@ private:
         return true;
     }
 
-    // ── DFS ─────────────────────────────────────────────────────────────
+    // ── DFS with sound memoization ──────────────────────────────────────
+    // A node's verdict depends on the ancestor path only through loop-backs.
+    // `loop_min_` reports the shallowest ancestor depth any descendant looped
+    // to (kInf if none).  When a subtree is self-contained — no loop reached a
+    // strict ancestor (submin >= this node's depth) — its verdict is
+    // path-independent and cached globally.  This turns the exponential
+    // re-exploration into one expansion per distinct node.
+    static constexpr std::size_t kInf = static_cast<std::size_t>(-1);
+
     bool dfs(const Node& n) {
-        if (++nodes_ > kBudget) { budget_hit_ = true; return false; }
-        if (node_closed(n.Gamma, f_) || n.Z.is_empty()) {
-            trace(n, "CLOSED");
+        if (budget_hit_) return false;
+        if (has_deadline_ && (nodes_ & 0x1FFF) == 0 &&
+            std::chrono::steady_clock::now() > deadline_) {
+            budget_hit_ = true;
             return false;
+        }
+        ++nodes_;
+        if (node_closed(n.Gamma, f_) || n.Z.is_empty()) {
+            loop_min_ = kInf; trace(n, "CLOSED"); return false;
         }
 
         std::string k = key(n);
         for (std::size_t a = 0; a < path_.size(); ++a)
             if (path_[a].key == k) {
+                loop_min_ = a;                       // loop-back to ancestor a
                 bool acc = loop_accepting(a);
                 trace(n, acc ? "LOOP+" : "LOOP-");
                 return acc;
             }
+        if (auto it = memo_.find(k); it != memo_.end()) {
+            loop_min_ = kInf; return it->second;
+        }
 
         Expansion e = expand(n);
-        if (e.kind == Expansion::Kind::Closed) { trace(n, "close"); return false; }
+        if (e.kind == Expansion::Kind::Closed) {
+            memo_.emplace(k, false); loop_min_ = kInf; trace(n, "close"); return false;
+        }
 
+        const std::size_t d = path_.size();
         trace(n, e.kind == Expansion::Kind::And ? "AND" : "OR");
         path_.push_back({k, n});
         ++depth_;
+        std::size_t submin = kInf;
         bool res;
         if (e.kind == Expansion::Kind::And) {
             res = true;
-            for (const Node& c : e.children) if (!dfs(c)) { res = false; break; }
+            for (const Node& c : e.children) {
+                bool r = dfs(c);
+                submin = std::min(submin, loop_min_);
+                if (!r) { res = false; break; }
+            }
         } else {  // Or
             res = false;
-            for (const Node& c : e.children) if (dfs(c)) { res = true; break; }
+            for (const Node& c : e.children) {
+                bool r = dfs(c);
+                submin = std::min(submin, loop_min_);
+                if (r) { res = true; break; }
+            }
         }
         --depth_;
         path_.pop_back();
+
+        if (submin >= d) {          // self-contained: no loop to a strict ancestor
+            memo_.emplace(k, res);
+            loop_min_ = kInf;
+        } else {
+            loop_min_ = submin;     // an outstanding loop bubbles up to that ancestor
+        }
         return res;
     }
 
@@ -503,17 +571,21 @@ private:
         std::fputs(os.str().c_str(), stderr);
     }
 
-    static constexpr std::uint64_t kBudget = 300000;
-
     FormulaFactory& f_;
     ClockMap cmap_;
     std::size_t nc_ = 1;
     std::vector<std::int32_t> max_;
+    std::vector<std::int32_t> bounds_;   // sorted formula interval endpoints (+0)
 
     struct Frame { std::string key; Node node; };
     std::vector<Frame> path_;
+    std::unordered_map<std::string, bool> memo_;   // self-contained node verdicts
+    SatCache sx_cache_;                             // persistent S_X(mu,X) memo
+    std::size_t loop_min_ = kInf;                  // shallowest ancestor a subtree looped to
     std::uint64_t nodes_ = 0;
     bool budget_hit_ = false;
+    bool has_deadline_ = false;
+    std::chrono::steady_clock::time_point deadline_{};
     bool debug_ = false;
     int depth_ = 0;
 };
@@ -545,7 +617,8 @@ Result PaperTableau::check(FormulaId normalized_formula) {
     stats_.reset();
     const auto t0 = std::chrono::steady_clock::now();
 
-    Engine engine(factory_, normalized_formula);
+    Engine engine(factory_, normalized_formula,
+                  static_cast<double>(timeout_.count()));
     bool sat = engine.decide(normalized_formula);
 
     Result::Value verdict;

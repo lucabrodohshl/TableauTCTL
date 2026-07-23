@@ -25,12 +25,19 @@
 
 #include <cstdint>
 #include <map>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace tctl {
 
 // A distinct clock index per modality subformula (clock 0 = reference).
 using ClockMap = std::map<FormulaId, ClockId>;
+
+// Persistent memo for S_X(mu, X): the fixpoint is otherwise recomputed at every
+// cover node — and recursively for nested modalities — which blows up
+// exponentially with nesting depth.  Keyed by (mu, X).
+using SatCache = std::unordered_map<std::string, ZoneSet>;
 
 // ── Task 1: leaf region + node closure ──────────────────────────────────────
 
@@ -53,6 +60,12 @@ bool node_closed(const FormulaSet& gamma, FormulaFactory& f);
 ZoneSet satisfaction_set(FormulaId mu, const FormulaSet& X, const ClockMap& cmap,
                          std::size_t num_clocks,
                          const std::vector<std::int32_t>& max, FormulaFactory& f);
+
+/// Memoised S_X(mu): shares the fixpoint across cover nodes and nested recursion.
+ZoneSet satisfaction_set(FormulaId mu, const FormulaSet& X, const ClockMap& cmap,
+                         std::size_t num_clocks,
+                         const std::vector<std::int32_t>& max, FormulaFactory& f,
+                         SatCache& cache);
 
 /// Region (over num_clocks) at which state formula psi holds under X, evaluating
 /// each top-level sub-modality via its S_X at "demanded now" (its clock = 0).

@@ -142,6 +142,14 @@ set(SOURCES
 
 # ── Executable ───────────────────────────────────────────────────────────────
 add_executable(tctl_sat ${SOURCES})
+
+# Enlarge the main-thread stack so the tableau's deep-but-finite DFS does not
+# overflow the default 8 MB, without an artificial recursion-depth limit.
+if(APPLE)
+    target_link_options(tctl_sat PRIVATE -Wl,-stack_size,0x20000000)  # 512 MB
+elseif(UNIX)
+    target_link_options(tctl_sat PRIVATE -Wl,-z,stacksize=0x20000000)
+endif()
 target_include_directories(tctl_sat PRIVATE 
     include
     ${Z3_INCLUDE_DIRS}

@@ -28,6 +28,7 @@
 #define TCTL_PAPER_TABLEAU_HPP
 
 #include "tctl/ast.hpp"
+#include "tctl/satisfaction_set.hpp"
 #include "tctl/zone.hpp"
 
 #include <chrono>
@@ -121,7 +122,8 @@ struct CoverResult {
 CoverResult apply_cover(const Node& n, FormulaId mu,
                         const std::map<FormulaId, ClockId>& cmap,
                         std::size_t num_clocks,
-                        const std::vector<std::int32_t>& max, FormulaFactory& f);
+                        const std::vector<std::int32_t>& max, FormulaFactory& f,
+                        SatCache& sx_cache);
 
 // ── Result ───────────────────────────────────────────────────────────────────
 // Verdict + wall-clock time.  Same public shape as the retired engine's Result
