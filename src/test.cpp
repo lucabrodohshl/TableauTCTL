@@ -1186,8 +1186,8 @@ std::vector<TestCase> generate_tctl_edge_tests_100() {
 
         // exact boundary clashes at t = 2 (closed/closed)
         { "AG[0,2] p & AG[2,5] !p", false },   // boundary included in both
-        { "AG[0,2) p & AG[2,5] !p", false },  // UNSAT: can't cross boundary at t=2 (closed [2,5] requires !p at t=2 but p holds up to transition)
-        { "AG[0,2] p & AG(2,5] !p", false },  // UNSAT: closed [0,2] locks p at t=2; can't switch to !p without violating AG[0,2]
+        { "AG[0,2) p & AG[2,5] !p", true },   // SAT: [0,2) and [2,5] are disjoint (2 not in [0,2)) — switch p→!p at t=2
+        { "AG[0,2] p & AG(2,5] !p", true },    // SAT: [0,2] and (2,5] are disjoint (2 not in (2,5]) — switch p→!p just after t=2
         { "AG[0,2) p & AG(2,5] !p", true },    // disjoint with gap at 2 (both open)
         { "AG[0,2) p & AG(2,5] !p", true },    // disjoint at boundary
 
@@ -1210,7 +1210,7 @@ std::vector<TestCase> generate_tctl_edge_tests_100() {
         { "AF(1,2) p & AG[0,2) !p", false },   // must happen in (1,2), forbidden there
 
         // adjacency without overlap
-        { "EG[0,1] p & AG(1,3] !p", false },  // UNSAT: transition from p to !p at boundary always violates one of the intervals
+        { "EG[0,1] p & AG(1,3] !p", true },   // SAT: [0,1] and (1,3] are disjoint (1 not in (1,3]) — switch p→!p just after t=1
         { "EG[0,1] p & AG[1,3] !p", false },   // t=1 overlap
 
         // strict lower only
@@ -1317,7 +1317,7 @@ std::vector<TestCase> generate_tctl_edge_tests_100() {
         // ================================================================
 
         { "EG[0,inf) p & AG[0,inf) !p", false },
-        { "EG[0,3] p & AG(3,5] !p", false },  // UNSAT: same boundary issue as EG[0,1] p & AG(1,3] !p
+        { "EG[0,3] p & AG(3,5] !p", true },   // SAT: [0,3] and (3,5] are disjoint (3 not in (3,5]) — switch p→!p just after t=3
         { "EG[0,3] p & AG[3,5] !p", false },         // boundary 3 clash
 
         // EG + EF on same atom with conflicting window
