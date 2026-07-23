@@ -142,7 +142,11 @@ CoverResult apply_cover(const Node& n, FormulaId mu,
         p.stage = Pursuit::Stage::Here; p.part = Pursuit::Part::Whole;
         p.is_until = until_kind;
         launch.pursuits.push_back(p);
-        if (is_universal(kind) && until_kind) {
+        // A deadline only for a *timed* universal until (real clock + finite
+        // window).  Untimed A-until has no clock and window [0,∞) → no deadline.
+        // (Guard on x_mu: an untimed AU node's time_upper.is_infinity is a
+        // default-constructed false, so this must not rely on it alone.)
+        if (x_mu != kNoClock && is_universal(kind) && until_kind) {
             const FormulaNode& mn = f.node(mu);
             if (!mn.time_upper.is_infinity)
                 launch.D.push_back(Deadline{x_mu, mn.time_upper.value,
