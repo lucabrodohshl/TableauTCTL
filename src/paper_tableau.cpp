@@ -13,6 +13,7 @@
 #include "tctl/zoneset.hpp"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <functional>
 #include <sstream>
@@ -196,6 +197,7 @@ public:
         max_.assign(nc_, M);
         max_[0] = 0;
         collect_boundaries(root, f);
+        debug_ = std::getenv("TCTL_DEBUG") != nullptr;
     }
 
     // The only clock values where a formula's truth can flip are the integer
@@ -512,15 +514,23 @@ private:
     // ── Loop acceptance (reads the explicit stack) ──────────────────────
     bool loop_accepting(const std::vector<Frame>& st, std::size_t a) const {
         const Node& rep = st[a].n;
-        // (i) every until-pursuit pending on the loop must be discharged on the
-        // segment (its (U•) stop taken somewhere): a persistent eventuality is
-        // re-launched each cycle, fine as long as it is fulfilled within the loop.
+        // (i) reject only an until-pursuit that is *continuously* pending around
+        // the whole loop — genuinely stuck, never discharged.  An until that
+        // leaves the loop path at some node is fine: either it was discharged
+        // (its (U•) stop removed it), or it forked onto a sibling EX-branch (a
+        // separate demanded successor) that already returned SAT — as with the
+        // inner existential until of E(φ R ...).  A stuck until is one present in
+        // every node of the segment.
         for (const Pursuit& p : rep.pursuits) {
             if (!p.is_until) continue;
-            bool discharged = false;
-            for (std::size_t k = a; k < st.size(); ++k)
-                if (st[k].n.discharges_until == p.mu) { discharged = true; break; }
-            if (!discharged) return false;
+            bool present_all = true;
+            for (std::size_t k = a; k < st.size(); ++k) {
+                bool has = false;
+                for (const Pursuit& q : st[k].n.pursuits)
+                    if (q.mu == p.mu) { has = true; break; }
+                if (!has) { present_all = false; break; }
+            }
+            if (present_all) return false;   // stuck eventuality → not accepting
         }
         // (ii) time-progressing (non-Zeno): positive elapse and every
         // deadline-bounded clock reset on the segment.
@@ -553,6 +563,22 @@ private:
         memo_[sk].emplace_back(ez, verdict);
     }
 
+    void dtrace(std::size_t depth, const char* tag, const Node& n, int res) const {
+        if (!debug_) return;
+        std::ostringstream os;
+        for (std::size_t i = 0; i < depth; ++i) os << ' ';
+        os << tag;
+        if (res >= 0) os << (res ? "+" : "-");
+        os << " G{";
+        for (FormulaId id : n.Gamma.elements()) os << f_.to_string(id) << ',';
+        os << "} P{";
+        for (const Pursuit& p : n.pursuits)
+            os << f_.to_string(p.mu) << "/s" << int(p.stage) << "/pt" << int(p.part)
+               << (p.is_until ? "U" : "R") << ' ';
+        os << "} ph" << int(n.phase) << " Z=" << n.Z.to_string() << '\n';
+        std::fputs(os.str().c_str(), stderr);
+    }
+
     void push_frame(std::vector<Frame>& st, const Node& n) {
         Frame fr;
         fr.n = n;
@@ -579,21 +605,27 @@ private:
                 }
                 // resolve without expanding: closed / loop back / memo (subsumption)
                 if (node_closed(fr.n.Gamma, f_) || fr.n.Z.is_empty()) {
+                    dtrace(st.size()-1, "CLOSED", fr.n, -1);
                     pend_res = false; pend_lm = kInf; st.pop_back(); continue;
                 }
                 if (auto it = onpath.find(fr.fk); it != onpath.end()) {
                     std::size_t a = it->second;
-                    pend_res = loop_accepting(st, a); pend_lm = a; st.pop_back(); continue;
+                    bool acc = loop_accepting(st, a);
+                    dtrace(st.size()-1, "LOOP", fr.n, acc);
+                    pend_res = acc; pend_lm = a; st.pop_back(); continue;
                 }
                 bool cached;
                 if (memo_lookup(fr.sk, fr.ez, cached)) {
+                    dtrace(st.size()-1, "memo", fr.n, cached);
                     pend_res = cached; pend_lm = kInf; st.pop_back(); continue;
                 }
                 fr.e = expand(fr.n);
                 if (fr.e.kind == Expansion::Kind::Closed) {
+                    dtrace(st.size()-1, "close", fr.n, -1);
                     memo_store(fr.sk, fr.ez, false);
                     pend_res = false; pend_lm = kInf; st.pop_back(); continue;
                 }
+                dtrace(st.size()-1, fr.e.kind == Expansion::Kind::And ? "AND" : "OR", fr.n, -1);
                 fr.expanded = true;
                 fr.ci = 0;
                 fr.res = (fr.e.kind == Expansion::Kind::And);
@@ -640,6 +672,7 @@ private:
     std::uint64_t expansions_ = 0;
     bool budget_hit_ = false;
     bool has_deadline_ = false;
+    bool debug_ = false;
     std::chrono::steady_clock::time_point deadline_{};
 };
 
