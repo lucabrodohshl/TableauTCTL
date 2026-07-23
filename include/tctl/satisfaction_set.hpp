@@ -31,8 +31,18 @@
 
 namespace tctl {
 
-// A distinct clock index per modality subformula (clock 0 = reference).
+// A distinct clock index per *timed* modality subformula (clock 0 = reference).
+// Untimed modalities (window [0,∞), no deadline) get no clock.
 using ClockMap = std::map<FormulaId, ClockId>;
+
+// Sentinel for "this modality has no formula-clock" (an untimed modality).
+inline constexpr ClockId kNoClock = static_cast<ClockId>(-1);
+
+/// mu's formula-clock, or kNoClock if it is untimed (no clock allocated).
+inline ClockId clock_of(const ClockMap& cmap, FormulaId mu) {
+    auto it = cmap.find(mu);
+    return it == cmap.end() ? kNoClock : it->second;
+}
 
 // Persistent memo for S_X(mu, X): the fixpoint is otherwise recomputed at every
 // cover node — and recursively for nested modalities — which blows up

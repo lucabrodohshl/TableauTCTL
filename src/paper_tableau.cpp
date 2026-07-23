@@ -63,8 +63,9 @@ Window window_of(FormulaId mu, const FormulaFactory& f) {
     return w;
 }
 
-// Z ∩ (x_mu ∈ I), in place.
+// Z ∩ (x_mu ∈ I), in place.  Untimed modalities have no clock / window [0,∞).
 void constrain_in_window(Zone& z, ClockId x, const Window& w) {
+    if (x == kNoClock) return;
     z.add_lower_bound(x, w.lo, w.lo_strict);
     if (!w.hi_inf) z.add_upper_bound(x, w.hi, w.hi_strict);
 }
@@ -108,13 +109,14 @@ CoverResult apply_cover(const Node& n, FormulaId mu,
     }
 
     ZoneSet SX = satisfaction_set(mu, n.X, cmap, num_clocks, max, f, sx_cache);
-    const ClockId x_mu = cmap.at(mu);
+    const ClockId x_mu = clock_of(cmap, mu);    // kNoClock if mu is untimed
 
     // Onset: the launch resets x_mu, so start measuring the window now by
     // *resetting* x_mu (not intersecting with x_mu=0 — the clock may already
-    // carry a value from an earlier, discharged launch of the same mu).
+    // carry a value from an earlier, discharged launch of the same mu).  An
+    // untimed modality has no clock, so the onset zone is just n.Z.
     Zone Zc = n.Z;
-    Zc.reset(x_mu);
+    if (x_mu != kNoClock) Zc.reset(x_mu);
 
     CoverResult res;
     if (Zc.is_empty()) { res.kind = CoverResult::Kind::Close; return res; }
@@ -131,9 +133,11 @@ CoverResult apply_cover(const Node& n, FormulaId mu,
         res.kind = CoverResult::Kind::Cover;
         Node discharge = base;
         Node launch = base;
-        launch.Z.reset(x_mu);
-        launch.just_reset.push_back(x_mu);
-        launch.O[mu] = x_mu;
+        if (x_mu != kNoClock) {
+            launch.Z.reset(x_mu);
+            launch.just_reset.push_back(x_mu);
+            launch.O[mu] = x_mu;
+        }
         Pursuit p; p.mu = mu; p.x_mu = x_mu;
         p.stage = Pursuit::Stage::Here; p.part = Pursuit::Part::Whole;
         p.is_until = until_kind;
@@ -360,6 +364,14 @@ private:
 
         // Release.
         if (p.part == Pursuit::Part::Whole) {
+            // Untimed release (window [0,∞), no clock): the "before"/"after"
+            // partitions are empty, so pursue only the in-window part on Z.
+            if (p.x_mu == kNoClock) {
+                Node in = n;
+                in.pursuits[i].part = Pursuit::Part::InI;
+                in.pursuits[i].stage = Pursuit::Stage::Here;
+                return {Expansion::Kind::And, {in}};
+            }
             // (R^split): partition Z by x_mu vs I; pursue before/in, lapse after.
             Expansion e; e.kind = Expansion::Kind::And;
             // before: x_mu ≤ lo (strict iff lo ∈ I)
@@ -410,6 +422,7 @@ private:
     // clock) avoids a Cartesian blow-up while still separating a boundary point
     // from the open interval where a co-present formula's truth flips.
     std::vector<Zone> integer_regions(const Zone& z, ClockId c) const {
+        if (c == kNoClock) return {z};     // untimed: no boundary to split at
         std::vector<Zone> regs;
         for (std::size_t i = 0; i < bounds_.size(); ++i) {
             const std::int32_t b = bounds_[i];

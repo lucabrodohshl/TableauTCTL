@@ -64,8 +64,10 @@ Interval interval_of(FormulaId mu, const FormulaFactory& f) {
     return I;
 }
 
-// Constrain x_mu ∈ I on a ZoneSet in place.
+// Constrain x_mu ∈ I on a ZoneSet in place.  Untimed modalities have no clock
+// and window [0,∞), so there is nothing to constrain.
 void constrain_window(ZoneSet& zs, ClockId x_mu, const Interval& I) {
+    if (x_mu == kNoClock) return;
     zs.constrain_lower(x_mu, I.lo, I.lo_strict);
     if (!I.hi_inf) zs.constrain_upper(x_mu, I.hi, I.hi_strict);
 }
@@ -136,7 +138,11 @@ namespace {
 void assign_clocks_rec(FormulaId id, FormulaFactory& f, ClockMap& cmap,
                        ClockId& next) {
     const FormulaNode& n = f.node(id);
-    if (is_modality(n.kind) && cmap.find(id) == cmap.end())
+    // Only *timed* modalities need a formula-clock.  An untimed modality has
+    // window [0,∞) and no deadline, so a clock for it would only add spurious
+    // difference constraints (x_i - x_j) that fracture zones — the M^O(n^2)
+    // blow-up — without ever being tested.
+    if (is_timed_kind(n.kind) && cmap.find(id) == cmap.end())
         cmap[id] = next++;
     for (FormulaId c : n.children)
         if (c != kInvalidId) assign_clocks_rec(c, f, cmap, next);
@@ -287,10 +293,12 @@ ZoneSet holds_region_cached(FormulaId psi, const FormulaSet& X, const ClockMap& 
         ZoneSet region = ZoneSet::universe(num_clocks);
         for (FormulaId m : cl.mods) {
             ZoneSet mr = satisfaction_set(m, X, cmap, num_clocks, max, f, cache);
-            ClockId xm = cmap.at(m);
-            mr.constrain_lower(xm, 0, false);
-            mr.constrain_upper(xm, 0, false);
-            free_clock(mr, xm);
+            ClockId xm = clock_of(cmap, m);
+            if (xm != kNoClock) {           // timed sub-modality: onset, project out
+                mr.constrain_lower(xm, 0, false);
+                mr.constrain_upper(xm, 0, false);
+                free_clock(mr, xm);
+            }
             region.intersect(mr);
         }
         result.unite(region);
@@ -318,7 +326,7 @@ ZoneSet satisfaction_set(FormulaId mu, const FormulaSet& X, const ClockMap& cmap
     const FormulaNode& n = f.node(mu);
     FormulaId phi = n.children[0];
     FormulaId psi = n.children[1];
-    ClockId   x_mu = cmap.at(mu);
+    ClockId   x_mu = clock_of(cmap, mu);   // kNoClock if mu is untimed
     Interval  I = interval_of(mu, f);
 
     ZoneSet phiR = holds_region_cached(phi, X, cmap, num_clocks, max, f, cache);
