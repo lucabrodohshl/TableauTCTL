@@ -88,6 +88,24 @@ CoverResult apply_cover(const Node& n, FormulaId mu,
                         std::size_t num_clocks,
                         const std::vector<std::int32_t>& max, FormulaFactory& f,
                         SatCache& sx_cache) {
+    // A persistent context (e.g. AG μ) re-demands μ at every onset.  Per the
+    // paper (Remark 1 / Fig. 2) a single formula-clock x_μ serves all onsets:
+    // if μ is already being pursued, do NOT launch a second pursuit — that makes
+    // the pursuits set (and thus the node key) grow without bound, so nothing
+    // ever memo-collides.  The active pursuit already witnesses μ; just discharge.
+    for (const Pursuit& p : n.pursuits) {
+        if (p.mu == mu) {
+            CoverResult only;
+            only.kind = CoverResult::Kind::Cover;
+            Node discharge;
+            discharge.Gamma = gamma_without(n.Gamma, mu);
+            discharge.X = n.X; discharge.Z = n.Z; discharge.O = n.O;
+            discharge.D = n.D; discharge.pursuits = n.pursuits; discharge.phase = n.phase;
+            only.children.push_back(std::move(discharge));
+            return only;
+        }
+    }
+
     ZoneSet SX = satisfaction_set(mu, n.X, cmap, num_clocks, max, f, sx_cache);
     const ClockId x_mu = cmap.at(mu);
 
