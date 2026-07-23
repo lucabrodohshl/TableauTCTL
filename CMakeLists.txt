@@ -105,6 +105,9 @@ endif()
 if(EXISTS "${UDBM_LIB_PATH}")
     set(UDBM_INCLUDE_DIRS "${UDBM_DIR}/include")
     set(UDBM_LOCAL_INCLUDE "${UDBM_DIR}/local/${UDBM_PLATFORM}/include")
+    # Generated config header (dbm/config.h) lives in the UDBM build tree; the
+    # C++ federation API (dbm/fed.h) needs it, so put it on the include path.
+    set(UDBM_BUILD_INCLUDE "${UDBM_BUILD_DIR}/include")
     set(UDBM_LIBRARIES "${UDBM_LIB_PATH}")
     message(STATUS "Found UDBM: ${UDBM_DIR}")
     message(STATUS "UDBM includes: ${UDBM_INCLUDE_DIRS}")
@@ -120,16 +123,22 @@ set(SOURCES
     src/lexer.cpp
     src/parser.cpp
     src/normalization.cpp
-    src/tableau.cpp
-    src/timed_automaton.cpp
+    src/paper_tableau.cpp
+    src/satisfaction_set.cpp
     src/z3_solver.cpp
     src/zone.cpp
+    src/zoneset.cpp
+    src/zoneset_test.cpp
     src/cli.cpp
     src/utils.cpp
     src/test.cpp
     src/benchmark.cpp
     src/main.cpp
 )
+# Deleted: src/tableau.cpp (retired Wolper engine).
+# Parked until the witness-TA phase: src/timed_automaton.cpp.
+# The self-test (test.cpp) and benchmark (benchmark.cpp) harnesses are retained
+# and re-pointed at the new PaperTableau engine.
 
 # ── Executable ───────────────────────────────────────────────────────────────
 add_executable(tctl_sat ${SOURCES})
@@ -146,9 +155,12 @@ set(UUTILS_LIBRARIES
     "${UUTILS_LIB_DIR}/libbase.a"
     "${UUTILS_LIB_DIR}/libhash.a"
 )
-target_include_directories(tctl_sat PRIVATE 
+# UDBM is third-party: mark as SYSTEM so its headers (e.g. the C++ federation
+# API dbm/fed.h → dbm/inline_fed.h) don't trip the project's -Werror.
+target_include_directories(tctl_sat SYSTEM PRIVATE
     ${UDBM_INCLUDE_DIRS}
     ${UDBM_LOCAL_INCLUDE}
+    ${UDBM_BUILD_INCLUDE}
 )
 target_link_libraries(tctl_sat PRIVATE ${UDBM_LIBRARIES} ${UUTILS_LIBRARIES})
 

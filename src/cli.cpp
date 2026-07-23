@@ -7,16 +7,14 @@
 #include "tctl/benchmark.hpp"
 #include "tctl/lexer.hpp"
 #include "tctl/normalization.hpp"
+#include "tctl/paper_tableau.hpp"
 #include "tctl/parser.hpp"
-#include "tctl/tableau.hpp"
 #include "tctl/test.hpp"
-#include "tctl/timed_automaton.hpp"
 #include "tctl/utils.hpp"
 #include "tctl/z3_solver.hpp"
 
-#include <cstdlib>
+#include <ctime>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -87,10 +85,8 @@ Options parse_args(int argc, char* argv[]) {
             }
             std::string dir = argv[++i];
             if (!std::filesystem::exists(dir)) {
-                //throw std::runtime_error("output directory does not exist: " + dir);
                 std::filesystem::create_directories(dir);
-            }else {
-                // create directory by appending timestamp if it already exists
+            } else {
                 std::string timestamp = std::to_string(std::time(nullptr));
                 dir += "_" + timestamp;
                 std::filesystem::create_directories(dir);
@@ -99,18 +95,8 @@ Options parse_args(int argc, char* argv[]) {
                 throw std::runtime_error("output path is not a directory: " + dir);
             }
             std::filesystem::current_path(dir);
-        } else if (arg == "--tot" || arg== "all_formula" || arg == "all"){
+        } else if (arg == "--tot" || arg == "all_formula" || arg == "all") {
             opts.tot = true;
-
-        } else if (arg == "--threads" || arg == "-j") {
-            if (i + 1 >= argc) {
-                throw std::runtime_error("--threads requires a number argument");
-            }
-            opts.num_threads = std::stoi(argv[++i]);
-            if (opts.num_threads < 0) {
-                throw std::runtime_error("--threads must be >= 0");
-            }
-
         } else if (arg.starts_with("-")) {
             throw std::runtime_error("unknown option: " + arg);
         } else {
@@ -137,18 +123,18 @@ void print_usage(const char* program_name) {
         << "       " << program_name << " --selftest\n"
         << "       " << program_name << " --benchmark [bench-options]\n"
         << "\n"
-        << "tctl satisfiability checker.\n"
+        << "TCTL satisfiability checker (ETAPS2026 tableau).\n"
         << "\n"
         << "Options:\n"
-        << "  <Formula> | <input.txt>  Formula or  File with one tctl formula per line\n"
-        << "  --selftest    Run built-in tests\n"
+        << "  <Formula> | <input.txt>  A TCTL formula, or a file with one per line\n"
+        << "  --selftest    Run the built-in semantic self-test suite\n"
         << "  --benchmark   Run benchmark suites (writes CSVs + reproducibility)\n"
-        << "  --model, --show-model   Extract Timed Automaton (UPPAAL style)\n"
-        << "  --output <dir>  Directory to write extracted models (default: current)\n"
         << "  --stats, --show-stats   Show engine statistics\n"
+        << "  --model, --show-model   Extract witness Timed Automaton (pending)\n"
+        << "  --output <dir>  Directory to write extracted models (default: current)\n"
+        << "  --real-vars a,b Declare variable names as Real-sorted (else Int)\n"
+        << "  --tot, --all, --all_formula  Conjoin all input formulas and check as one\n"
         << "  --help, -h    Show this message\n"
-        << "  --tot, --all, --all_formula  Conjoin all formulas in the input with AND and check as one formula\n"
-        << "  --threads N, -j N  Set number of OpenMP threads (0 = auto, default)\n"
         << "\n"
         << "Benchmark options (use with --benchmark):\n"
         << "  --bench-timeout <sec>     Per-instance timeout (default: 30)\n"
@@ -171,28 +157,21 @@ void print_usage(const char* program_name) {
 // prints results.
 
 int run(const Options& opts) {
-    // ── Handle --selftest ───────────────────────────────────────────────
     if (opts.selftest) {
         return run_selftests();
     }
-
-    // ── Handle --benchmark ──────────────────────────────────────────────
     if (opts.benchmark) {
         return run_benchmarks(opts.bench_opts);
     }
 
-    // ── Read input file ─────────────────────────────────────────────────
-
-    
     if (opts.input.empty()) {
         std::cerr << "ERROR: no input specified (use --help for usage)\n";
         return 1;
     }
 
     std::vector<std::string> formulas;
-    std::string stem;
     bool is_file = opts.input.ends_with(".txt");
-    //if it ends with .txt assume text file input, otherwise treat it as a single formula
+    // If it ends with .txt assume a file; otherwise treat as a single formula.
     if (is_file) {
         std::vector<std::string> temp;
         try {
@@ -206,119 +185,59 @@ int run(const Options& opts) {
             for (const auto& line : temp) {
                 std::string content = strip_comment(line);
                 if (!content.empty()) {
-                    if (!combined.empty()) {
-                        combined += " & ";
-                    }
+                    if (!combined.empty()) combined += " & ";
                     combined += "(" + content + ")";
                 }
             }
             formulas.clear();
             formulas.push_back(combined);
-        }else{
+        } else {
             formulas = std::move(temp);
         }
-
-        stem =std::filesystem::path(opts.input).stem().string();
-    }
-    else {
+    } else {
         formulas.push_back(opts.input);
-        // name is formula + timestamp to avoid collisions when using --output with multiple formulas
-        stem = "formula_" + std::to_string(std::time(nullptr));
     }
 
-    
-
-        
-
-    
-
-    // ── Process each line ───────────────────────────────────────────────
     FormulaFactory factory;
-    TableauEngine engine(factory);
-    engine.set_extract_model(opts.show_model);
-    if (opts.num_threads > 0) engine.set_num_threads(opts.num_threads);
+    PaperTableau engine(factory);
     bool had_errors = false;
-
-    
 
     for (std::size_t i = 0; i < formulas.size(); ++i) {
         std::uint32_t line_num = static_cast<std::uint32_t>(i + 1);
         std::string content = strip_comment(formulas[i]);
-
-        // Skip blank / comment-only lines.
-        if (content.empty()) {
-            continue;
-        }
+        if (content.empty()) continue;  // blank / comment-only
 
         try {
-            // Parse the formula.
+            // Parse → normalise (desugar → eliminate implications → NNF).
             FormulaId parsed = parse_formula(content, factory, line_num);
-
-            // Normalise: desugar → eliminate implications → NNF.
             FormulaId normalised = normalize(parsed, factory);
 
-            // Run the tableau stub.
-            Result result = engine.check(normalised);
+            // Warn when the input leaves the fragment the procedure is complete
+            // for: a punctual interval nested inside another timed modality
+            // (timed-nesting depth > 1) is sound and terminating but may be
+            // incomplete.
+            PunctualityReport pr = analyze_punctuality(normalised, factory);
+            if (pr.punctual_nested) {
+                std::cerr << line_num << ": warning: punctual interval [a,a] nested "
+                             "inside another timed modality (timed-nesting depth > 1). "
+                             "The procedure stays SOUND and TERMINATING but is not "
+                             "guaranteed COMPLETE here: a SATISFIABLE verdict is "
+                             "reliable (a witness exists), an UNSATISFIABLE verdict "
+                             "may be a false negative.\n";
+            }
 
-            // Print result.
+            Result result = engine.check(normalised);
             std::cout << line_num << ": " << result_to_string(result) << "\n";
 
-            // Optional: show stats.
             if (opts.show_stats) {
                 std::cout << "  Stats: " << engine.stats() << "\n";
             }
-
-            // Optional: extract Timed Automaton (--model).
             if (opts.show_model && result == Result::Satisfiable) {
-                TimedAutomaton ta = build_from_tableau(engine);
-                std::cout << "\n" << ta.to_string() << "\n";
-
-                
-                std::string base;
-                if (is_file && !opts.tot) {
-                    //create one folder per line
-                    std::filesystem::create_directories("line_" + std::to_string(line_num));
-                    base= "line_" + std::to_string(line_num) + "/" + stem;
-                } else {
-                    base = stem + "_ta";
-                }
-
-                // JSON
-                {
-                    std::string path = base + ".json";
-                    std::ofstream f(path);
-                    f << ta.to_json();
-                    std::cout << "  TA JSON : " << path << "\n";
-                }
-                // UPPAAL XML
-                {
-                    std::string path = base + ".xml";
-                    std::ofstream f(path);
-                    f << ta.to_uppaal_xml();
-                    std::cout << "  TA XML  : " << path << "\n";
-                }
-                // DOT → PNG
-                {
-                    std::string dot_path = base + ".dot";
-                    std::string png_path = base + ".png";
-                    {
-                        std::ofstream f(dot_path);
-                        f << ta.to_dot();
-                    }
-                    std::string cmd =
-                        "dot -Tpng \"" + dot_path + "\" -o \"" + png_path + "\" 2>/dev/null";
-                    int rc = std::system(cmd.c_str());
-                    if (rc == 0) {
-                        std::filesystem::remove(dot_path);
-                        std::cout << "  TA PNG  : " << png_path << "\n";
-                    } else {
-                        std::cout << "  TA DOT  : " << dot_path << "\n";
-                    }
-                }
+                std::cerr << "  note: witness Timed Automaton extraction is not yet "
+                             "implemented (verdict-first build).\n";
             }
-
         } catch (const std::exception& e) {
-            // Error messages from the parser already include line/column.
+            // Parser error messages already include line/column.
             std::cerr << e.what() << "\n";
             had_errors = true;
         }

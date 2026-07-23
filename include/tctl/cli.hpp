@@ -26,7 +26,6 @@ struct Options {
     bool        show_stats = false;
     bool        help = false;
     bool        tot = false; // conjoin all formulas in the input with AND and check as one formula
-    int         num_threads = 0; // OpenMP threads (0 = default)
 
     // ── Benchmark mode ──────────────────────────────────────────────────
     bool              benchmark = false;

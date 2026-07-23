@@ -12,7 +12,7 @@
 #include "tctl/lexer.hpp"
 #include "tctl/normalization.hpp"
 #include "tctl/parser.hpp"
-#include "tctl/tableau.hpp"
+#include "tctl/paper_tableau.hpp"
 #include "tctl/utils.hpp"
 
 #include <algorithm>
@@ -549,7 +549,7 @@ static BenchRow run_instance(const std::string& family,
             FormulaFactory wf;
             FormulaId parsed = parse_formula(formula_str, wf, 1);
             FormulaId normed = normalize(parsed, wf);
-            TableauEngine eng(wf);
+            PaperTableau eng(wf);
             eng.set_timeout(std::chrono::seconds(opt.timeout_s));
             eng.set_extrapolation(extrapolation);
             if (opt.num_threads > 0) eng.set_num_threads(opt.num_threads);
@@ -565,7 +565,7 @@ static BenchRow run_instance(const std::string& family,
         FormulaId parsed = parse_formula(formula_str, factory, 1);
         FormulaId normed = normalize(parsed, factory);
 
-        TableauEngine engine(factory);
+        PaperTableau engine(factory);
         engine.set_timeout(std::chrono::seconds(opt.timeout_s));
         engine.set_extrapolation(extrapolation);
         if (opt.num_threads > 0) engine.set_num_threads(opt.num_threads);
@@ -576,12 +576,12 @@ static BenchRow run_instance(const std::string& family,
         row.elapsed_s       = result.elapsed_s;
 
         const auto& st      = engine.get_stats();
-        row.nodes_generated = st.nodes_created.load();
-        row.distinct_zones  = st.distinct_zones.load();
-        row.loop_checks     = st.loop_checks.load();
-        auto mem = st.peak_memory_bytes.load();
+        row.nodes_generated = st.nodes_created;
+        row.distinct_zones  = st.distinct_zones;
+        row.loop_checks     = st.loop_checks;
+        auto mem = st.peak_memory_bytes;
         row.peak_memory_kb  = (mem + 1023) / 1024;  // ceiling
-        auto nc2 = st.nodes_created.load();
+        auto nc2 = st.nodes_created;
         row.avg_memory_kb   = nc2 > 0 ? ((mem / nc2) + 1023) / 1024 : 0;
 
     } catch (const std::exception& e) {

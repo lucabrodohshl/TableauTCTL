@@ -19,7 +19,7 @@
 #include "tctl/lexer.hpp"
 #include "tctl/normalization.hpp"
 #include "tctl/parser.hpp"
-#include "tctl/tableau.hpp"
+#include "tctl/paper_tableau.hpp"
 #include "tctl/utils.hpp"
 #include "tctl/zone.hpp"
 
@@ -338,8 +338,13 @@ static void test_tctl_with_arithmetic(TestContext& ctx) {
 }
 
 static void test_parse_errors_intervals(TestContext& ctx) {
-    ctx.check(parse_fails("EF[5,3] p"), "EF[5,3] fails (5 > 3)");
-    ctx.check(parse_fails("EF[3,3] p"), "EF[3,3] fails (point interval, a == b)");
+    ctx.check(parse_fails("EF[5,3] p"), "EF[5,3] fails (5 > 3, empty)");
+    // Punctual (closed point) intervals [a,a] are now ADMITTED: the ETAPS2026
+    // procedure is sound & terminating on punctual TCTL (and complete at depth 1).
+    ctx.check(!parse_fails("EF[3,3] p"), "EF[3,3] parses (punctual point interval [a,a])");
+    // Half-open / open coincident endpoints are still empty and rejected.
+    ctx.check(parse_fails("EF[3,3) p"), "EF[3,3) fails (empty: half-open point)");
+    ctx.check(parse_fails("EF(3,3] p"), "EF(3,3] fails (empty: half-open point)");
     ctx.check(parse_fails("EF[1 5] p"), "EF[1 5] fails (missing comma)");
     ctx.check(parse_fails("EF[1,5 p"), "EF[1,5 p fails (missing ])");
 }
@@ -435,6 +440,12 @@ static void test_normalize_timed_sugar(TestContext& ctx) {
 
 static void test_zone_smoke(TestContext& ctx) {
     ctx.check(zone_smoke_test(), "Zone operations pass smoke test");
+}
+
+// ZoneSet (federation) behavioural tests — see src/zoneset_test.cpp.
+int zoneset_run_tests();
+static void test_zoneset(TestContext& ctx) {
+    ctx.check(zoneset_run_tests() == 0, "ZoneSet federation operations pass");
 }
 
 static void test_zone_universe_empty(TestContext& ctx) {
@@ -590,7 +601,7 @@ static Result check_sat(const std::string& formula_str,
     FormulaFactory f;
     FormulaId parsed = parse_formula(formula_str, f);
     FormulaId norm = normalize(parsed, f);
-    TableauEngine engine(f);
+    PaperTableau engine(f);
     if (timeout_s > 0) {
         engine.set_timeout(std::chrono::seconds(timeout_s));
     }
@@ -653,17 +664,60 @@ static void test_tctl_unsat3_lower_bound_impossible(TestContext& ctx) {
     ctx.check(r == Result::Unsatisfiable, "E(true U[1,3] p) & AG !p should be UNSAT");
 }
 
-// ── UNSAT-4: Point intervals are rejected by the parser ──────────────────
-// Both E(true U(2,2) p) and E(true U[2,2] p) have a == b, which is
-// disallowed (the parser requires a < b).
-static void test_tctl_unsat4_strict_upper_boundary(TestContext& ctx) {
-    // Open point interval: parse error (a == b)
+// ── Punctual (point) interval semantics ─────────────────────────────────────
+// [a,a] is admitted (ETAPS2026: sound & terminating on punctual TCTL, complete
+// at depth 1).  Only the empty coincident-endpoint intervals (a,a)/[a,a)/(a,a]
+// stay rejected.  Verdicts below are justified semantically, not by the old
+// "parser rejects it" behaviour.
+static void test_tctl_punctual_point_intervals(TestContext& ctx) {
+    // Empty coincident-endpoint intervals: still rejected by the parser.
     ctx.check(parse_fails("E(true U(2,2) p)"),
-              "E(true U(2,2) p) should fail to parse (point interval)");
+              "E(true U(2,2) p) is empty (open point) — rejected");
 
-    // Closed point interval: parse error (a == b)
-    ctx.check(parse_fails("E(true U[2,2] p)"),
-              "E(true U[2,2] p) should fail to parse (point interval)");
+    // Closed point [2,2] now parses.
+    ctx.check(!parse_fails("E(true U[2,2] p)"),
+              "E(true U[2,2] p) parses (punctual point interval)");
+
+    // Reach p exactly at time 2: satisfiable (witness delays to 2, then p).
+    ctx.check(check_sat("E(true U[2,2] p)") == Result::Satisfiable,
+              "E(true U[2,2] p) is SAT (p reachable at time 2)");
+
+    // Same demand under a global ¬p is contradictory: p must hold at t=2 yet
+    // never holds → UNSAT.
+    ctx.check(check_sat("E(true U[2,2] p) & AG (!p)") == Result::Unsatisfiable,
+              "E(true U[2,2] p) & AG !p is UNSAT (punctual deadline vs invariant)");
+}
+
+// ── Paper Fig. 1 oracle + boundary/punctual discriminators ──────────────────
+// The engine must decide the ETAPS2026 paper's own worked examples correctly.
+// Every verdict below is justified from TCTL semantics (does a witness TA
+// exist?), NOT from any prior behaviour of the tool.  ν = E(p U[1,2] q),
+// μ1 = AG[0,4] ν, μ2 = AG[0,3] ¬q.
+static void test_paper_fig1_oracle(TestContext& ctx) {
+    // Fig. 1a: μ1 ∧ μ2 is UNSAT (the persistent ν forces q into the band that
+    // the huge AG[0,3]¬q forbids).
+    ctx.check(check_sat("AG[0,4] (E(p U[1,2] q)) & AG[0,3] (!q)") == Result::Unsatisfiable,
+              "Fig.1a  AG[0,4]E(pU[1,2]q) & AG[0,3]!q  is UNSAT");
+    // Fig. 1b: μ1 alone is SAT (a one-location witness labelled p with a
+    // q-successor reachable within [1,2] of each onset).
+    ctx.check(check_sat("AG[0,4] (E(p U[1,2] q))") == Result::Satisfiable,
+              "Fig.1b  AG[0,4]E(pU[1,2]q)  is SAT");
+    ctx.check(check_sat("E(p U[1,2] q)") == Result::Satisfiable,
+              "E(pU[1,2]q) is SAT");
+
+    // Bounded eventuality vs. a covering invariant.
+    ctx.check(check_sat("EF[1,2] q & AG[0,3] (!q)") == Result::Unsatisfiable,
+              "EF[1,2]q & AG[0,3]!q is UNSAT (window inside the forbidden band)");
+    ctx.check(check_sat("EF[1,2] q") == Result::Satisfiable, "EF[1,2]q is SAT");
+
+    // Punctual boundary discriminators (depth-1 punctual → complete).
+    ctx.check(check_sat("EF[2,2] q & AG[0,1] (!q)") == Result::Satisfiable,
+              "EF[2,2]q & AG[0,1]!q is SAT (deadline t=2 outside forbidden [0,1])");
+    ctx.check(check_sat("EF[2,2] q & AG[0,3] (!q)") == Result::Unsatisfiable,
+              "EF[2,2]q & AG[0,3]!q is UNSAT (deadline t=2 inside forbidden [0,3])");
+    // Half-open window escapes a closed forbidden prefix.
+    ctx.check(check_sat("EF[1,2) q & AG[0,1] (!q)") == Result::Satisfiable,
+              "EF[1,2)q & AG[0,1]!q is SAT (q can occur in (1,2))");
 }
 
 // ── UNSAT-5: Loop without fulfilment must be rejected ───────────────────────
@@ -1435,8 +1489,8 @@ std::vector<TestCase> generate_comprehensive_200() {
         /* 081 */ { "E(false R[1,3] p)", true },
         /* 082 */ { "E(p R[1,3] q) & !q", true },
         /* 083 */ { "A(p R[1,3] q) & !q", true },
-        /* 084 */ { "E(p R[1,3] false)", false },  // false can't hold in [1,3]
-        /* 085 */ { "A(p R[1,3] false)", false },  // false can't hold in [1,3]
+        /* 084 */ { "E(p R[1,3] false)", true },   // SAT: p releases the (false) obligation
+        /* 085 */ { "A(p R[1,3] false)", true },   // SAT: p releases on all runs (witness: p always)
         /* 086 */ { "E(false R[1,3] false)", false }, // false can't hold in [1,3]
         /* 087 */ { "E(p R[1,3] q) & AG[0,inf) !q & AG[0,inf) !p", false }, // q must hold in [1,3], but AG forbids it
         /* 088 */ { "E(p R q) & !q & !p", false },  // untimed R: q must hold initially
@@ -1887,9 +1941,9 @@ std::vector<TestCase> generate_stress_200() {
     // 108: A(p U[1,3] q) & AG[0,inf) (!q) — UNSAT
     /* 108 */ { "A(p U[1,3] q) & AG[0,inf) (!q)", false },
     // 109: timed release: E(p R[1,3] q) & AG[0,inf)(!q) — UNSAT: q must hold in [1,3]
-    /* 109 */ { "E(p R[1,3] q) & AG[0,inf) (!q)", false },
+    /* 109 */ { "E(p R[1,3] q) & AG[0,inf) (!q)", true },   // SAT: p releases before [1,3], so !q is fine
     // 110: timed release: A(p R[1,3] q) & AG[0,inf)(!q) — UNSAT
-    /* 110 */ { "A(p R[1,3] q) & AG[0,inf) (!q)", false },
+    /* 110 */ { "A(p R[1,3] q) & AG[0,inf) (!q)", true },   // SAT: p releases before [1,3] on all runs
     // 111: tight adjacent intervals — SAT: p in [1,3], q in [4,6]
     /* 111 */ { "EF[1,3] p & EF[4,6] q", true },
     // 112: overlapping timed-until E(p U[1,3] q) & E(q U[2,5] r) — SAT
@@ -1962,9 +2016,9 @@ std::vector<TestCase> generate_stress_200() {
     // 143: timed under EG nested — SAT
     /* 143 */ { "EG[1,5] (EF[2,4] (EG[6,8] p))", true },
     // 144: two timed ER + both held-globally blocked — UNSAT
-    /* 144 */ { "E(p R[1,3] q) & E(r R[2,4] s) & AG[0,inf) (!q) & AG[0,inf) (!s)", false },
+    /* 144 */ { "E(p R[1,3] q) & E(r R[2,4] s) & AG[0,inf) (!q) & AG[0,inf) (!s)", true }, // SAT: p,r release before their windows
     // 145: two timed AR + held-globally blocked — UNSAT
-    /* 145 */ { "A(p R[1,3] q) & A(r R[2,4] s) & AG[0,inf) (!q) & AG[0,inf) (!s)", false },
+    /* 145 */ { "A(p R[1,3] q) & A(r R[2,4] s) & AG[0,inf) (!q) & AG[0,inf) (!s)", true }, // SAT: p,r release before their windows
     // 146: mixed timed EU + timed AR + EF — SAT
     /* 146 */ { "E(p U[1,3] q) & A(r R[4,6] s) & EF[7,9] t", true },
     // 147: mixed timed AU + timed ER + AG — SAT
@@ -1993,9 +2047,9 @@ std::vector<TestCase> generate_stress_200() {
     // 156: A(p R false) — UNSAT
     /* 156 */ { "A(p R false)", false },
     // 157: E(p R[1,3] false) — UNSAT: false can't hold in [1,3]
-    /* 157 */ { "E(p R[1,3] false)", false },
+    /* 157 */ { "E(p R[1,3] false)", true },   // SAT: p releases the (false) obligation
     // 158: A(p R[1,3] false) — UNSAT
-    /* 158 */ { "A(p R[1,3] false)", false },
+    /* 158 */ { "A(p R[1,3] false)", true },   // SAT: p releases on all runs
     // 159: E(false R[1,3] false) — UNSAT
     /* 159 */ { "E(false R[1,3] false)", false },
     // 160: A(false R[1,3] false) — UNSAT
@@ -2318,7 +2372,7 @@ std::vector<TestCase> generate_propositional_100() {
     // 096: release with contradictory invariant — UNSAT
     /* 096 */ { "E(p R (q & (!q)))", false },
     // 097: timed release with contradictory safety — UNSAT
-    /* 097 */ { "E(p R[1,3] ({x <= 5} & {x > 5}))", false },
+    /* 097 */ { "E(p R[1,3] ({x <= 5} & {x > 5}))", true },  // SAT: psi is false, p releases it
     // 098: conjunction of contradictory EGs — UNSAT
     /* 098 */ { "EG p & EG (!p)", false },
     // 099: AG forces p, EF forces !p — UNSAT
@@ -2375,12 +2429,12 @@ static void test_parallel_equivalence(TestContext& ctx) {
     };
 
     FormulaFactory f1;
-    TableauEngine eng1(f1);
+    PaperTableau eng1(f1);
     eng1.set_num_threads(1);   // force single-thread
     eng1.set_timeout(std::chrono::seconds(5));
 
     FormulaFactory f2;
-    TableauEngine eng2(f2);
+    PaperTableau eng2(f2);
     eng2.set_num_threads(0);   // OMP default (>1 if available)
     eng2.set_timeout(std::chrono::seconds(5));
 
@@ -2474,6 +2528,7 @@ int run_selftests() {
 
     // Zone tests (UDBM)
     runner.run("zone_smoke",                 test_zone_smoke);
+    runner.run("zoneset_federation",         test_zoneset);
     runner.run("zone_universe_empty",        test_zone_universe_empty);
     runner.run("zone_constraints",           test_zone_constraints);
     runner.run("zone_delay_reset",           test_zone_delay_reset);
@@ -2497,7 +2552,8 @@ int run_selftests() {
     runner.run("tctl_unsat1_invariant",             test_tctl_unsat1_invariant_contradiction);
     runner.run("tctl_unsat2_upper_deadline",        test_tctl_unsat2_upper_deadline);
     runner.run("tctl_unsat3_lower_impossible",      test_tctl_unsat3_lower_bound_impossible);
-    runner.run("tctl_unsat4_strict_upper",          test_tctl_unsat4_strict_upper_boundary);
+    runner.run("tctl_punctual_point_intervals",     test_tctl_punctual_point_intervals);
+    runner.run("paper_fig1_oracle",                 test_paper_fig1_oracle);
     runner.run("tctl_unsat5_loop_no_fulfilment",    test_tctl_unsat5_loop_without_fulfilment);
 
     // Negated timed-until zone-splitting tests
