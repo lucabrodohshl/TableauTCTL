@@ -77,6 +77,9 @@ bool is_modality(NodeKind k) noexcept;
 /// of `root`; returns the map.  Clock 0 stays the reference clock.
 ClockMap assign_clocks(FormulaId root, FormulaFactory& f);
 
+/// The largest integer constant M appearing in any time interval of `root`.
+std::int32_t max_constant(FormulaId root, FormulaFactory& f);
+
 }  // namespace tctl
 
 #endif  // TCTL_SATISFACTION_SET_HPP

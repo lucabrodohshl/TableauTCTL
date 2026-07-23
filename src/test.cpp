@@ -2554,12 +2554,21 @@ static Node make_demand_node(FormulaId mu, const FormulaSet& X, FormulaFactory& 
     return n;
 }
 
+// Cover using the same global clock map the engine would use for `mu`.
+static CoverResult cover_of(const Node& n, FormulaId mu, FormulaFactory& f) {
+    ClockMap cm = assign_clocks(mu, f);
+    std::size_t nc = 1 + cm.size();
+    std::vector<std::int32_t> max(nc, max_constant(mu, f));
+    max[0] = 0;
+    return apply_cover(n, mu, cm, nc, max, f);
+}
+
 static void test_cover_rule(TestContext& ctx) {
     // Full cover: onset ∈ S_X ⇒ Cov with {discharge, launch}.
     {   FormulaFactory f; FormulaSet X;
         FormulaId mu = normalize(parse_formula("E(true U[1,2] q)", f), f);
         Node n = make_demand_node(mu, X, f);
-        CoverResult r = apply_cover(n, mu, f);
+        CoverResult r = cover_of(n, mu, f);
         ctx.check(r.kind == CoverResult::Kind::Cover, "cover: onset fully covered");
         ctx.check(r.children.size() == 2, "cover: two children (discharge+launch)");
         ctx.check(r.children.size() == 2 && !r.children[1].pursuits.empty(),
@@ -2572,14 +2581,14 @@ static void test_cover_rule(TestContext& ctx) {
     {   FormulaFactory f; FormulaSet X; X.insert(f.make_not(f.make_atom("q")));
         FormulaId mu = normalize(parse_formula("E(true U[1,2] q)", f), f);
         Node n = make_demand_node(mu, X, f);
-        CoverResult r = apply_cover(n, mu, f);
+        CoverResult r = cover_of(n, mu, f);
         ctx.check(r.kind == CoverResult::Kind::Close, "close: empty S_X ⇒ close");
     }
     // A-until: launch child receives a deadline D_mu = {(x_mu, sup I)}.
     {   FormulaFactory f; FormulaSet X;
         FormulaId mu = normalize(parse_formula("AF[1,2] q", f), f);
         Node n = make_demand_node(mu, X, f);
-        CoverResult r = apply_cover(n, mu, f);
+        CoverResult r = cover_of(n, mu, f);
         ctx.check(r.kind == CoverResult::Kind::Cover, "A-until: cover");
         ctx.check(r.children.size() == 2 && !r.children[1].D.empty(),
                   "A-until: launch child has a deadline");
@@ -2588,7 +2597,7 @@ static void test_cover_rule(TestContext& ctx) {
     {   FormulaFactory f; FormulaSet X;
         FormulaId mu = normalize(parse_formula("EF[1,2] q", f), f);
         Node n = make_demand_node(mu, X, f);
-        CoverResult r = apply_cover(n, mu, f);
+        CoverResult r = cover_of(n, mu, f);
         ctx.check(r.children.size() == 2 && r.children[1].D.empty(),
                   "E-until: launch child has no deadline");
     }

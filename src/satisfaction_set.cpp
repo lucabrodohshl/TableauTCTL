@@ -110,6 +110,15 @@ std::vector<Clause> to_dnf(FormulaId id, const FormulaFactory& f) {
     }
 }
 
+// Project clock c out of a ZoneSet (existential quantification): after pinning a
+// sub-modality clock to its onset (x=0), free it so it no longer constrains the
+// ambient space — the sub-modality's window is measured on its own clock only.
+void free_clock(ZoneSet& zs, ClockId c) {
+    ZoneSet out = ZoneSet::empty(zs.num_clocks());
+    for (Zone z : zs.components()) { z.free(c); out.unite(ZoneSet::of(z)); }
+    zs = std::move(out);
+}
+
 // Joint Z3 consistency of {X_prop ∧ lits}.  UNKNOWN is treated as consistent.
 bool lits_consistent(const std::vector<FormulaId>& lits, const FormulaSet& X,
                      FormulaFactory& f) {
@@ -133,7 +142,7 @@ void assign_clocks_rec(FormulaId id, FormulaFactory& f, ClockMap& cmap,
         if (c != kInvalidId) assign_clocks_rec(c, f, cmap, next);
 }
 
-std::int32_t max_constant_rec(FormulaId id, FormulaFactory& f) {
+std::int32_t max_constant_impl(FormulaId id, FormulaFactory& f) {
     const FormulaNode& n = f.node(id);
     std::int32_t m = 0;
     if (is_timed_kind(n.kind)) {
@@ -142,7 +151,7 @@ std::int32_t max_constant_rec(FormulaId id, FormulaFactory& f) {
             m = std::max(m, static_cast<std::int32_t>(n.time_upper.value));
     }
     for (FormulaId c : n.children)
-        if (c != kInvalidId) m = std::max(m, max_constant_rec(c, f));
+        if (c != kInvalidId) m = std::max(m, max_constant_impl(c, f));
     return m;
 }
 }  // namespace
@@ -152,6 +161,10 @@ ClockMap assign_clocks(FormulaId root, FormulaFactory& f) {
     ClockId next = 1;  // clock 0 = reference
     assign_clocks_rec(root, f, cmap, next);
     return cmap;
+}
+
+std::int32_t max_constant(FormulaId root, FormulaFactory& f) {
+    return max_constant_impl(root, f);
 }
 
 // ── Task 1: leaf region + node closure ──────────────────────────────────────
@@ -231,10 +244,12 @@ ZoneSet holds_region(FormulaId psi, const FormulaSet& X, const ClockMap& cmap,
         ZoneSet region = ZoneSet::universe(num_clocks);
         for (FormulaId m : cl.mods) {
             ZoneSet mr = satisfaction_set(m, X, cmap, num_clocks, max, f);
-            // Sub-modality demanded now: its formula-clock is 0.
+            // Sub-modality demanded now: pin its formula-clock to 0, then project
+            // it out so it does not constrain the ambient clock space.
             ClockId xm = cmap.at(m);
             mr.constrain_lower(xm, 0, false);
             mr.constrain_upper(xm, 0, false);
+            free_clock(mr, xm);
             region.intersect(mr);
         }
         result.unite(region);
@@ -265,7 +280,7 @@ ZoneSet satisfaction_set(FormulaId mu, const FormulaSet& X, FormulaFactory& f,
                          ClockId* out_x_mu, std::size_t* out_num_clocks) {
     ClockMap cmap = assign_clocks(mu, f);
     const std::size_t nc = 1 + cmap.size();
-    const std::int32_t M = max_constant_rec(mu, f);
+    const std::int32_t M = max_constant_impl(mu, f);
     std::vector<std::int32_t> max(nc, M);
     max[0] = 0;
     if (out_x_mu)       *out_x_mu = cmap.at(mu);

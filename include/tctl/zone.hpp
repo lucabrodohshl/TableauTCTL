@@ -154,7 +154,14 @@ public:
     
     /// Number of clocks (including reference clock 0).
     std::size_t num_clocks() const { return dim_; }
-    
+
+    /// Raw DBM matrix (row-major, dim*dim raw_t entries). Valid only when
+    /// !is_empty(); used to bridge to UDBM's fed_t / dbm_t (see ZoneSet).
+    const raw_t* raw_data() const { return dbm_.data(); }
+
+    /// Build a zone from a raw DBM matrix (copies dim*dim entries).
+    static Zone from_raw(std::size_t dim, const raw_t* m);
+
     /// Get the bound for clock_x - clock_y.
     Bound get_bound(ClockId clock_x, ClockId clock_y) const;
     

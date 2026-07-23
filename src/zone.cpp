@@ -231,6 +231,12 @@ void Zone::extrapolate(const std::vector<std::int32_t>& max) {
 
 // ── Zone: Accessors ─────────────────────────────────────────────────────────
 
+Zone Zone::from_raw(std::size_t dim, const raw_t* m) {
+    Zone z(static_cast<cindex_t>(dim), false);
+    std::copy(m, m + dim * dim, z.dbm_.begin());
+    return z;
+}
+
 Bound Zone::get_bound(ClockId clock_x, ClockId clock_y) const {
     assert(clock_x < dim_ && clock_y < dim_);
     

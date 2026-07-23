@@ -81,6 +81,11 @@ struct Pursuit {
     }
 };
 
+// Successor phase: an Elapse node lets time pass (Delay rule), a Discrete node
+// takes the discrete step (EX rule).  Alternating them lets a launched clock
+// x_mu grow into its window before the pursuit's stop is tested.
+enum class Phase : std::uint8_t { Elapse, Discrete };
+
 // A tableau node.  Pursuit markers live in `pursuits` (not as synthetic AST
 // nodes in Gamma) so the EX/AX residual and R-region stay explicit.
 struct Node {
@@ -90,6 +95,12 @@ struct Node {
     std::map<FormulaId, ClockId>  O;         // launched mu ↦ x_mu
     std::vector<Deadline>         D;         // ⇒ Inv(N) = AND x_mu </<= bound
     std::vector<Pursuit>          pursuits;  // active mu• (stage / part)
+    Phase                         phase = Phase::Elapse;
+    std::vector<ClockId>          just_reset;  // clocks reset creating this node
+                                               // (metadata; excluded from node key)
+    FormulaId                     discharges_until = kInvalidId;
+                                  // set on a (U•) stop child: the until mu it
+                                  // discharges here (metadata; excluded from key)
 };
 
 // ── Cover rule result (paper §4.2) ──────────────────────────────────────────
@@ -104,10 +115,13 @@ struct CoverResult {
     std::vector<Node> children;
 };
 
-// Apply the cover rule to node `n` for the demanded modality `mu`.  `n.Z` must
-// be expressed over S_X(mu)'s clock space (the graph task arranges this); the
-// onset is taken at x_mu = 0.
-CoverResult apply_cover(const Node& n, FormulaId mu, FormulaFactory& f);
+// Apply the cover rule to node `n` for the demanded modality `mu`, using the
+// engine's global clock map / dimension / extrapolation vector (so `n.Z` and
+// S_X(mu) share one clock space).  The onset is taken at x_mu = 0.
+CoverResult apply_cover(const Node& n, FormulaId mu,
+                        const std::map<FormulaId, ClockId>& cmap,
+                        std::size_t num_clocks,
+                        const std::vector<std::int32_t>& max, FormulaFactory& f);
 
 // ── Result ───────────────────────────────────────────────────────────────────
 // Verdict + wall-clock time.  Same public shape as the retired engine's Result

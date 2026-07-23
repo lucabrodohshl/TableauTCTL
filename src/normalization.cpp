@@ -444,6 +444,44 @@ FormulaId eliminate_implications(FormulaId id, FormulaFactory& f) {
 // Forward declaration of the negation-pusher.
 static FormulaId negate_nnf(FormulaId id, FormulaFactory& f);
 
+// ============================================================================
+// Punctuality / nesting-depth analysis
+// ============================================================================
+
+static bool bound_is_punctual(const TimeBound& lo, const TimeBound& hi) {
+    // A closed point [a,a]: both bounds finite, equal, and non-strict.
+    return !lo.is_infinity && !hi.is_infinity &&
+           lo.value == hi.value && !lo.is_strict && !hi.is_strict;
+}
+
+static void analyze_punctuality_rec(FormulaId id, FormulaFactory& f,
+                                    int timed_ancestors, PunctualityReport& r) {
+    if (id == kInvalidId) return;
+    const FormulaNode& n = f.node(id);
+
+    const bool is_timed =
+        n.kind == NodeKind::TimedEU || n.kind == NodeKind::TimedAU ||
+        n.kind == NodeKind::TimedER || n.kind == NodeKind::TimedAR;
+
+    int child_ancestors = timed_ancestors;
+    if (is_timed) {
+        child_ancestors = timed_ancestors + 1;
+        if (child_ancestors > r.max_timed_depth) r.max_timed_depth = child_ancestors;
+        if (bound_is_punctual(n.time_lower, n.time_upper)) {
+            r.has_punctual = true;
+            if (timed_ancestors >= 1) r.punctual_nested = true;  // depth >= 2
+        }
+    }
+    analyze_punctuality_rec(n.children[0], f, child_ancestors, r);
+    analyze_punctuality_rec(n.children[1], f, child_ancestors, r);
+}
+
+PunctualityReport analyze_punctuality(FormulaId id, FormulaFactory& f) {
+    PunctualityReport r;
+    analyze_punctuality_rec(id, f, 0, r);
+    return r;
+}
+
 FormulaId to_nnf(FormulaId id, FormulaFactory& f) {
     // Copy node kind and children BEFORE any recursive calls.
     NodeKind kind = f.node(id).kind;

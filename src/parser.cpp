@@ -274,16 +274,25 @@ Parser::TimeInterval Parser::parse_time_interval() {
     }
     
     TimeBound lower{lower_val, lower_strict, false};
-    
-    // Validate: lower < upper (point intervals a=b are not allowed)
-    if (!upper.is_infinity && lower_val > upper.value) {
-        error(start, "time interval requires lower < upper");
-    }
-    if (!upper.is_infinity && lower_val == upper.value) {
-        error(start, "point intervals (a = b) are not allowed; require a < b");
-    }
+
+    // Validate the interval.  Punctual intervals [a,a] ARE allowed: the
+    // ETAPS2026 procedure is sound and terminating on all of TCTL, including
+    // punctual constraints (completeness holds for non-punctual TCTL, and for
+    // depth-1 TCTL even with punctuality — see docs/PAPER_PORT.md).  Only
+    // genuinely empty intervals are rejected.
     if (lower_val < 0) {
         error(start, "time interval lower bound must be non-negative");
+    }
+    if (!upper.is_infinity) {
+        if (lower_val > upper.value) {
+            error(start, "empty time interval: lower bound exceeds upper bound");
+        }
+        if (lower_val == upper.value && (lower_strict || upper.is_strict)) {
+            // (a,a), [a,a), (a,a] are all empty; only the closed singleton
+            // [a,a] denotes a (punctual) point and is admissible.
+            error(start, "empty time interval; a=b is only meaningful as the "
+                         "closed point [a,a]");
+        }
     }
     
     return TimeInterval{lower, upper};
