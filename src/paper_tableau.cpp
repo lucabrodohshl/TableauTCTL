@@ -269,18 +269,29 @@ private:
                                        : Pursuit::Stage::DeferAX;
 
         if (p.is_until) {
-            // (U•): stop ⊕ go.
-            Node stop = n;
-            stop.Gamma.insert(psi);
-            constrain_in_window(stop.Z, p.x_mu, w);
-            stop.pursuits.erase(stop.pursuits.begin() + static_cast<long>(i));
-            stop.D = drop_deadline(n.D, p.x_mu);
-            stop.discharges_until = p.mu;   // until eventuality fulfilled here
-
+            // (U•): stop ⊕ go.  The stop zone Z ∩ (x_mu ∈ I) is split into
+            // integer regions so the eventuality can be discharged in a
+            // boundary-free cell (e.g. (1,2)) rather than a zone straddling a
+            // hyperplane where a co-present formula flips.
+            Expansion e; e.kind = Expansion::Kind::Or;
+            Zone stopZ = n.Z;
+            constrain_in_window(stopZ, p.x_mu, w);
+            if (!stopZ.is_empty()) {
+                for (const Zone& r : integer_regions(stopZ)) {
+                    Node stop = n;
+                    stop.Gamma.insert(psi);
+                    stop.Z = r;
+                    stop.pursuits.erase(stop.pursuits.begin() + static_cast<long>(i));
+                    stop.D = drop_deadline(n.D, p.x_mu);
+                    stop.discharges_until = p.mu;
+                    e.children.push_back(std::move(stop));
+                }
+            }
             Node go = n;
             go.Gamma.insert(phi);
             go.pursuits[i].stage = defer;
-            return {Expansion::Kind::Or, {stop, go}};
+            e.children.push_back(std::move(go));
+            return e;
         }
 
         // Release.
@@ -329,9 +340,39 @@ private:
         return {Expansion::Kind::Or, {stop, go}};
     }
 
+    // Integer-region split of a delayed zone (paper's Δ°/Δ^∂ generalised): every
+    // maximal sub-zone is either on an integer hyperplane or inside an open unit
+    // cell, so no zone straddles a boundary where a formula's truth flips.
+    std::vector<Zone> integer_regions(const Zone& Zup) const {
+        std::vector<Zone> regs = {Zup};
+        const std::int32_t M = max_.empty() ? 0 : *std::max_element(max_.begin(), max_.end());
+        for (ClockId c = 1; c < nc_; ++c) {
+            std::vector<Zone> nx;
+            for (const Zone& z : regs) {
+                for (std::int32_t k = 0; k <= M; ++k) {
+                    Zone pt = z;                       // c = k
+                    pt.add_lower_bound(c, k, false); pt.add_upper_bound(c, k, false);
+                    if (!pt.is_empty()) nx.push_back(pt);
+                    if (k < M) {                       // c ∈ (k, k+1)
+                        Zone op = z;
+                        op.add_lower_bound(c, k, true); op.add_upper_bound(c, k + 1, true);
+                        if (!op.is_empty()) nx.push_back(op);
+                    }
+                }
+                Zone hi = z;                           // c > M
+                hi.add_lower_bound(c, M, true);
+                if (!hi.is_empty()) nx.push_back(hi);
+            }
+            regs = std::move(nx);
+        }
+        return regs;
+    }
+
     Expansion successors(const Node& n) {
         if (n.phase == Phase::Elapse) {
-            // (Delay): single time-successor, capped by Inv(N).
+            // (Delay): single time-successor, capped by Inv(N).  Boundary vs open
+            // distinctions are made where a modality's truth is pinned (the U•
+            // stop / R^split), via integer_regions, not here.
             Node d = n;
             d.Z.up();
             apply_inv(d.Z, n.D);
@@ -347,14 +388,22 @@ private:
             if (p.stage == Pursuit::Stage::DeferEX) ex.push_back(p);
             else if (p.stage == Pursuit::Stage::DeferAX) ax.push_back(p);
         }
+        // Reviving a deferred pursuit: time has advanced (a delay just ran), so a
+        // release must re-partition its window against the new zone — reset its
+        // part to Whole so (R^split) re-runs (else it stays "in-window" and keeps
+        // imposing ψ after x_mu has lapsed past I).
+        auto revive = [](Pursuit q) {
+            q.stage = Pursuit::Stage::Here;
+            q.part = Pursuit::Part::Whole;
+            return q;
+        };
         auto make_child = [&](const Pursuit* ex_one) {
             Node c;
             c.X = n.X;
             c.Gamma = n.X;             // {ψ} ∪ X base
             c.Z = n.Z; c.O = n.O; c.D = n.D; c.phase = Phase::Elapse;
-            if (ex_one) { Pursuit q = *ex_one; q.stage = Pursuit::Stage::Here;
-                          c.pursuits.push_back(q); }
-            for (Pursuit q : ax) { q.stage = Pursuit::Stage::Here; c.pursuits.push_back(q); }
+            if (ex_one) c.pursuits.push_back(revive(*ex_one));
+            for (const Pursuit& q : ax) c.pursuits.push_back(revive(q));
             return c;
         };
         Expansion e; e.kind = Expansion::Kind::And;
