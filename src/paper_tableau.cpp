@@ -13,12 +13,13 @@
 #include "tctl/zoneset.hpp"
 
 #include <algorithm>
-#include <cstdio>
 #include <cstdlib>
 #include <functional>
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace tctl {
 
@@ -187,7 +188,6 @@ public:
         max_.assign(nc_, M);
         max_[0] = 0;
         collect_boundaries(root, f);
-        debug_ = std::getenv("TCTL_DEBUG") != nullptr;
     }
 
     // The only clock values where a formula's truth can flip are the integer
@@ -221,15 +221,18 @@ public:
         n.Gamma.insert(root);
         n.Z = Zone::zero(nc_);
         n.phase = Phase::Elapse;
-        return dfs(n);
+        return decide_iter(n);
     }
 
-    std::uint64_t nodes() const { return nodes_; }
+    std::uint64_t nodes() const { return expansions_; }
     bool budget_hit() const { return budget_hit_; }
 
 private:
     // ── Canonical key for loop detection ────────────────────────────────
-    std::string key(const Node& n) const {
+    // Everything about a node EXCEPT its zone.  Two nodes with the same struct
+    // key differ only in their zone, so narrowing-monotonicity (paper §4.1)
+    // applies between them: a realisable zone subsumes its sub-zones.
+    std::string struct_key(const Node& n) const {
         std::ostringstream os;
         os << 'G';
         for (FormulaId id : n.Gamma.elements()) os << id << ',';
@@ -253,10 +256,18 @@ private:
         }
         std::sort(ds.begin(), ds.end());
         for (auto& s : ds) os << s << ';';
-        os << 'F' << int(n.phase) << 'Z';
-        Zone z = n.Z; z.extrapolate(max_);
-        os << z.to_string();
+        os << 'F' << int(n.phase);
         return os.str();
+    }
+
+    // The ~=_M-canonical zone used for memo/loop comparison.
+    Zone canon_zone(const Node& n) const {
+        Zone z = n.Z; z.extrapolate(max_); return z;
+    }
+
+    // Full key (struct + canonical zone) for exact loop detection.
+    std::string key(const Node& n) const {
+        return struct_key(n) + "Z" + canon_zone(n).to_string();
     }
 
     // ── Expansion (single rule) ─────────────────────────────────────────
@@ -465,128 +476,139 @@ private:
         return e;
     }
 
-    // ── Loop acceptance ─────────────────────────────────────────────────
-    bool loop_accepting(std::size_t a) const {
-        const Node& rep = path_[a].node;
-        // (i) every until-pursuit pending on the loop must be *discharged*
-        // somewhere on the segment (its (U•) stop taken).  A persistent
-        // eventuality is re-launched each cycle, so "pending at the repeat" is
-        // fine as long as it is fulfilled within the loop.
+    static constexpr std::size_t kInf = static_cast<std::size_t>(-1);
+
+    // ── Explicit-stack frame (no call recursion → no stack overflow) ────
+    struct Frame {
+        Node        n;
+        std::string sk;        // struct key (zone-independent)
+        std::string fk;        // full key (struct + canonical zone)
+        Zone        ez;        // canonical zone (for memo store)
+        Expansion   e;
+        std::size_t ci = 0;
+        std::size_t depth = 0;
+        std::size_t submin = kInf;
+        bool        res = false;
+        bool        expanded = false;
+    };
+
+    // ── Loop acceptance (reads the explicit stack) ──────────────────────
+    bool loop_accepting(const std::vector<Frame>& st, std::size_t a) const {
+        const Node& rep = st[a].n;
+        // (i) every until-pursuit pending on the loop must be discharged on the
+        // segment (its (U•) stop taken somewhere): a persistent eventuality is
+        // re-launched each cycle, fine as long as it is fulfilled within the loop.
         for (const Pursuit& p : rep.pursuits) {
             if (!p.is_until) continue;
             bool discharged = false;
-            for (std::size_t k = a; k < path_.size(); ++k)
-                if (path_[k].node.discharges_until == p.mu) { discharged = true; break; }
+            for (std::size_t k = a; k < st.size(); ++k)
+                if (st[k].n.discharges_until == p.mu) { discharged = true; break; }
             if (!discharged) return false;
         }
-        // (ii) time-progressing (non-Zeno)
-        return time_progressing(a);
-    }
-
-    bool time_progressing(std::size_t a) const {
-        // A delay step must occur on the segment.
+        // (ii) time-progressing (non-Zeno): positive elapse and every
+        // deadline-bounded clock reset on the segment.
         bool has_delay = false;
         std::vector<char> reset(nc_, 0);
-        for (std::size_t k = a; k < path_.size(); ++k) {
-            if (path_[k].node.phase == Phase::Discrete) has_delay = true;
-            for (ClockId c : path_[k].node.just_reset)
-                if (c < nc_) reset[c] = 1;
+        for (std::size_t k = a; k < st.size(); ++k) {
+            if (st[k].n.phase == Phase::Discrete) has_delay = true;
+            for (ClockId c : st[k].n.just_reset) if (c < nc_) reset[c] = 1;
         }
-        if (!has_delay) return false;   // no positive elapse on the segment
-        // A clock only *pins* time (Zeno) when it is held below a finite bound
-        // that persists — i.e. an active deadline (Inv(N), from an A-until) that
-        // is never reset on the segment.  A mere window bound in the zone does
-        // not pin: the run can always delay out of the window and lapse.
-        const Node& rep = path_[a].node;
-        for (const Deadline& d : rep.D) {
+        if (!has_delay) return false;
+        for (const Deadline& d : rep.D)
             if (d.x_mu < nc_ && !reset[d.x_mu]) return false;
-        }
         return true;
     }
 
-    // ── DFS with sound memoization ──────────────────────────────────────
-    // A node's verdict depends on the ancestor path only through loop-backs.
-    // `loop_min_` reports the shallowest ancestor depth any descendant looped
-    // to (kInf if none).  When a subtree is self-contained — no loop reached a
-    // strict ancestor (submin >= this node's depth) — its verdict is
-    // path-independent and cached globally.  This turns the exponential
-    // re-exploration into one expansion per distinct node.
-    static constexpr std::size_t kInf = static_cast<std::size_t>(-1);
-
-    bool dfs(const Node& n) {
-        if (budget_hit_) return false;
-        if (has_deadline_ && (nodes_ & 0x1FFF) == 0 &&
-            std::chrono::steady_clock::now() > deadline_) {
-            budget_hit_ = true;
-            return false;
+    // ── Zone-subsumption memo (narrowing-monotonicity, paper §4.1) ──────
+    // Keyed by struct key; a realisable zone subsumes its sub-zones, and an
+    // unrealisable zone subsumes its super-zones — so many distinct zones share
+    // one stored verdict.  Only self-contained (path-independent) verdicts cached.
+    bool memo_lookup(const std::string& sk, const Zone& ez, bool& out) const {
+        auto it = memo_.find(sk);
+        if (it == memo_.end()) return false;
+        for (const auto& e : it->second) {
+            if (e.second) { if (ez.is_subset_of(e.first)) { out = true;  return true; } }
+            else          { if (e.first.is_subset_of(ez)) { out = false; return true; } }
         }
-        ++nodes_;
-        if (node_closed(n.Gamma, f_) || n.Z.is_empty()) {
-            loop_min_ = kInf; trace(n, "CLOSED"); return false;
-        }
-
-        std::string k = key(n);
-        for (std::size_t a = 0; a < path_.size(); ++a)
-            if (path_[a].key == k) {
-                loop_min_ = a;                       // loop-back to ancestor a
-                bool acc = loop_accepting(a);
-                trace(n, acc ? "LOOP+" : "LOOP-");
-                return acc;
-            }
-        if (auto it = memo_.find(k); it != memo_.end()) {
-            loop_min_ = kInf; return it->second;
-        }
-
-        Expansion e = expand(n);
-        if (e.kind == Expansion::Kind::Closed) {
-            memo_.emplace(k, false); loop_min_ = kInf; trace(n, "close"); return false;
-        }
-
-        const std::size_t d = path_.size();
-        trace(n, e.kind == Expansion::Kind::And ? "AND" : "OR");
-        path_.push_back({k, n});
-        ++depth_;
-        std::size_t submin = kInf;
-        bool res;
-        if (e.kind == Expansion::Kind::And) {
-            res = true;
-            for (const Node& c : e.children) {
-                bool r = dfs(c);
-                submin = std::min(submin, loop_min_);
-                if (!r) { res = false; break; }
-            }
-        } else {  // Or
-            res = false;
-            for (const Node& c : e.children) {
-                bool r = dfs(c);
-                submin = std::min(submin, loop_min_);
-                if (r) { res = true; break; }
-            }
-        }
-        --depth_;
-        path_.pop_back();
-
-        if (submin >= d) {          // self-contained: no loop to a strict ancestor
-            memo_.emplace(k, res);
-            loop_min_ = kInf;
-        } else {
-            loop_min_ = submin;     // an outstanding loop bubbles up to that ancestor
-        }
-        return res;
+        return false;
+    }
+    void memo_store(const std::string& sk, const Zone& ez, bool verdict) {
+        memo_[sk].emplace_back(ez, verdict);
     }
 
-    void trace(const Node& n, const char* tag) const {
-        if (!debug_) return;
-        std::ostringstream os;
-        for (int i = 0; i < depth_; ++i) os << ' ';
-        os << tag << " G{";
-        for (FormulaId id : n.Gamma.elements()) os << f_.to_string(id) << ',';
-        os << "} P{";
-        for (const Pursuit& p : n.pursuits)
-            os << f_.to_string(p.mu) << "/x" << p.x_mu << "/s" << int(p.stage)
-               << "/pt" << int(p.part) << (p.is_until ? "U" : "R") << ' ';
-        os << "} ph" << int(n.phase) << " Z=" << n.Z.to_string() << '\n';
-        std::fputs(os.str().c_str(), stderr);
+    void push_frame(std::vector<Frame>& st, const Node& n) {
+        Frame fr;
+        fr.n = n;
+        fr.sk = struct_key(n);
+        fr.ez = canon_zone(n);
+        fr.fk = fr.sk + "Z" + fr.ez.to_string();
+        st.push_back(std::move(fr));
+    }
+
+    // ── Iterative on-the-fly DFS with short-circuiting + memoisation ────
+    bool decide_iter(const Node& root) {
+        std::vector<Frame> st;
+        std::unordered_map<std::string, std::size_t> onpath;  // fk → depth
+        bool pend_res = false;
+        std::size_t pend_lm = kInf;
+
+        push_frame(st, root);
+        while (!st.empty()) {
+            Frame& fr = st.back();
+            if (!fr.expanded) {
+                if ((++expansions_ & 0x1FFF) == 0 && has_deadline_ &&
+                    std::chrono::steady_clock::now() > deadline_) {
+                    budget_hit_ = true; return false;
+                }
+                // resolve without expanding: closed / loop back / memo (subsumption)
+                if (node_closed(fr.n.Gamma, f_) || fr.n.Z.is_empty()) {
+                    pend_res = false; pend_lm = kInf; st.pop_back(); continue;
+                }
+                if (auto it = onpath.find(fr.fk); it != onpath.end()) {
+                    std::size_t a = it->second;
+                    pend_res = loop_accepting(st, a); pend_lm = a; st.pop_back(); continue;
+                }
+                bool cached;
+                if (memo_lookup(fr.sk, fr.ez, cached)) {
+                    pend_res = cached; pend_lm = kInf; st.pop_back(); continue;
+                }
+                fr.e = expand(fr.n);
+                if (fr.e.kind == Expansion::Kind::Closed) {
+                    memo_store(fr.sk, fr.ez, false);
+                    pend_res = false; pend_lm = kInf; st.pop_back(); continue;
+                }
+                fr.expanded = true;
+                fr.ci = 0;
+                fr.res = (fr.e.kind == Expansion::Kind::And);
+                fr.submin = kInf;
+                fr.depth = st.size() - 1;
+                onpath.emplace(fr.fk, fr.depth);
+            } else {
+                // resume: fold in the child result that just bubbled up
+                fr.submin = std::min(fr.submin, pend_lm);
+                const bool isAnd = (fr.e.kind == Expansion::Kind::And);
+                if ((isAnd && !pend_res) || (!isAnd && pend_res)) {
+                    fr.res = pend_res;
+                    fr.ci = fr.e.children.size();      // short-circuit
+                } else {
+                    ++fr.ci;
+                }
+            }
+            if (fr.ci < fr.e.children.size()) {
+                Node child = fr.e.children[fr.ci];    // copy before push invalidates fr
+                push_frame(st, child);
+                continue;
+            }
+            // finalize
+            const std::size_t d = fr.depth;
+            const bool self_contained = (fr.submin >= d);
+            if (self_contained) memo_store(fr.sk, fr.ez, fr.res);
+            onpath.erase(fr.fk);
+            pend_res = fr.res;
+            pend_lm  = self_contained ? kInf : fr.submin;
+            st.pop_back();
+        }
+        return pend_res;
     }
 
     FormulaFactory& f_;
@@ -595,17 +617,13 @@ private:
     std::vector<std::int32_t> max_;
     std::vector<std::int32_t> bounds_;   // sorted formula interval endpoints (+0)
 
-    struct Frame { std::string key; Node node; };
-    std::vector<Frame> path_;
-    std::unordered_map<std::string, bool> memo_;   // self-contained node verdicts
-    SatCache sx_cache_;                             // persistent S_X(mu,X) memo
-    std::size_t loop_min_ = kInf;                  // shallowest ancestor a subtree looped to
-    std::uint64_t nodes_ = 0;
+    // struct key → list of (canonical zone, verdict) for subsumption lookup
+    std::unordered_map<std::string, std::vector<std::pair<Zone, bool>>> memo_;
+    SatCache sx_cache_;                  // persistent S_X(mu,X) memo
+    std::uint64_t expansions_ = 0;
     bool budget_hit_ = false;
     bool has_deadline_ = false;
     std::chrono::steady_clock::time_point deadline_{};
-    bool debug_ = false;
-    int depth_ = 0;
 };
 
 }  // namespace
