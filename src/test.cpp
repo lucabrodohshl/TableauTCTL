@@ -1,18 +1,21 @@
-// ============================================================================
-// test.cpp — Self-test suite for the TCTL satisfiability tool
-// ============================================================================
-//
-// Contains tests covering:
-//   - Lexer tokenisation (brackets, braces, commas, inf, comparison ops)
-//   - Parser correctness (atoms, booleans, temporal, TCTL operators)
-//   - Time interval syntax ([a,b], (a,b), [a,b), (a,b])
-//   - Relational time bounds (<c, <=c, >c, >=c)
-//   - Arithmetic islands with {} syntax
-//   - Desugaring (EF[a,b], AF[a,b], EG[a,b], AG[a,b])
-//   - NNF conversion for TCTL
-//   - Zone operations (HDBM integration)
-//
-// ============================================================================
+/// @file test.cpp
+/// @brief Semantic self-test suite.
+///
+/// The expected verdicts here are not a trusted oracle: each is justified from
+/// TCTL semantics --- does a witness automaton exist? --- rather than from what
+/// the engine happens to answer.  The paper's Fig. 1 worked examples are
+/// included as a permanent regression oracle.
+///
+/// Contains tests covering:
+///   - Lexer tokenisation (brackets, braces, commas, inf, comparison ops)
+///   - Parser correctness (atoms, booleans, temporal, TCTL operators)
+///   - Time interval syntax ([a,b], (a,b), [a,b), (a,b])
+///   - Relational time bounds (<c, <=c, >c, >=c)
+///   - Arithmetic islands with {} syntax
+///   - Desugaring (EF[a,b], AF[a,b], EG[a,b], AG[a,b])
+///   - NNF conversion for TCTL
+///   - Zone operations (HDBM integration)
+///
 
 #include "tctl/test.hpp"
 #include "tctl/ast.hpp"

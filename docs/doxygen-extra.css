@@ -1,0 +1,181 @@
+/* ===========================================================================
+   Theme overrides for the generated API documentation.
+   Self-contained: no webfonts, no CDN, nothing to fetch. Works offline.
+
+   Doxygen >= 1.10 exposes its palette as CSS custom properties, so most of
+   this is re-declaring those; the rest fixes typography, which the defaults
+   set in a serif face better suited to a printed paper than to code docs.
+   =========================================================================== */
+
+html {
+    /* ── palette: light ──────────────────────────────────────────────── */
+    --primary-color:            #2563eb;
+    --primary-dark-color:       #1d4ed8;
+    --primary-light-color:      #60a5fa;
+    --primary-lighter-color:    #dbeafe;
+    --primary-lightest-color:   #eff6ff;
+
+    --page-background-color:            #ffffff;
+    --page-foreground-color:            #1f2933;
+    --page-secondary-foreground-color:  #52606d;
+    --separator-color:                  #e5e7eb;
+
+    --side-nav-background:      #f7f8fa;
+    --side-nav-foreground:      #1f2933;
+    --side-nav-border-color:    #e5e7eb;
+
+    --code-background:          #f6f8fa;
+    --code-foreground:          #1f2933;
+
+    --tablehead-background:     #f3f4f6;
+    --tablehead-foreground:     #1f2933;
+
+    --border-radius-small:  4px;
+    --border-radius-medium: 6px;
+    --border-radius-large:  8px;
+
+    --content-maxwidth: 62rem;
+
+    /* Doxygen's default is a serif stack; a UI face reads far better here. */
+    --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   "Helvetica Neue", Arial, sans-serif;
+    --font-family-monospace: ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+                             Consolas, "Liberation Mono", monospace;
+}
+
+html.dark-mode {
+    /* ── palette: dark ───────────────────────────────────────────────── */
+    --primary-color:            #60a5fa;
+    --primary-dark-color:       #93c5fd;
+    --primary-light-color:      #3b82f6;
+    --primary-lighter-color:    #1e3a5f;
+    --primary-lightest-color:   #172554;
+
+    --page-background-color:            #0f1419;
+    --page-foreground-color:            #d7dde3;
+    --page-secondary-foreground-color:  #9aa5b1;
+    --separator-color:                  #232a33;
+
+    --side-nav-background:      #141a21;
+    --side-nav-foreground:      #d7dde3;
+    --side-nav-border-color:    #232a33;
+
+    --code-background:          #161c23;
+    --code-foreground:          #d7dde3;
+
+    --tablehead-background:     #1a212a;
+    --tablehead-foreground:     #d7dde3;
+}
+
+/* ── typography ──────────────────────────────────────────────────────── */
+body, table, div, p, dl, #nav-tree .label, .navpath li.navelem a {
+    font-family: var(--font-family);
+    font-size: 15px;
+    line-height: 1.65;
+}
+
+h1, h2, h3, h4, h5, h6, div.title, .memtitle {
+    font-family: var(--font-family);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.3;
+}
+
+div.title  { font-size: 1.9rem; margin: 1.2rem 0 0.6rem; }
+h1         { font-size: 1.6rem; margin-top: 2rem; }
+h2         { font-size: 1.3rem; margin-top: 1.8rem; }
+h2.groupheader {
+    border-bottom: 1px solid var(--separator-color);
+    padding-bottom: .3rem;
+    color: var(--page-foreground-color);
+}
+
+code, tt, kbd, samp, pre, .fragment, div.line, span.mlabel {
+    font-family: var(--font-family-monospace);
+    font-size: 13.5px;
+}
+
+/* ── chrome: flatten the gradients the default theme leans on ────────── */
+#titlearea {
+    background: var(--side-nav-background);
+    border-bottom: 1px solid var(--separator-color);
+    padding: 14px 20px;
+}
+#projectname { font-size: 1.5rem; font-weight: 650; letter-spacing: -0.02em; }
+#projectbrief { color: var(--page-secondary-foreground-color); font-size: .9rem; }
+
+.sm-dox, .sm-dox ul, .sm-dox a, .sm-dox a:hover, .sm-dox a:focus, .sm-dox a:active {
+    background-image: none;
+    background-color: var(--side-nav-background);
+    text-shadow: none;
+    border: 0;
+}
+.sm-dox a:hover { background-color: var(--primary-lighter-color); }
+
+/* ── code blocks ─────────────────────────────────────────────────────── */
+div.fragment, pre.fragment {
+    background-color: var(--code-background);
+    border: 1px solid var(--separator-color);
+    border-radius: var(--border-radius-medium);
+    padding: 12px 14px;
+    overflow-x: auto;
+}
+
+/* ── member documentation ────────────────────────────────────────────── */
+.memtitle {
+    background: var(--tablehead-background);
+    border: 1px solid var(--separator-color);
+    border-bottom: 0;
+    border-radius: var(--border-radius-medium) var(--border-radius-medium) 0 0;
+    font-size: .95rem;
+}
+.memitem { margin-bottom: 1.4rem; }
+.memproto, .memdoc {
+    border: 1px solid var(--separator-color);
+    box-shadow: none;
+    background-image: none;
+}
+.memproto { background-color: var(--tablehead-background); }
+.memdoc   { background-color: var(--page-background-color); border-top: 0; }
+
+/* ── tables ──────────────────────────────────────────────────────────── */
+table.doxtable, table.markdownTable {
+    border-collapse: collapse;
+    border-radius: var(--border-radius-medium);
+    overflow: hidden;
+}
+table.doxtable th, table.markdownTable th {
+    background-color: var(--tablehead-background);
+    color: var(--tablehead-foreground);
+    font-weight: 600;
+}
+table.doxtable td, table.doxtable th,
+table.markdownTable td, table.markdownTable th {
+    border: 1px solid var(--separator-color);
+    padding: 7px 11px;
+}
+
+/* ── sidebar ─────────────────────────────────────────────────────────── */
+#side-nav      { border-right: 1px solid var(--side-nav-border-color); }
+#nav-tree      { background: var(--side-nav-background); }
+#nav-tree .item     { line-height: 1.9; }
+#nav-tree .selected {
+    background-image: none;
+    background-color: var(--primary-lighter-color);
+    border-radius: var(--border-radius-small);
+    text-shadow: none;
+}
+#nav-tree a { color: var(--side-nav-foreground); }
+
+/* ── diagrams: let the SVGs breathe, and keep wide ones scrollable ───── */
+div.dyncontent, div.center { overflow-x: auto; }
+div.dyncontent img, div.dyncontent svg, .center img { max-width: 100%; height: auto; }
+
+/* ── misc ────────────────────────────────────────────────────────────── */
+a { text-decoration: none; }
+a:hover { text-decoration: underline; }
+hr { border: 0; border-top: 1px solid var(--separator-color); }
+.navpath ul { background-image: none; background: var(--side-nav-background);
+              border: 0; border-bottom: 1px solid var(--separator-color); }
+.navpath li.navelem a { text-shadow: none; }
+address.footer { color: var(--page-secondary-foreground-color); font-size: .8rem; }

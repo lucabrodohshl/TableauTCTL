@@ -1,27 +1,27 @@
-// ============================================================================
-// parser.cpp — Recursive-descent tctl parser
-// ============================================================================
-//
-// Implementation notes
-// --------------------
-//
-// This parser consumes tokens from a Lexer and builds an AST via
-// FormulaFactory.  The recursive-descent structure mirrors the grammar
-// directly:
-//
-//   parse()           calls parse_iff()  and then expects Eof.
-//   parse_iff()       handles  <->  (left-associative).
-//   parse_implies()   handles  ->   (right-associative via recursion).
-//   parse_or()        handles  |    (left-associative).
-//   parse_and()       handles  &    (left-associative).
-//   parse_unary()     handles  !, EF, AF, EG, AG  (prefix).  EX/AX are
-//                     rejected here: TCTL has no next operator.
-//   parse_primary()   handles  atoms, true, false, E(…U…), A(…U…), parens.
-//
-// All error messages follow the required format:
-//   <line>: ERROR: <message> at column <n>
-//
-// ============================================================================
+/// @file parser.cpp
+/// @brief Recursive-descent parser for TCTL.
+///
+/// Implementation notes
+/// --------------------
+///
+/// This parser consumes tokens from a Lexer and builds an AST via
+/// FormulaFactory.  The recursive-descent structure mirrors the grammar
+/// directly:
+///
+///   parse()           calls parse_iff()  and then expects Eof.
+///   parse_iff()       handles  <->  (left-associative).
+///   parse_implies()   handles  ->   (right-associative via recursion).
+///   parse_or()        handles  |    (left-associative).
+///   parse_and()       handles  &    (left-associative).
+///   parse_unary()     handles  !, EF, AF, EG, AG  (prefix).  EX/AX are
+///                     rejected here: TCTL has no next operator.
+///   parse_primary()   handles  atoms, true, false, E(…U…), A(…U…), parens.
+///
+/// All error messages follow the required format:
+/// @code
+/// <line>: ERROR: <message> at column <n>
+/// @endcode
+///
 
 #include "tctl/parser.hpp"
 

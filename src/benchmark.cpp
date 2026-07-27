@@ -1,11 +1,13 @@
-// ============================================================================
-// benchmark.cpp — CAV-style benchmarking suite for TCTL satisfiability
-// ============================================================================
-//
-// Parameterized formula generators, scalability curves, and CSV output.
-// Called via `--benchmark` from the CLI.
-//
-// ============================================================================
+/// @file benchmark.cpp
+/// @brief Legacy in-binary benchmark harness.
+///
+/// Superseded by the standalone harness under bench/, which separates instance
+/// generation, execution and analysis.  Kept because it is self-contained and
+/// needs no Python toolchain.
+///
+/// Parameterized formula generators, scalability curves, and CSV output.
+/// Called via `--benchmark` from the CLI.
+///
 
 #include "tctl/benchmark.hpp"
 #include "tctl/ast.hpp"

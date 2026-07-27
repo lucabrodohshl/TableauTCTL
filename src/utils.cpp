@@ -1,6 +1,5 @@
-// ============================================================================
-// utils.cpp — File I/O and string utilities
-// ============================================================================
+/// @file utils.cpp
+/// @brief Small file and string helpers shared across the tool.
 
 #include "tctl/utils.hpp"
 

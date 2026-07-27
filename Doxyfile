@@ -118,6 +118,9 @@ DOT_MULTI_TARGETS      = YES
 
 DOT_NUM_THREADS        = 0
 
-DOT_TRANSPARENT        = YES
 
 GENERATE_LEGEND        = YES
+
+HTML_COLORSTYLE        = TOGGLE
+
+HTML_EXTRA_STYLESHEET  = docs/doxygen-extra.css

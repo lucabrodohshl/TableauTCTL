@@ -1,6 +1,9 @@
-// ============================================================================
-// z3_solver.cpp — Implementation of Z3 arithmetic constraint checker
-// ============================================================================
+/// @file z3_solver.cpp
+/// @brief Z3 bridge for the propositional and arithmetic leaves.
+///
+/// The solver is consulted only as a closure oracle for state predicates; it
+/// never encodes a temporal operator, a clock or a fixpoint.  All clock
+/// reasoning stays in the zone layer.
 
 #include "tctl/z3_solver.hpp"
 

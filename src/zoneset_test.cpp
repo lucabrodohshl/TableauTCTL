@@ -1,6 +1,5 @@
-// ============================================================================
-// zoneset_test.cpp — behavioural tests for ZoneSet (federation of zones)
-// ============================================================================
+/// @file zoneset_test.cpp
+/// @brief Behavioural tests for ZoneSet.
 // Exposes `zoneset_run_tests()` returning the number of FAILED checks (0 = ok).
 // Wired into `--selftest`; also runnable standalone.
 // ============================================================================

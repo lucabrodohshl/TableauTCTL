@@ -1,6 +1,11 @@
-// ============================================================================
-// timed_automaton.cpp — Timed Automaton extraction from tableau graph
-// ============================================================================
+/// @file timed_automaton.cpp
+/// @brief Witness timed automaton: datatypes, serialisation and validation.
+///
+/// The extractor itself lives with the engine, which is where the marking is.
+/// This file holds what a witness *is* and how it is written out --- Graphviz
+/// for viewing, JSON for further processing, UPPAAL XML for model checking ---
+/// together with the structural checks a certificate must pass before it is
+/// offered as one.
 
 #include "tctl/timed_automaton.hpp"
 #include "tctl/tableau.hpp"

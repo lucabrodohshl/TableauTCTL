@@ -125,7 +125,7 @@ There is **no next operator**: TCTL has none, and `EX`/`AX` are rejected by the
 parser. They exist only as internal proof-theoretic markers.
 
 See `examples/tctl_examples.txt` for a tour of the accepted syntax, and
-`docs/manual/` for a typeset user manual (`latexmk -pdf main.tex`) covering the
+`docs/manual/` for a typeset user manual (`latexmk -pdf manual.tex`) covering the
 grammar, the options, worked examples and the witness format.
 
 ## Testing

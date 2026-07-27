@@ -1,11 +1,13 @@
-// ============================================================================
-// zone.cpp — Zone implementation over HDBM
-// ============================================================================
-//
-// This file provides the Zone class implementation using HDBM for Difference
-// Bound Matrix operations.
-//
-// ============================================================================
+/// @file zone.cpp
+/// @brief Zone: a clock zone as a Difference Bound Matrix, over HDBM.
+///
+/// The class owns a matrix and defers every operation to HDBM's header-only
+/// algebra, which inlines into the call site.  A zone is kept canonical, so
+/// emptiness and inclusion are entrywise tests.
+///
+/// This file provides the Zone class implementation using HDBM for Difference
+/// Bound Matrix operations.
+///
 
 #include "tctl/zone.hpp"
 

@@ -1,16 +1,14 @@
-// ============================================================================
-// normalization.cpp — Desugaring, implication elimination, and NNF
-// ============================================================================
-//
-// Each phase is a recursive, bottom-up transformation over the interned
-// formula DAG.  Because FormulaFactory interns everything, repeated
-// sub-formulas are normalised at most once.
-//
-// IMPORTANT: When recursively calling these functions, we must copy child IDs
-// *before* the recursive call, because the call may grow the factory and
-// invalidate any references to FormulaNode (e.g., `const FormulaNode& n`).
-//
-// ============================================================================
+/// @file normalization.cpp
+/// @brief Desugaring, implication elimination and negation normal form.
+///
+/// Each phase is a recursive, bottom-up transformation over the interned
+/// formula DAG.  Because FormulaFactory interns everything, repeated
+/// sub-formulas are normalised at most once.
+///
+/// IMPORTANT: When recursively calling these functions, we must copy child IDs
+/// *before* the recursive call, because the call may grow the factory and
+/// invalidate any references to FormulaNode (e.g., `const FormulaNode& n`).
+///
 
 #include "tctl/normalization.hpp"
 

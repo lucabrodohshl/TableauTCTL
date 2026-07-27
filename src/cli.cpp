@@ -1,6 +1,5 @@
-// ============================================================================
-// cli.cpp — Command-line interface and main driver
-// ============================================================================
+/// @file cli.cpp
+/// @brief Command-line interface and driver loop.
 
 #include "tctl/cli.hpp"
 #include "tctl/ast.hpp"

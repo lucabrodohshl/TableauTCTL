@@ -1,6 +1,9 @@
-// ============================================================================
-// lexer.cpp — tctl tokeniser implementation
-// ============================================================================
+/// @file lexer.cpp
+/// @brief Tokeniser for the TCTL surface syntax.
+///
+/// Recognises identifiers, integer literals, the boolean and temporal operators,
+/// and interval brackets, reporting line and column on every token so the parser
+/// can point at the offending character.
 
 #include "tctl/lexer.hpp"
 

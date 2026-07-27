@@ -1,6 +1,9 @@
-// ============================================================================
-// zoneset.cpp — ZoneSet implementation over HDBM's ptctlmc::Federation
-// ============================================================================
+/// @file zoneset.cpp
+/// @brief ZoneSet: a finite union of zones, over HDBM's federations.
+///
+/// A zone is convex, so the satisfaction sets the cover rule computes --- least
+/// and greatest fixpoints over unions of zones --- cannot be held in one DBM.
+/// This is the union layer the construction needs.
 
 #include "tctl/zoneset.hpp"
 

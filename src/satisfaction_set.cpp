@@ -1,6 +1,11 @@
-// ============================================================================
-// satisfaction_set.cpp — S_X(mu) satisfaction sets (§4.2, §5.1)
-// ============================================================================
+/// @file satisfaction_set.cpp
+/// @brief Satisfaction sets S_X(mu), and the leaf decision procedure.
+///
+/// The cover rule discharges a demanded modality against its satisfaction set,
+/// computed as a Knaster--Tarski fixpoint over unions of zones: least for an
+/// until, greatest for a release.  This file also decides node closure, where
+/// the common case is settled by a complementary-literal scan and only the rest
+/// reaches the theory solver.
 
 #include "tctl/satisfaction_set.hpp"
 

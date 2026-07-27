@@ -1,6 +1,10 @@
-// ============================================================================
-// ast.cpp — Implementation of tctl AST, interning, and pretty-printing
-// ============================================================================
+/// @file ast.cpp
+/// @brief Formula AST: interning, construction and pretty-printing.
+///
+/// Every formula is a node in an interned DAG, so two structurally identical
+/// formulas share one FormulaId and equality is a pointer-cheap integer test.
+/// The factory owns the nodes; ids are indices into it and are meaningless
+/// against a different factory, which is why FormulaFactory::serial() exists.
 
 #include "tctl/ast.hpp"
 
