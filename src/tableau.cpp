@@ -105,8 +105,7 @@ CoverResult apply_cover(const Node& n, FormulaId mu,
                         const std::map<FormulaId, ClockId>& cmap,
                         std::size_t num_clocks,
                         const std::vector<std::int32_t>& max, FormulaFactory& f,
-                        SatCache& sx_cache, bool solo_launch, bool reuse_witness,
-                        bool window_reuse) {
+                        SatCache& sx_cache) {
     // A persistent context such as AG μ re-demands μ at uncountably many onsets.
     // A single formula-clock x_μ serves them all (§4.2): the dense family of
     // onsets is absorbed into one finite union of zones, against which the cover
@@ -123,63 +122,22 @@ CoverResult apply_cover(const Node& n, FormulaId mu,
             discharge.Gamma = gamma_without(n.Gamma, mu);
             discharge.X = n.X; discharge.Z = n.Z; discharge.O = n.O;
             discharge.D = n.D; discharge.pursuits = n.pursuits; discharge.phase = n.phase;
-            discharge.witnessed = n.witnessed;
             // The re-demand itself is the evidence that this demand is
             // persistent.  Discharging it against the live pursuit is sound for
             // the *window*, but nothing then bounds the time to the NEXT
             // witness -- which is the rate contradiction.  Mark the pursuit so
             // its (U-stop) rolls the clock over instead of retiring it.
+            // Universal only.  An existential until under a persistent context
+            // has no recurrence rate: distinct onsets may be witnessed by
+            // distinct branching runs, so capping the gap between consecutive
+            // witnesses on one run over-constrains it (measured: it turns
+            // AG(EF[1,3](AG(EF[4,6](AG(EF[7,9]p))))) UNSAT, which is SAT).
             const Window rw = window_of(mu, f);
-            if (is_until_modality(f.node(mu).kind) && !rw.hi_inf &&
-                rw.lo == 0 && !rw.lo_strict && clock_of(cmap, mu) != kNoClock) {
+            if (is_until_modality(f.node(mu).kind) && is_universal(f.node(mu).kind) &&
+                !rw.hi_inf && clock_of(cmap, mu) != kNoClock) {
                 for (Pursuit& q : discharge.pursuits)
                     if (q.mu == mu) q.persistent = true;
             }
-            only.children.push_back(std::move(discharge));
-            return only;
-        }
-    }
-
-    // Likewise once mu has been witnessed on this branch: the completed pursuit
-    // already realises it, and relaunching would only restart the same witness at
-    // a later onset — which is what turns a persistent demand into an unbounded
-    // chain of relaunches and, with it, a cycle the loop test must reject.
-    if (reuse_witness && n.witnessed.contains(mu)) {
-        CoverResult only;
-        only.kind = CoverResult::Kind::Cover;
-        Node discharge;
-        discharge.Gamma = gamma_without(n.Gamma, mu);
-        discharge.X = n.X; discharge.Z = n.Z; discharge.O = n.O;
-        discharge.D = n.D; discharge.pursuits = n.pursuits; discharge.phase = n.phase;
-        discharge.witnessed = n.witnessed;
-        only.children.push_back(std::move(discharge));
-        return only;
-    }
-
-    // TCTL_WINDOW_REUSE -- the "overlapping windows" side condition on (Cov),
-    // evaluated and REJECTED.  **UNSOUND.**  See the note in the header.
-    //
-    // The idea: discharge a re-demand against a settled pursuit only when the
-    // zone proves the new onset lies inside the window the earlier pursuit
-    // already covered, i.e. Z |= x_mu in I.  It is strictly narrower than the
-    // `witnessed` shortcut -- and still wrong, because the direction of the
-    // containment is the wrong one.  The settled pursuit's witness sits at
-    // x_mu = v for some v in I *already passed*; the new demand asks for a
-    // witness at v' - x_mu in I with v' >= x_mu, i.e. in the window's forward
-    // translate.  Knowing that the onset itself fell inside the old window says
-    // nothing about the old witness lying inside the new one.
-    if (window_reuse && n.witnessed.contains(mu)) {
-        const ClockId xw = clock_of(cmap, mu);
-        Zone probe = n.Z;
-        constrain_in_window(probe, xw, window_of(mu, f));
-        if (n.Z.is_subset_of(probe)) {              // Z |= x_mu in I
-            CoverResult only;
-            only.kind = CoverResult::Kind::Cover;
-            Node discharge;
-            discharge.Gamma = gamma_without(n.Gamma, mu);
-            discharge.X = n.X; discharge.Z = n.Z; discharge.O = n.O;
-            discharge.D = n.D; discharge.pursuits = n.pursuits;
-            discharge.phase = n.phase; discharge.witnessed = n.witnessed;
             only.children.push_back(std::move(discharge));
             return only;
         }
@@ -204,7 +162,7 @@ CoverResult apply_cover(const Node& n, FormulaId mu,
     Node base;
     base.Gamma = gamma_without(n.Gamma, mu);
     base.X = n.X; base.Z = n.Z; base.O = n.O; base.D = n.D;
-    base.pursuits = n.pursuits; base.phase = n.phase; base.witnessed = n.witnessed;
+    base.pursuits = n.pursuits; base.phase = n.phase;
 
     if (SX.contains(Zc)) {
         res.kind = CoverResult::Kind::Cover;
@@ -216,40 +174,6 @@ CoverResult apply_cover(const Node& n, FormulaId mu,
             // keep O sorted; it is written once per launch and never searched
             launch.O.emplace_back(mu, x_mu);
             std::sort(launch.O.begin(), launch.O.end());
-        }
-        // TCTL_SOLO_LAUNCH -- an experiment, kept as a record.  **UNSOUND.**
-        //
-        // The idea was that an existential modality still demanded here asks
-        // for a run branching off this configuration, not for anything about
-        // mu's witness run, so the launch child could drop it and let the
-        // AND-sibling `discharge` build its witness separately.  That would
-        // turn k demanded modalities from 2^k leaves --- one carrying k
-        // formula-clocks in a single zone --- into k+1, cutting the live clock
-        // count per node to one.
-        //
-        // It is wrong, and the reason is worth recording.  The children of the
-        // (Cov) fork are not independent proofs: they describe *one*
-        // configuration, whose propositional labelling has to satisfy every
-        // demand at once.  The cross-product leaf is exactly what forces the
-        // demands into a single node where a contradiction between them can
-        // close it.  Drop it and `EG p & EG !p` reports SATISFIABLE: one branch
-        // unfolds EG p and asserts p, another unfolds EG !p and asserts !p,
-        // each node consistent on its own, the contradiction never met.  The
-        // default rule builds the leaf carrying both pursuits, whose Gamma
-        // holds p and !p together, and closes it.
-        //
-        // A sound version would have to check the immediate obligations of
-        // every demand against the shared labelling before separating --- and
-        // extracting "what does this modality require *now*" is itself an
-        // unfolding, which is what launching does.  That is a change to the
-        // calculus, not a filter on this rule.
-        if (solo_launch) {
-            FormulaIdVec keep;
-            for (FormulaId id : launch.Gamma.elements()) {
-                const NodeKind k2 = f.node(id).kind;
-                if (!is_modality(k2) || is_universal(k2)) keep.push_back(id);
-            }
-            launch.Gamma = FormulaSet::from_sorted(keep);
         }
         Pursuit p; p.mu = mu; p.x_mu = x_mu;
         p.stage = Pursuit::Stage::Here; p.part = Pursuit::Part::Whole;
@@ -313,7 +237,6 @@ public:
         max_[0] = 0;
         collect_boundaries(root, f);
         collect_clock_bounds(root, f);
-        collect_lu_bounds(root, f);
         // A formula-clock is only ever compared against the endpoints of its own
         // window, so extrapolating every clock at the global maximum constant M
         // preserves distinctions no guard can observe.  Per-clock maxima are
@@ -322,37 +245,6 @@ public:
         for (ClockId c = 1; c < nc_; ++c)
             max_[c] = clock_bounds_[c].empty() ? 0 : clock_bounds_[c].back();
         debug_ = std::getenv("TCTL_DEBUG") != nullptr;
-        // Extra_LU for node identity.  MEASURED INCOMPLETE -- see the note on
-        // #canon_zone.  Off by default; kept for the record and for experiments.
-        extra_lu_ = std::getenv("TCTL_EXTRA_LU") != nullptr;
-        solo_launch_ = std::getenv("TCTL_SOLO_LAUNCH") != nullptr;
-        // Neither shortcut is in the calculus: the paper's (Cov) always yields
-        // discharge + launch.  Both are engine additions and both are on by
-        // default; TCTL_NO_WITNESS_REUSE removes them together, since dropping
-        // the discharge shortcut while still *recording* the witness would keep
-        // the set growing inside the node key and stop loops from ever closing.
-        // UNSOUND, and now off by default: it discharges a re-demand against a
-        // pursuit settled at an *earlier* onset, which is what made
-        // `AG(AF q) & EF(AG !q)` come out SAT.  Dead-clock elimination below is
-        // what makes paying for its removal affordable.  TCTL_WITNESS_REUSE
-        // restores it for A/B measurement.
-        reuse_witness_ = std::getenv("TCTL_WITNESS_REUSE") != nullptr;
-        // The "overlapping windows" side condition, kept as a recorded
-        // experiment; selecting it replaces the unconditional shortcut.
-        window_reuse_ = std::getenv("TCTL_WINDOW_REUSE") != nullptr;
-        if (window_reuse_) reuse_witness_ = false;
-        record_witness_ = reuse_witness_ || window_reuse_;
-        // Exact dead-clock elimination (see #collapse_dead_clocks).  Now on by
-        // default: it is what pays for removing the witness shortcut above.
-        free_dead_ = std::getenv("TCTL_NO_FREE_DEAD_CLOCKS") == nullptr;
-        verify_decode_ = std::getenv("TCTL_VERIFY_DECODE") != nullptr;
-        // SCC acceptance is the default: conditions (i) and (ii) of §4.3 are
-        // reachability queries over the surviving subgraph, which only the
-        // per-SCC elimination answers.  TCTL_LEGACY_LOOP selects the earlier
-        // path-local loop test, kept for A/B comparison; it decides one
-        // back-edge at a time and so rejects a node that sits on a Zeno loop
-        // but reaches an accepting one by another route.
-        scc_mode_ = std::getenv("TCTL_LEGACY_LOOP") == nullptr;
         words_ = (nc_ + 63) / 64;
     }
 
@@ -410,36 +302,6 @@ public:
         }
     }
 
-    /// Per-clock maximum lower- and upper-bound constants, for Extra_LU.
-    ///
-    /// A formula-clock @f$x_\mu@f$ is only ever tested against its own window
-    /// @f$I_\mu@f$, so its maximum *lower*-bound constant is @f$\inf I_\mu@f$
-    /// and its maximum *upper*-bound constant @f$\sup I_\mu@f$.  Extra_M has to
-    /// use the larger of the two for both; separating them is what makes
-    /// Extra_LU strictly coarser, and it is coarsest exactly where the window is
-    /// wide.
-    void collect_lu_bounds(FormulaId root, FormulaFactory& f) {
-        lu_L_.assign(nc_, 0);
-        lu_U_.assign(nc_, 0);
-        std::function<void(FormulaId)> walk = [&](FormulaId x) {
-            if (x == kInvalidId) return;
-            const FormulaNode& n = f.node(x);
-            if (is_timed(n.kind)) {
-                const ClockId c = clock_of(cmap_, x);
-                if (c != kNoClock && c < nc_) {
-                    lu_L_[c] = std::max(lu_L_[c],
-                                        static_cast<std::int32_t>(n.time_lower.value));
-                    if (!n.time_upper.is_infinity)
-                        lu_U_[c] = std::max(lu_U_[c],
-                                            static_cast<std::int32_t>(n.time_upper.value));
-                }
-            }
-            walk(n.children[0]); walk(n.children[1]);
-        };
-        walk(root);
-        lu_L_[0] = lu_U_[0] = 0;                 // the reference clock
-    }
-
     // Memoisation + boundary-region abstraction keep the search shallow.  The
     // process runs with an enlarged main-thread stack (set via a linker option,
     // see CMakeLists.txt) so deep-but-finite runs do not overflow — no per-check
@@ -449,13 +311,7 @@ public:
         n.Gamma.insert(root);
         n.Z = Zone::zero(nc_);
         n.phase = Phase::Elapse;
-        const bool r = scc_mode_ ? decide_scc(n) : decide_iter(n);
-        if (verify_decode_) {
-            std::fprintf(stderr, "decode round-trip: %llu ok, %llu mismatched\n",
-                         (unsigned long long)decode_ok_,
-                         (unsigned long long)decode_bad_);
-        }
-        return r;
+        return decide_scc(n);
     }
 
     std::uint64_t nodes() const { return expansions_; }
@@ -464,7 +320,7 @@ public:
     /// Witness automaton for the marking of the last successful decide().
     /// Only meaningful when SCC acceptance ran and the verdict was SAT.
     TimedAutomaton witness() { return extract_witness(root_id_); }
-    bool can_extract() const { return scc_mode_ && root_id_ != kNoRegion; }
+    bool can_extract() const { return root_id_ != kNoRegion; }
 
 private:
     // ── Canonical node key ──────────────────────────────────────────────
@@ -500,7 +356,6 @@ private:
         // Interned sets contribute one word each rather than one per element.
         put(k, n.Gamma.handle());
         put(k, n.X.handle());
-        put(k, n.witnessed.handle());
 
         // Pursuits and deadlines are sets, so the encoded tuples are sorted:
         // the key must not depend on the order the rules happened to append
@@ -514,7 +369,8 @@ private:
                                         static_cast<std::uint32_t>(p.stage),
                                         static_cast<std::uint32_t>(p.part),
                                         static_cast<std::uint32_t>(p.is_until),
-                                        static_cast<std::uint32_t>(p.persistent)});
+                                        static_cast<std::uint32_t>(p.persistent),
+                                        static_cast<std::uint32_t>(p.rolled)});
         std::sort(pursuit_scratch_.begin(), pursuit_scratch_.end());
         put(k, static_cast<std::uint32_t>(pursuit_scratch_.size()));
         for (const auto& t : pursuit_scratch_)
@@ -741,7 +597,6 @@ private:
         std::size_t i = 0;
         n.Gamma     = FormulaSet::from_handle(k[i++]);
         n.X         = FormulaSet::from_handle(k[i++]);
-        n.witnessed = FormulaSet::from_handle(k[i++]);
 
         const std::uint32_t np = k[i++];
         for (std::uint32_t t = 0; t < np; ++t) {
@@ -807,37 +662,14 @@ private:
     /// @f$\mathrm{EG}_{[1,5]}\mathrm{EF}_{[2,4]}\,p@f$ --- plainly satisfiable
     /// --- goes the same way.  No verdict went the other way, so the abstraction
     /// stays sound; it just stops being a decision procedure.
-    ///
-    /// The separate #exact_unbounded bits were needed for a different reason
-    /// and remain correct: Extra_LU also erases the upper bounds acceptance
-    /// condition (ii) reads, which would have admitted Zeno witnesses.
     Zone canon_zone(const Node& n) const {
         Zone z = n.Z;
-        if (extra_lu_) z.extrapolate_lu(lu_L_, lu_U_);
-        else           z.extrapolate(max_);
+        z.extrapolate(max_);
         return z;
     }
 
-    /// Which clocks are genuinely unbounded, under the *exact* (Extra_M)
-    /// abstraction.
-    ///
-    /// The Zeno test of condition (ii) asks whether a clock keeps a finite upper
-    /// bound around a loop.  Extra_LU relaxes such bounds far more freely than
-    /// Extra_M --- for a window @f$[1,5]@f$ it drops any bound above 1 --- so
-    /// reading boundedness off an Extra_LU zone would call a loop capped at 3
-    /// time-progressing and admit a Zeno witness.  These bits are therefore
-    /// always computed from Extra_M, and they join the node key, so two nodes
-    /// that a coarser zone would merge stay apart when they disagree on which
-    /// clocks can still stop time.  That costs K bits, not K^2 bounds.
-    void exact_unbounded(const Node& n, std::vector<char>& out) const {
-        Zone z = n.Z;
-        z.extrapolate(max_);
-        out.assign(nc_, 0);
-        for (ClockId c = 1; c < nc_; ++c)
-            out[c] = z.get_bound(c, kReferenceClock).is_infinity() ? 1 : 0;
-    }
 
-    // ── Exact dead-clock elimination (TCTL_FREE_DEAD_CLOCKS) ────────────
+    // ── Exact dead-clock elimination ────────────────────────────────────
     //
     // A formula-clock x_mu is *read* by exactly four things: the stop guard
     // Z ∩ (x_mu ∈ I) of a live pursuit of mu, the region split that guard is
@@ -858,13 +690,13 @@ private:
     // ("a clock with no live pursuit is never read, and is freshly reset if its
     // modality is launched again").
     //
-    // Unlike the `witnessed` shortcut it discharges no obligation and drops no
+    // It discharges no obligation and drops no
     // child of (Cov): every re-demand still launches a fresh pursuit.  It only
     // stops the settled pursuit's leftover clock value from splitting nodes
     // that are otherwise identical — which is where the cost of relaunching
     // actually goes.
     void collapse_dead_clocks(Node& n) const {
-        if (!free_dead_ || n.Z.is_empty()) return;
+        if (n.Z.is_empty()) return;
         live_scratch_.assign(nc_, 0);
         for (const Pursuit& p : n.pursuits)
             if (p.x_mu != kNoClock && p.x_mu < nc_) live_scratch_[p.x_mu] = 1;
@@ -881,13 +713,36 @@ private:
         ez = canon_zone(n);
         append_struct_key(n, k);
         append_zone(ez, k);
-        if (extra_lu_) {
-            exact_unbounded(n, lu_bits_);
-            std::uint32_t w = 0;
-            for (ClockId c = 1; c < nc_; ++c)
-                if (lu_bits_[c]) w |= (1u << (c & 31));
-            put(k, w);                        // K bits, not K^2 bounds
-        }
+    }
+
+    /// The guard a pursuit is tested against.  Before any rollover that is the
+    /// modality's own window I; after one, x_mu measures time since the last
+    /// witness, so the guard is the *recurrence* window [0, sup I - inf I].
+    Window pursuit_window(const Pursuit& p) const {
+        Window w = window_of(p.mu, f_);
+        if (!p.rolled || w.hi_inf) return w;
+        Window r;
+        r.lo = 0; r.lo_strict = false;
+        r.hi_inf = false; r.hi = w.hi - w.lo;
+        r.hi_strict = w.hi_strict || w.lo_strict;
+        return r;
+    }
+
+    /// Trace one node to stderr under TCTL_DEBUG.
+    void dtrace(std::size_t depth, const char* tag, const Node& n, int res) const {
+        if (!debug_) return;
+        std::ostringstream os;
+        for (std::size_t i = 0; i < depth; ++i) os << ' ';
+        os << tag;
+        if (res >= 0) os << (res ? "+" : "-");
+        os << " G{";
+        for (FormulaId id : n.Gamma.elements()) os << f_.to_string(id) << ',';
+        os << "} P{";
+        for (const Pursuit& p : n.pursuits)
+            os << f_.to_string(p.mu) << "/s" << int(p.stage) << "/pt" << int(p.part)
+               << (p.is_until ? "U" : "R") << ' ';
+        os << "} ph" << int(n.phase) << " Z=" << n.Z.to_string() << '\n';
+        std::fputs(os.str().c_str(), stderr);
     }
 
     // ── Expansion (single rule) ─────────────────────────────────────────
@@ -928,8 +783,7 @@ private:
         for (FormulaId id : n.Gamma.elements()) {
             if (is_modality(f_.node(id).kind)) {
                 CoverResult cr = apply_cover(n, id, cmap_, nc_, max_, f_,
-                                             sx_cache_, solo_launch_,
-                                             reuse_witness_, window_reuse_);
+                                             sx_cache_);
                 switch (cr.kind) {
                     case CoverResult::Kind::Close:
                         return {Expansion::Kind::Closed, {}};
@@ -950,7 +804,7 @@ private:
         const FormulaNode& mn = f_.node(p.mu);
         const FormulaId phi = mn.children[0], psi = mn.children[1];
         const bool existential = !is_universal(mn.kind);
-        const Window w = window_of(p.mu, f_);
+        const Window w = pursuit_window(p);
         const auto defer = existential ? Pursuit::Stage::DeferEX
                                        : Pursuit::Stage::DeferAX;
 
@@ -979,11 +833,21 @@ private:
                         stop.just_reset.push_back(p.x_mu);
                         stop.pursuits[i].stage = Pursuit::Stage::Here;
                         stop.pursuits[i].part  = Pursuit::Part::Whole;
+                        stop.pursuits[i].rolled = true;
+                        // Retune the cap to the recurrence bound sup I - inf I:
+                        // the launch deadline was sup I, measured from an onset,
+                        // and x_mu now measures from the last witness.
+                        const Window ow = window_of(p.mu, f_);
+                        if (!ow.hi_inf) {
+                            stop.D = drop_deadline(n.D, p.x_mu);
+                            stop.D.push_back(Deadline{p.x_mu, ow.hi - ow.lo,
+                                                      ow.hi_strict || ow.lo_strict});
+                            std::sort(stop.D.begin(), stop.D.end());
+                        }
                     } else {
                         stop.pursuits.erase(stop.pursuits.begin() + static_cast<long>(i));
                         stop.D = drop_deadline(n.D, p.x_mu);
                     }
-                    if (record_witness_) stop.witnessed.insert(p.mu);
                     stop.discharges_until = p.mu;
                     e.children.push_back(std::move(stop));
                 }
@@ -1027,7 +891,6 @@ private:
             if (!w.hi_inf) {
                 Node after = n; after.Z.add_lower_bound(p.x_mu, w.hi, !w.hi_strict);
                 if (!after.Z.is_empty()) {
-                    if (record_witness_) after.witnessed.insert(p.mu);
                     after.pursuits.erase(after.pursuits.begin() + static_cast<long>(i));
                     e.children.push_back(after);
                 }
@@ -1243,7 +1106,6 @@ private:
             c.X = n.X;
             c.Gamma = n.X;             // {ψ} ∪ X base
             c.Z = n.Z; c.O = n.O; c.D = n.D; c.phase = Phase::Elapse;
-            c.witnessed = n.witnessed;
             if (ex_one) c.pursuits.push_back(revive(*ex_one));
             for (const Pursuit& q : ax) c.pursuits.push_back(revive(q));
             return c;
@@ -1257,158 +1119,11 @@ private:
         return e;
     }
 
-    static constexpr std::size_t kInf = static_cast<std::size_t>(-1);
 
     // ── Explicit-stack frame (no call recursion → no stack overflow) ────
-    struct Frame {
-        Node        n;
-        Key         k;         // full key (struct + canonical zone)
-        Expansion   e;
-        std::size_t ci = 0;
-        std::size_t depth = 0;
-        std::size_t submin = kInf;
-        bool        res = false;
-        bool        expanded = false;
-    };
 
-    // ── Loop acceptance (§4.3) ──────────────────────────────────────────
-    // A candidate loop N_i … N_j (equal componentwise, zones modulo ~=_M) is
-    // accepting iff
-    //   (i)  every until pursuit active at N_i is discharged on the segment —
-    //        the (stop) branch of (U•) is taken for it at some N_k whose zone
-    //        meets the window — which enforces the least-fixpoint reading of
-    //        until; and
-    //   (ii) the loop is time-progressing: it elapses positive time, and every
-    //        clock is either reset on the segment or extrapolated above its
-    //        maximum constant, hence unbounded.  This excludes Zeno cycles, a
-    //        loop pinned to x < 1 on a never-reset clock elapsing only finite
-    //        total time (Lemma 4).
-    bool loop_accepting(const std::vector<Frame>& st, std::size_t a) const {
-        const Node& rep = st[a].n;
-
-        // ── (i) every active until discharged on the segment ──
-        // A (U•) stop child records the until it settles, and the rule emits one
-        // only on a zone that meets the window, so the marker witnesses exactly
-        // the paper's  Z_k ∩ (x_mu ∈ I) ≠ ∅.
-        for (const Pursuit& p : rep.pursuits) {
-            if (!p.is_until) continue;
-            bool discharged = false;
-            for (std::size_t k = a; k < st.size() && !discharged; ++k)
-                if (st[k].n.discharges_until == p.mu) discharged = true;
-            if (discharged) continue;
-            // (EX) hands each deferred pursuit to *one* successor, so an until can
-            // legitimately leave this path: the obligation then rides a sibling
-            // AND-branch, which the marking requires to succeed on its own.  Only
-            // a pursuit present at every node of the segment is genuinely stuck.
-            bool present_all = true;
-            for (std::size_t k = a; k < st.size() && present_all; ++k) {
-                bool has = false;
-                for (const Pursuit& q : st[k].n.pursuits)
-                    if (q.mu == p.mu) { has = true; break; }
-                present_all = has;
-            }
-            if (present_all) return false;          // stuck eventuality
-        }
-
-        // ── (ii) time-progressing ──
-        bool has_delay = false;
-        std::vector<char> reset(nc_, 0);
-        for (std::size_t k = a; k < st.size(); ++k) {
-            if (st[k].n.phase == Phase::Discrete) has_delay = true;
-            for (ClockId c : st[k].n.just_reset) if (c < nc_) reset[c] = 1;
-        }
-        if (!has_delay) return false;
-
-        // Every clock, not just those a guard reads: the argument of Lemma 4 is
-        // that a clock retaining a finite bound x <= c in the loop's zones and
-        // never reset caps the total elapse at c - nu(x), so infinitely many
-        // iterations converge.  That holds however the bound got there.  A clock
-        // past its maximum constant has been extrapolated to no upper bound at
-        // all, which is exactly the "extrapolated above M" escape.
-        // The escape clause is read over the clocks that can actually cap the
-        // elapse: those of the pursuits still live here and those carrying a
-        // deadline in Inv(N).  A clock whose pursuit has settled is read by no
-        // rule and constrains no guard, so a finite bound left on it cannot
-        // converge the loop's total delay — Lemma 4's argument needs the bound
-        // to be *enforced* at every node, which only a live clock's is.
-        std::vector<char> capping(nc_, 0);
-        for (const Pursuit& p : rep.pursuits)
-            if (p.x_mu != kNoClock && p.x_mu < nc_) capping[p.x_mu] = 1;
-        for (const Deadline& d : rep.D)
-            if (d.x_mu < nc_) capping[d.x_mu] = 1;
-
-        for (ClockId c = 1; c < nc_; ++c) {
-            if (!capping[c] || reset[c]) continue;                             // dead, or reset
-            if (rep.Z.get_bound(c, kReferenceClock).is_infinity()) continue;   // above its max
-            return false;                                                     // bounded, unreset
-        }
-        return true;
-    }
-
-    // ── Memo over ~=_M-identical nodes (paper Thm 1) ────────────────────
-    // Keyed by struct key, matched on the ~=_M-canonical zone.  Only
-    // self-contained (path-independent) verdicts are cached.
-    //
-    // The match must be EXACT.  It is tempting to subsume by narrowing-
-    // monotonicity (§4.1: realisable at Z ⇒ realisable at every ∅≠Z'⊆Z), but
-    // that lemma is about realisability, which quantifies over *every* ν ∈ Z,
-    // whereas a verdict this search returns does not: (Cov*) — and the Δ^∂ step
-    // of (Delay) — are ⊕-narrowings, so a SAT verdict at Z certifies only *some*
-    // subzone of Z.  Propagating it down to an arbitrary Z' ⊆ Z then certifies a
-    // zone disjoint from the witness: it is what made Fig. 1a come out SAT, the
-    // origin inheriting a verdict whose witness lived in the lapsed tail x₁ > 3.
-    // The node bound of Lemma 1 counts ~=_M-distinct nodes, so exact matching is
-    // also what Theorem 1's "each node is expanded at most once" assumes.
-    bool memo_lookup(const Key& k, bool& out) const {
-        auto it = memo_.find(k);
-        if (it == memo_.end()) return false;
-        out = it->second;
-        return true;
-    }
-    void memo_store(const Key& k, bool verdict) { memo_.emplace(k, verdict); }
-
-    void dtrace(std::size_t depth, const char* tag, const Node& n, int res) const {
-        if (!debug_) return;
-        std::ostringstream os;
-        for (std::size_t i = 0; i < depth; ++i) os << ' ';
-        os << tag;
-        if (res >= 0) os << (res ? "+" : "-");
-        os << " G{";
-        for (FormulaId id : n.Gamma.elements()) os << f_.to_string(id) << ',';
-        os << "} P{";
-        for (const Pursuit& p : n.pursuits)
-            os << f_.to_string(p.mu) << "/s" << int(p.stage) << "/pt" << int(p.part)
-               << (p.is_until ? "U" : "R") << ' ';
-        os << "} ph" << int(n.phase) << " Z=" << n.Z.to_string() << '\n';
-        std::fputs(os.str().c_str(), stderr);
-    }
-
-    void push_frame(std::vector<Frame>& st, const Node& n) {
-        Frame fr;
-        fr.n = n;
-        collapse_dead_clocks(fr.n);
-        Zone ez;
-        build_key(fr.n, fr.k, ez);
-        st.push_back(std::move(fr));
-    }
-
-    // ════════════════════════════════════════════════════════════════════
-    //  SCC acceptance (§4.3 read through §5.1)
-    // ════════════════════════════════════════════════════════════════════
-    //
-    // §5.1 states conditions (i) and (ii) of §4.3 as *reachability queries over
-    // the surviving subgraph*:
-    //
-    //   "...every node from which no surviving path reaches a time-progressing
-    //    loop, and every node from which no surviving path takes the (stop)
-    //    branch of an until pursuit active there.  The first three tests are
-    //    local; the last two are reachability queries over the surviving
-    //    subgraph ...  The two queries enforce conditions (ii) and (i) of §4.3
-    //    respectively."
-    //
-    // A node therefore dies only when it can reach *no* accepting loop — never
     // because one particular back-edge happens to close a bad one.  That is the
-    // whole difference from loop_accepting(), which returns a verdict on the
+    // whole difference from a path-local loop test, which returns a verdict on the
     // path segment and hands it back as the branch's value.  On
     // EG[1,5](EF[2,4] p) the launch child closes a Zeno loop (x1 is bounded by 5
     // and never reset) and is rejected *as a loop* — yet it also reaches the
@@ -1495,20 +1210,6 @@ private:
         Zone ez;
         collapse_dead_clocks(n);
         acc_key(n, k, ez);
-        // Self-check for the witness extractor: decoding a key and re-encoding
-        // it must reproduce the key exactly, or a reconstructed node would not
-        // be the node the search saw.
-        if (verify_decode_) {
-            Node back = decode_key(k);
-            Key again; Zone tmp;
-            acc_key(back, again, tmp);
-            if (again != k) {
-                std::fputs("decode_key round-trip MISMATCH\n", stderr);
-                ++decode_bad_;
-            } else {
-                ++decode_ok_;
-            }
-        }
         if (auto it = gid_.find(k); it != gid_.end()) return it->second;
 
         const auto id = static_cast<std::uint32_t>(g_.size());
@@ -1542,17 +1243,9 @@ private:
         for (ClockId c : g_[id].n->just_reset)
             if (c < nc_) set_bit(res, c);
 
-        // Boundedness is always the exact (Extra_M) one: reading it off an
-        // Extra_LU zone would erase the caps condition (ii) relies on.
         std::uint64_t* unb = unb_of(id);
-        if (extra_lu_) {
-            exact_unbounded(*g_[id].n, lu_bits_);
-            for (ClockId c = 1; c < nc_; ++c)
-                if (lu_bits_[c]) set_bit(unb, c);
-        } else {
-            for (ClockId c = 1; c < nc_; ++c)
-                if (ez.get_bound(c, kReferenceClock).is_infinity()) set_bit(unb, c);
-        }
+        for (ClockId c = 1; c < nc_; ++c)
+            if (ez.get_bound(c, kReferenceClock).is_infinity()) set_bit(unb, c);
 
         return id;
     }
@@ -1938,77 +1631,6 @@ private:
         return g_[r].val;
     }
 
-    // ── Iterative on-the-fly DFS with short-circuiting + memoisation ────
-    bool decide_iter(const Node& root) {
-        std::vector<Frame> st;
-        std::unordered_map<Key, std::size_t, KeyHash> onpath;  // key → depth
-        bool pend_res = false;
-        std::size_t pend_lm = kInf;
-
-        push_frame(st, root);
-        while (!st.empty()) {
-            Frame& fr = st.back();
-            if (!fr.expanded) {
-                if ((++expansions_ & 0x1FFF) == 0 && has_deadline_ &&
-                    std::chrono::steady_clock::now() > deadline_) {
-                    budget_hit_ = true; return false;
-                }
-                // resolve without expanding: closed / loop back / memo (subsumption)
-                if (node_closed(fr.n.Gamma, f_) || fr.n.Z.is_empty()) {
-                    dtrace(st.size()-1, "CLOSED", fr.n, -1);
-                    pend_res = false; pend_lm = kInf; st.pop_back(); continue;
-                }
-                if (auto it = onpath.find(fr.k); it != onpath.end()) {
-                    std::size_t a = it->second;
-                    const bool acc = loop_accepting(st, a);
-                    dtrace(st.size()-1, "LOOP", fr.n, acc);
-                    pend_res = acc; pend_lm = a; st.pop_back(); continue;
-                }
-                bool cached;
-                if (memo_lookup(fr.k, cached)) {
-                    dtrace(st.size()-1, "memo", fr.n, cached);
-                    pend_res = cached; pend_lm = kInf; st.pop_back(); continue;
-                }
-                fr.e = expand(fr.n);
-                if (fr.e.kind == Expansion::Kind::Closed) {
-                    dtrace(st.size()-1, "close", fr.n, -1);
-                    memo_store(fr.k, false);
-                    pend_res = false; pend_lm = kInf; st.pop_back(); continue;
-                }
-                dtrace(st.size()-1, fr.e.kind == Expansion::Kind::And ? "AND" : "OR", fr.n, -1);
-                fr.expanded = true;
-                fr.ci = 0;
-                fr.res = (fr.e.kind == Expansion::Kind::And);
-                fr.submin = kInf;
-                fr.depth = st.size() - 1;
-                onpath.emplace(fr.k, fr.depth);
-            } else {
-                // resume: fold in the child result that just bubbled up
-                fr.submin = std::min(fr.submin, pend_lm);
-                const bool isAnd = (fr.e.kind == Expansion::Kind::And);
-                if ((isAnd && !pend_res) || (!isAnd && pend_res)) {
-                    fr.res = pend_res;
-                    fr.ci = fr.e.children.size();      // short-circuit
-                } else {
-                    ++fr.ci;
-                }
-            }
-            if (fr.ci < fr.e.children.size()) {
-                Node child = fr.e.children[fr.ci];    // copy before push invalidates fr
-                push_frame(st, child);
-                continue;
-            }
-            // finalize
-            const std::size_t d = fr.depth;
-            const bool self_contained = (fr.submin >= d);
-            if (self_contained) memo_store(fr.k, fr.res);
-            onpath.erase(fr.k);
-            pend_res = fr.res;
-            pend_lm  = self_contained ? kInf : fr.submin;
-            st.pop_back();
-        }
-        return pend_res;
-    }
 
     FormulaFactory& f_;
     bool keep_graph_ = false;    ///< retain children/untils for witness extraction
@@ -2021,23 +1643,12 @@ private:
     std::vector<std::vector<std::int32_t>> clock_bounds_;
 
     // full node key → verdict; the match is exact by construction
-    std::unordered_map<Key, bool, KeyHash> memo_;
     SatCache sx_cache_;                  // persistent S_X(mu,X) memo
     std::uint64_t expansions_ = 0;
     bool budget_hit_ = false;
     bool has_deadline_ = false;
     bool debug_ = false;
-    bool verify_decode_ = false;
-    bool extra_lu_ = false;                                ///< use Extra_LU for node identity
-    bool solo_launch_ = false;                             ///< one new pursuit per launch branch
-    bool reuse_witness_ = false;                           ///< discharge a re-demand against a settled pursuit -- UNSOUND, opt-in
-    bool record_witness_ = false;                          ///< record settled pursuits in `witnessed`
-    bool free_dead_ = true;                                ///< project out clocks no live pursuit/deadline reads
-    bool window_reuse_ = false;                            ///< "overlapping windows" (Cov) side condition -- UNSOUND, recorded
-    std::vector<std::int32_t> lu_L_, lu_U_;                ///< per-clock L and U
     std::uint32_t root_id_ = static_cast<std::uint32_t>(-1);
-    std::uint64_t decode_ok_ = 0, decode_bad_ = 0;
-    bool scc_mode_ = true;
     std::chrono::steady_clock::time_point deadline_{};
 
     // ── SCC acceptance state (unused under TCTL_LEGACY_LOOP) ────────────
@@ -2046,10 +1657,9 @@ private:
     std::vector<const Key*> key_of_;                       // node id → its key
     std::size_t words_ = 1;                                // clock-bitmap width
     // key-building scratch, reused so the hot path allocates nothing
-    mutable std::vector<std::array<std::uint32_t, 6>> pursuit_scratch_;
+    mutable std::vector<std::array<std::uint32_t, 7>> pursuit_scratch_;
     mutable std::vector<std::array<std::uint32_t, 4>> deadline_scratch_;
     mutable std::vector<std::uint32_t> scratch32_;
-    mutable std::vector<char>          lu_bits_;
     mutable std::vector<char>          live_scratch_;   ///< clocks a live pursuit/deadline reads
     // minimal-graph packing scratch, reused so key building allocates nothing
     mutable std::vector<std::uint32_t> pack_buf_, pack_bits_;

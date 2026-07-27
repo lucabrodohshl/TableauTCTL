@@ -123,11 +123,19 @@ struct Pursuit {
     /// last witness".  Only set when @f$\inf I = 0@f$, where that bound
     /// coincides with @f$\sup I@f$; see not_track/SATISFACTION_SET_X.md.
     bool      persistent = false;
+    /// @brief The pursuit has rolled over at least once.
+    ///
+    /// After a rollover @f$x_\mu@f$ measures time since the *last witness*, not
+    /// since an onset, so the guard it is tested against is the recurrence
+    /// window @f$[0,\sup I-\inf I]@f$ rather than @f$I@f$ itself.  Restarting on
+    /// @f$I@f$ would admit gaps up to @f$\sup I@f$ where the semantics allows
+    /// only @f$\sup I-\inf I@f$.
+    bool      rolled = false;
 
     bool operator==(const Pursuit& o) const noexcept {
         return mu == o.mu && x_mu == o.x_mu && stage == o.stage &&
                part == o.part && is_until == o.is_until &&
-               persistent == o.persistent;
+               persistent == o.persistent && rolled == o.rolled;
     }
     bool operator<(const Pursuit& o) const noexcept {
         if (mu != o.mu)       return mu < o.mu;
@@ -135,6 +143,7 @@ struct Pursuit {
         if (stage != o.stage) return stage < o.stage;
         if (part != o.part)   return part < o.part;
         if (persistent != o.persistent) return persistent < o.persistent;
+        if (rolled != o.rolled) return rolled < o.rolled;
         return is_until < o.is_until;
     }
 };
@@ -174,13 +183,6 @@ struct Node {
     /// Diagnostic metadata for the loop test; excluded from the node key.
     PooledVec<ClockId> just_reset;
 
-    /// Modalities already witnessed on this branch: a pursuit for each was
-    /// launched and then settled (an until stopped, a release lapsed past its
-    /// window).  A persistent context re-demands such a modality at uncountably
-    /// many onsets; §4.2 has one formula-clock serve them all, and one witness
-    /// serves them likewise, so a re-demand is discharged against the completed
-    /// pursuit instead of launching a fresh one.  Part of the node key.
-    FormulaSet witnessed;
 
     /// On a (U•) stop child, the until it discharges here.
     /// Diagnostic metadata; excluded from the node key.
@@ -229,13 +231,6 @@ struct CoverResult {
 /// @param max         Per-clock extrapolation bounds.
 /// @param f           Formula factory owning @p mu.
 /// @param sx_cache    Memo for satisfaction sets, shared across cover sites.
-/// @param solo_launch Drop the other existential demands from the launch child.
-///                    **Unsound; retained only as a recorded experiment.**  The
-///                    children of the fork describe one configuration and its
-///                    labelling must satisfy every demand together, so the
-///                    cross-product leaf is load-bearing: without it
-///                    @f$\mathrm{EG}\,p \wedge \mathrm{EG}\,\neg p@f$ is
-///                    reported satisfiable.  Always pass @c false.
 /// @return The classification and the resulting children.
 ///
 /// The onset is taken at @f$x_\mu = 0@f$: the launch resets the formula-clock,
@@ -244,9 +239,7 @@ CoverResult apply_cover(const Node& n, FormulaId mu,
                         const std::map<FormulaId, ClockId>& cmap,
                         std::size_t num_clocks,
                         const std::vector<std::int32_t>& max, FormulaFactory& f,
-                        SatCache& sx_cache, bool solo_launch = false,
-                        bool reuse_witness = true,
-                        bool window_reuse = false);
+                        SatCache& sx_cache);
 
 // ─── Result ─────────────────────────────────────────────────────────────────
 
