@@ -30,26 +30,67 @@ STATS_RE = re.compile(r"nodes=(\d+).*?distinct_zones=(\d+).*?peak_mem_kb=(\d+)",
 WARN_RE = re.compile(r"punctual interval .* not guaranteed COMPLETE", re.S)
 
 
-def _run_capture(cmd: List[str], timeout_s: int):
-    """Run `cmd`, returning (stdout, stderr, peak_rss_kb).
+def _run_capture(cmd: List[str], timeout_s: int, mem_limit_mb: int = 0):
+    """Run `cmd` under a wall-clock and a memory budget.
 
-    The engine does not populate its own memory counter, so peak resident size
-    is taken from the operating system.  os.wait4 reports rusage for one
-    process, which is what makes the figure per-instance; RUSAGE_CHILDREN is a
-    running maximum over every child and could not give that.  Output goes to
-    temporary files rather than pipes because Popen.communicate() reaps the
-    child, leaving wait4 nothing to report on.
+    Returns ``(stdout, stderr, peak_rss_kb, outcome)`` where ``outcome`` is
+    ``""``, ``"TIMEOUT"`` or ``"MEMOUT"``.
+
+    macOS refuses every ``setrlimit`` that would cap memory --- ``RLIMIT_AS``,
+    ``RLIMIT_DATA`` and ``RLIMIT_RSS`` all fail, and ``ulimit -v`` is rejected by
+    the kernel --- so the budget is enforced from the parent instead: a watchdog
+    samples the child's resident size and kills it on breach.  That is portable
+    and, unlike a soft limit the allocator may route around, actually binding.
+
+    Peak resident size comes from ``os.wait4``, which reports rusage for this one
+    process; ``RUSAGE_CHILDREN`` is a running maximum over every child and could
+    not give a per-instance figure.  Output goes to temporary files rather than
+    pipes because ``Popen.communicate()`` reaps the child, leaving wait4 nothing
+    to report on.
     """
-    import resource  # noqa: F401  (documents the dependency)
+    import psutil
 
+    outcome = {"reason": ""}
     with tempfile.TemporaryFile() as fo, tempfile.TemporaryFile() as fe:
         proc = subprocess.Popen(cmd, stdout=fo, stderr=fe)
-        timer = threading.Timer(timeout_s, proc.kill)
+
+        def on_timeout():
+            outcome["reason"] = outcome["reason"] or "TIMEOUT"
+            proc.kill()
+
+        timer = threading.Timer(timeout_s, on_timeout)
         timer.start()
+
+        watchdog_stop = threading.Event()
+
+        def watch():
+            limit = mem_limit_mb * 1024 * 1024
+            try:
+                ps = psutil.Process(proc.pid)
+            except psutil.Error:
+                return
+            while not watchdog_stop.wait(0.1):
+                try:
+                    if ps.memory_info().rss > limit:
+                        outcome["reason"] = outcome["reason"] or "MEMOUT"
+                        proc.kill()
+                        return
+                except psutil.Error:
+                    return                      # the child is gone
+
+        watcher = None
+        if mem_limit_mb > 0:
+            watcher = threading.Thread(target=watch, daemon=True)
+            watcher.start()
+
         try:
             _, status, ru = os.wait4(proc.pid, 0)
         finally:
             timer.cancel()
+            watchdog_stop.set()
+            if watcher is not None:
+                watcher.join(timeout=1.0)
+
         proc.returncode = os.waitstatus_to_exitcode(status) \
             if os.WIFEXITED(status) else -os.WTERMSIG(status)
         fo.seek(0); out = fo.read().decode("utf-8", "replace")
@@ -57,13 +98,11 @@ def _run_capture(cmd: List[str], timeout_s: int):
 
     # macOS reports ru_maxrss in bytes, Linux in kilobytes.
     rss_kb = ru.ru_maxrss // 1024 if sys.platform == "darwin" else ru.ru_maxrss
-    if proc.returncode < 0:                     # killed by the timer
-        raise subprocess.TimeoutExpired(cmd, timeout_s)
-    return out, err, (rss_kb or None)
+    return out, err, (rss_kb or None), outcome["reason"]
 
 
 def run_one(solver: Path, inst: Instance, timeout_s: int,
-            repeats: int = 1) -> dict:
+            repeats: int = 1, mem_limit_mb: int = 0) -> dict:
     """Run one instance, returning a record ready for JSONL."""
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as fh:
         fh.write(inst.formula + "\n")
@@ -73,14 +112,13 @@ def run_one(solver: Path, inst: Instance, timeout_s: int,
         verdict, nodes, zones, mem_kb, warned = "ERROR", None, None, None, False
         for _ in range(max(1, repeats)):
             t0 = time.perf_counter()
-            try:
-                out, err, rss_kb = _run_capture([str(solver), "--stats", path],
-                                                timeout_s)
-                elapsed = time.perf_counter() - t0
-            except subprocess.TimeoutExpired:
-                elapsed = float(timeout_s)
-                out, err = "", ""
-                verdict = "TIMEOUT"
+            out, err, rss_kb, stopped = _run_capture(
+                [str(solver), "--stats", path], timeout_s, mem_limit_mb)
+            elapsed = time.perf_counter() - t0
+            if stopped:
+                verdict = stopped                # TIMEOUT or MEMOUT
+                if rss_kb:
+                    mem_kb = max(mem_kb or 0, rss_kb)
                 times.append(elapsed)
                 break
             times.append(elapsed)
@@ -118,13 +156,13 @@ def run_one(solver: Path, inst: Instance, timeout_s: int,
 
 def run_all(solver: Path, instances: Iterable[Instance], out: Path,
             timeout_s: int = 300, repeats: int = 1,
-            progress: bool = True) -> int:
+            progress: bool = True, mem_limit_mb: int = 0) -> int:
     instances = list(instances)
     out.parent.mkdir(parents=True, exist_ok=True)
     n = 0
     with out.open("w") as fh:
         for i, inst in enumerate(instances, 1):
-            rec = run_one(solver, inst, timeout_s, repeats)
+            rec = run_one(solver, inst, timeout_s, repeats, mem_limit_mb)
             fh.write(json.dumps(rec) + "\n")
             fh.flush()
             n += 1

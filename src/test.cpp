@@ -698,6 +698,41 @@ static void test_tctl_punctual_point_intervals(TestContext& ctx) {
 // Every verdict below is justified from TCTL semantics (does a witness TA
 // exist?), NOT from any prior behaviour of the tool.  ν = E(p U[1,2] q),
 // μ1 = AG[0,4] ν, μ2 = AG[0,3] ¬q.
+// Known soundness defects, recorded so they cannot be lost.
+//
+// Both report SATISFIABLE for formulas that are plainly unsatisfiable, so they
+// break Theorem 2 (soundness).  Neither is a defect of the calculus: the paper's
+// (Cov) always yields discharge + launch, with no shortcut for a modality that
+// has already been witnessed.  The engine added one, and it is what these
+// expose.  They FAIL today; that is deliberate.
+static void test_soundness_regressions(TestContext& ctx) {
+    // (1) The `witnessed` shortcut.  Once AF q has been discharged once on a
+    // branch, every later re-demand is discharged against that completed
+    // pursuit instead of relaunching -- so the branch that dives into AG !q
+    // forever is never asked to satisfy AF q again.  Pure untimed CTL.
+    // Setting TCTL_NO_WITNESS_REUSE=1 makes these pass, at a large cost in
+    // search size.
+    ctx.check(check_sat("AG (AF q) & EF (AG (!q))") == Result::Unsatisfiable,
+              "REGRESSION AG AF q & EF AG !q is UNSAT (infinitely-often vs eventually-never)");
+    ctx.check(check_sat("AG (AF[0,1] q) & EF (AG[0,3] (!q))") == Result::Unsatisfiable,
+              "REGRESSION AG AF[0,1]q & EF AG[0,3]!q is UNSAT");
+
+    // (2) A second, independent defect: a *rate* contradiction.  AF[0,1] forces
+    // consecutive q's at most 1 apart, the guard forces them more than 1 apart.
+    // Each obligation is checked correctly on its own; what is lost is the
+    // handover between one pursuit's stop and the next launch, a continuum of
+    // onsets that no node's zone covers.  Unaffected by TCTL_NO_WITNESS_REUSE.
+    ctx.check(check_sat("AG (AF[0,1] q) & AG (q -> AG(0,1] (!q))") == Result::Unsatisfiable,
+              "REGRESSION AG AF[0,1]q & AG(q -> AG(0,1]!q) is UNSAT (rate contradiction)");
+
+    // The neighbouring satisfiable cases, so a fix cannot pass by simply
+    // answering UNSAT more often.
+    ctx.check(check_sat("AG (AF[0,3] q) & AG (q -> AG(0,1] (!q))") == Result::Satisfiable,
+              "control  AG AF[0,3]q & AG(q -> AG(0,1]!q) is SAT (q every 2 works)");
+    ctx.check(check_sat("AG (AF q)") == Result::Satisfiable, "control  AG AF q is SAT");
+    ctx.check(check_sat("EF (AG (!q))") == Result::Satisfiable, "control  EF AG !q is SAT");
+}
+
 static void test_paper_fig1_oracle(TestContext& ctx) {
     // Fig. 1a: μ1 ∧ μ2 is UNSAT (the persistent ν forces q into the band that
     // the huge AG[0,3]¬q forbids).
@@ -2686,6 +2721,7 @@ int run_selftests() {
     runner.run("tctl_unsat2_upper_deadline",        test_tctl_unsat2_upper_deadline);
     runner.run("tctl_unsat3_lower_impossible",      test_tctl_unsat3_lower_bound_impossible);
     runner.run("tctl_punctual_point_intervals",     test_tctl_punctual_point_intervals);
+    runner.run("soundness_regressions",            test_soundness_regressions);
     runner.run("paper_fig1_oracle",                 test_paper_fig1_oracle);
     runner.run("tctl_unsat5_loop_no_fulfilment",    test_tctl_unsat5_loop_without_fulfilment);
 

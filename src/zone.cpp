@@ -229,6 +229,15 @@ void Zone::extrapolate(const std::vector<std::int32_t>& max) {
     dbm_extrapolate(dbm_.data(), static_cast<int>(dim_), max.data());
 }
 
+void Zone::extrapolate_lu(const std::vector<std::int32_t>& L,
+                          const std::vector<std::int32_t>& U) {
+    if (empty_) return;
+    assert(L.size() == static_cast<std::size_t>(dim_));
+    assert(U.size() == static_cast<std::size_t>(dim_));
+    ptctlmc::dbm_extrapolate_lu(dbm_.data(), static_cast<int>(dim_),
+                                L.data(), U.data());
+}
+
 // ── Zone: Accessors ─────────────────────────────────────────────────────────
 
 Zone Zone::from_raw(std::size_t dim, const raw_t* m) {

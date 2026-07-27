@@ -37,6 +37,9 @@ def main() -> int:
     ap.add_argument("--results", type=Path, default=DEFAULT_RESULTS)
     ap.add_argument("--timeout", type=int, default=300)
     ap.add_argument("--repeats", type=int, default=1)
+    ap.add_argument("--mem-limit-mb", type=int, default=10240,
+                    help="per-instance resident-memory budget; the instance is "
+                         "killed and recorded MEMOUT on breach (0 disables)")
     ap.add_argument("--rq", default=None, help="restrict to RQ1|RQ2|RQ3")
     ap.add_argument("--figs", type=Path, default=OUT / "figs")
     ap.add_argument("--tables", type=Path, default=OUT / "tables")
@@ -56,10 +59,11 @@ def main() -> int:
         if not args.solver.exists():
             print(f"solver not found: {args.solver}", file=sys.stderr)
             return 2
-        print(f"running {len(insts)} instances "
-              f"(timeout {args.timeout}s, repeats {args.repeats})\n")
+        print(f"running {len(insts)} instances (timeout {args.timeout}s, "
+              f"memory {args.mem_limit_mb} MB, repeats {args.repeats})\n")
         runner.run_all(args.solver, insts, args.results,
-                       timeout_s=args.timeout, repeats=args.repeats)
+                       timeout_s=args.timeout, repeats=args.repeats,
+                       mem_limit_mb=args.mem_limit_mb)
         print(f"\nwrote {args.results}")
 
     if args.action in ("analyze", "all"):

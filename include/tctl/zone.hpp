@@ -160,6 +160,18 @@ public:
     /// finitely many distinct zones. Uses HDBM's dbm_extrapolate (Extra_M).
     /// @param max: array of size num_clocks(), max[0]=0, max[i]=max constant for clock i.
     void extrapolate(const std::vector<std::int32_t>& max);
+
+    /// Extra_LU widening (Behrmann et al.), separating the maximum lower-bound
+    /// constant of each clock from its maximum upper-bound one.
+    ///
+    /// Strictly coarser than #extrapolate, hence fewer distinct zones. Sound
+    /// for reachability over the diagonal-free constraints this construction
+    /// emits; it does *not* preserve which clocks keep a finite upper bound, so
+    /// a caller that needs that must take it from #extrapolate instead.
+    /// @param L Per-clock maximum lower-bound constant, @c L[0]==0.
+    /// @param U Per-clock maximum upper-bound constant, @c U[0]==0.
+    void extrapolate_lu(const std::vector<std::int32_t>& L,
+                        const std::vector<std::int32_t>& U);
     
     // ── Accessors ───────────────────────────────────────────────────────
     

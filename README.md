@@ -103,6 +103,25 @@ is nothing to read an automaton off.
 |---|---|
 | `TCTL_DEBUG=1` | trace every node the search expands, to stderr |
 | `TCTL_LEGACY_LOOP=1` | use the earlier path-local loop acceptance instead of SCC acceptance |
+| `TCTL_EXTRA_LU=1` | Extra_LU instead of Extra_M for node identity — **incomplete**, see below |
+| `TCTL_SOLO_LAUNCH=1` | one new pursuit per launch branch — **unsound**, see below |
+
+`TCTL_EXTRA_LU` is a negative result kept for the record. Extra_LU shrinks the
+search sharply — 77% fewer nodes at four clocks, and enough to move the solvable
+frontier by one clock — but it loses models. Extra_LU is sound and complete for
+*reachability*; the cover rule is not a reachability test. It asks
+`Z ⊆ S_X(μ)`, a universal question over the whole zone, and enlarging `Z` can
+only make that inclusion fail. Measured: 7 of 938 satisfiable-by-construction
+formulas come back `UNSATISFIABLE`, `EG[1,5](EF[2,4] p)` among them. Soundness
+survives; completeness does not.
+
+`TCTL_SOLO_LAUNCH` is a second negative result. It would have cut the number of
+simultaneously-live formula-clocks per node to one, which is the parameter that
+drives the memory wall. It is unsound: the children of the cover fork describe
+*one* configuration whose labelling must satisfy every demand at once, so the
+cross-product leaf is load-bearing. Without it `EG p & EG !p` is reported
+SATISFIABLE — one branch asserts `p`, another asserts `!p`, each consistent
+alone, and the contradiction is never met in a single node.
 
 `TCTL_LEGACY_LOOP` exists for A/B comparison only. That acceptance test decides
 one back-edge at a time, so it rejects a node that sits on a Zeno loop but

@@ -112,16 +112,29 @@ struct Pursuit {
     Stage     stage = Stage::Here;   ///< Current proof-theoretic marker.
     Part      part  = Part::Whole;   ///< Region being pursued (releases only).
     bool      is_until = true;       ///< Until pursuits are subject to loop condition (i).
+    /// @brief The demand is *persistent*: it is re-issued at every configuration.
+    ///
+    /// Set when the duplicate-pursuit guard discharges a re-demand of @f$\mu@f$
+    /// against this live pursuit.  A persistent demand is not one deadline but a
+    /// **recurrence rate** -- a witness at least every @f$\sup I - \inf I@f$ --
+    /// which a clock measuring a single onset cannot express.  So a persistent
+    /// until is not retired by its (U-stop): the clock is reset, the deadline
+    /// kept, and the pursuit continues, turning @f$x_\mu@f$ into "time since the
+    /// last witness".  Only set when @f$\inf I = 0@f$, where that bound
+    /// coincides with @f$\sup I@f$; see not_track/SATISFACTION_SET_X.md.
+    bool      persistent = false;
 
     bool operator==(const Pursuit& o) const noexcept {
         return mu == o.mu && x_mu == o.x_mu && stage == o.stage &&
-               part == o.part && is_until == o.is_until;
+               part == o.part && is_until == o.is_until &&
+               persistent == o.persistent;
     }
     bool operator<(const Pursuit& o) const noexcept {
         if (mu != o.mu)       return mu < o.mu;
         if (x_mu != o.x_mu)   return x_mu < o.x_mu;
         if (stage != o.stage) return stage < o.stage;
         if (part != o.part)   return part < o.part;
+        if (persistent != o.persistent) return persistent < o.persistent;
         return is_until < o.is_until;
     }
 };
@@ -216,6 +229,13 @@ struct CoverResult {
 /// @param max         Per-clock extrapolation bounds.
 /// @param f           Formula factory owning @p mu.
 /// @param sx_cache    Memo for satisfaction sets, shared across cover sites.
+/// @param solo_launch Drop the other existential demands from the launch child.
+///                    **Unsound; retained only as a recorded experiment.**  The
+///                    children of the fork describe one configuration and its
+///                    labelling must satisfy every demand together, so the
+///                    cross-product leaf is load-bearing: without it
+///                    @f$\mathrm{EG}\,p \wedge \mathrm{EG}\,\neg p@f$ is
+///                    reported satisfiable.  Always pass @c false.
 /// @return The classification and the resulting children.
 ///
 /// The onset is taken at @f$x_\mu = 0@f$: the launch resets the formula-clock,
@@ -224,7 +244,9 @@ CoverResult apply_cover(const Node& n, FormulaId mu,
                         const std::map<FormulaId, ClockId>& cmap,
                         std::size_t num_clocks,
                         const std::vector<std::int32_t>& max, FormulaFactory& f,
-                        SatCache& sx_cache);
+                        SatCache& sx_cache, bool solo_launch = false,
+                        bool reuse_witness = true,
+                        bool window_reuse = false);
 
 // ─── Result ─────────────────────────────────────────────────────────────────
 
