@@ -167,7 +167,8 @@ CSVs; `bench/` supersedes it.
 | `HDBM/` | zone layer (DBMs, federations, minimal-graph storage); cloned automatically |
 | `bench/` | evaluation harness and its independent satisfiability oracle |
 | `docs/manual/` | typeset user manual (LaTeX) |
-| `docs/api/` | generated API reference with UML diagrams (`doxygen Doxyfile`) |
+| `docs/api/` | generated API reference with UML diagrams (`make docs`) |
+| `documentation.html` | opens that reference; the entry point to click |
 | `examples/` | sample formula files |
 | `UppaalPlugin/` | UPPAAL query translator and plugin |
 

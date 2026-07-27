@@ -4,7 +4,7 @@
 
 BUILD_DIR := build
 
-.PHONY: all run test clean
+.PHONY: all run test docs clean
 
 all:
 	@mkdir -p $(BUILD_DIR)
@@ -20,6 +20,12 @@ endif
 
 test: all
 	@./$(BUILD_DIR)/tctl_sat --selftest
+
+# Generate the API reference (UML class diagrams, call and include graphs).
+# Open documentation.html at the repo root afterwards.
+docs:
+	@doxygen Doxyfile
+	@echo "open documentation.html"
 
 clean:
 	@rm -rf $(BUILD_DIR)
