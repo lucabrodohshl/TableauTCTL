@@ -12,7 +12,7 @@
 #include "tctl/lexer.hpp"
 #include "tctl/normalization.hpp"
 #include "tctl/parser.hpp"
-#include "tctl/paper_tableau.hpp"
+#include "tctl/tableau.hpp"
 #include "tctl/utils.hpp"
 
 #include <algorithm>
@@ -517,9 +517,21 @@ static void write_csv_row(std::ofstream& f, const BenchRow& r) {
       << r.avg_memory_kb << "\n";
 }
 
-/// Run a single benchmark instance: parse → normalize → check.
-/// Performs warmup_runs first (results discarded), then one measured run.
-/// @param extrapolation  If false, disables zone extrapolation in the engine.
+/// @brief Run a single benchmark instance: parse, normalise, then decide.
+///
+/// Performs @c opt.warmup_runs unmeasured runs first, discarding their results,
+/// then one measured run.
+///
+/// @param family         Name of the benchmark family the instance belongs to.
+/// @param variant        Variant within the family (e.g. its SAT/UNSAT shape).
+/// @param param_name     Name of the parameter that scales the family.
+/// @param param_value    Value of that parameter for this instance.
+/// @param formula_str    The instance's formula, in concrete syntax.
+/// @param M_value        Largest integer constant occurring in the formula.
+/// @param opt            Harness options: timeout, warmup count, output paths.
+/// @param extrapolation  If @c false, disables zone extrapolation in the engine,
+///                       which is the ablation configuration.
+/// @return One row of measurements, ready to be written to the CSV.
 static BenchRow run_instance(const std::string& family,
                              const std::string& variant,
                              const std::string& param_name,
@@ -549,7 +561,7 @@ static BenchRow run_instance(const std::string& family,
             FormulaFactory wf;
             FormulaId parsed = parse_formula(formula_str, wf, 1);
             FormulaId normed = normalize(parsed, wf);
-            PaperTableau eng(wf);
+            Tableau eng(wf);
             eng.set_timeout(std::chrono::seconds(opt.timeout_s));
             eng.set_extrapolation(extrapolation);
             if (opt.num_threads > 0) eng.set_num_threads(opt.num_threads);
@@ -565,7 +577,7 @@ static BenchRow run_instance(const std::string& family,
         FormulaId parsed = parse_formula(formula_str, factory, 1);
         FormulaId normed = normalize(parsed, factory);
 
-        PaperTableau engine(factory);
+        Tableau engine(factory);
         engine.set_timeout(std::chrono::seconds(opt.timeout_s));
         engine.set_extrapolation(extrapolation);
         if (opt.num_threads > 0) engine.set_num_threads(opt.num_threads);

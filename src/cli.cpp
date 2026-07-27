@@ -7,7 +7,8 @@
 #include "tctl/benchmark.hpp"
 #include "tctl/lexer.hpp"
 #include "tctl/normalization.hpp"
-#include "tctl/paper_tableau.hpp"
+#include "tctl/tableau.hpp"
+#include "tctl/timed_automaton.hpp"
 #include "tctl/parser.hpp"
 #include "tctl/test.hpp"
 #include "tctl/utils.hpp"
@@ -15,6 +16,7 @@
 
 #include <ctime>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -123,14 +125,15 @@ void print_usage(const char* program_name) {
         << "       " << program_name << " --selftest\n"
         << "       " << program_name << " --benchmark [bench-options]\n"
         << "\n"
-        << "TCTL satisfiability checker (ETAPS2026 tableau).\n"
+        << "TCTL satisfiability checker.\n"
         << "\n"
         << "Options:\n"
         << "  <Formula> | <input.txt>  A TCTL formula, or a file with one per line\n"
         << "  --selftest    Run the built-in semantic self-test suite\n"
         << "  --benchmark   Run benchmark suites (writes CSVs + reproducibility)\n"
         << "  --stats, --show-stats   Show engine statistics\n"
-        << "  --model, --show-model   Extract witness Timed Automaton (pending)\n"
+        << "  --model, --show-model   Extract a witness timed automaton and write\n"
+        << "                          witness_<n>.{dot,json,xml} beside the run\n"
         << "  --output <dir>  Directory to write extracted models (default: current)\n"
         << "  --real-vars a,b Declare variable names as Real-sorted (else Int)\n"
         << "  --tot, --all, --all_formula  Conjoin all input formulas and check as one\n"
@@ -199,7 +202,8 @@ int run(const Options& opts) {
     }
 
     FormulaFactory factory;
-    PaperTableau engine(factory);
+    Tableau engine(factory);
+    engine.set_extract_witness(opts.show_model);
     bool had_errors = false;
 
     for (std::size_t i = 0; i < formulas.size(); ++i) {
@@ -233,8 +237,29 @@ int run(const Options& opts) {
                 std::cout << "  Stats: " << engine.stats() << "\n";
             }
             if (opts.show_model && result == Result::Satisfiable) {
-                std::cerr << "  note: witness Timed Automaton extraction is not yet "
-                             "implemented (verdict-first build).\n";
+                if (!engine.has_witness()) {
+                    std::cerr << "  note: no witness available for this run.\n";
+                } else {
+                    const TimedAutomaton& ta = engine.witness();
+                    const TAValidation v = validate(ta);
+                    std::cout << "  Witness: " << ta.locations.size()
+                              << " locations, " << ta.transitions.size()
+                              << " transitions, " << ta.num_clocks << " clocks"
+                              << (v.ok ? "" : "  [INVALID]") << "\n";
+                    for (const std::string& why : v.problems)
+                        std::cerr << "  witness problem: " << why << "\n";
+                    const std::string stem =
+                        "witness_" + std::to_string(line_num);
+                    auto dump = [&](const std::string& ext,
+                                    const std::string& body) {
+                        std::ofstream out(stem + ext);
+                        out << body;
+                    };
+                    dump(".dot",  ta.to_dot());
+                    dump(".json", ta.to_json());
+                    dump(".xml",  ta.to_uppaal_xml());
+                    std::cout << "  wrote " << stem << ".{dot,json,xml}\n";
+                }
             }
         } catch (const std::exception& e) {
             // Parser error messages already include line/column.

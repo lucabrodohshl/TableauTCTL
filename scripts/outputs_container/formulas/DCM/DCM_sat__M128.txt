@@ -1,2 +1,0 @@
-# DCM/DCM_sat  M=128  expected=SAT
-AG[0,256] (E(p U[128,256] (q))) & AG[0,127] (!q)

@@ -1,9 +1,9 @@
 // ============================================================================
-// tctl/zone.hpp — Zone wrapper for UPPAAL UDBM
+// tctl/zone.hpp — Zone wrapper over HDBM
 // ============================================================================
 //
-// This module provides a C++ wrapper around the UPPAAL UDBM library
-// for handling Difference Bound Matrices (zones) in TCTL model checking.
+// This module provides a C++ wrapper around HDBM (HDBM/include/ptctlmc) for
+// handling Difference Bound Matrices (zones) in TCTL model checking.
 //
 // Zones represent sets of clock valuations satisfying conjunctions of
 // constraints of the form:
@@ -11,15 +11,17 @@
 //   - x >= c      (lower bound on clock x)
 //   - x - y <= c  (difference constraint between clocks x and y)
 //
-// This implementation uses the UDBM library directly.
+// HDBM is header-only, so every DBM primitive inlines into the call site; at
+// the dimensions this engine uses (one clock per timed subformula, so typically
+// three to six) that matters more than the asymptotics.
 //
 // ============================================================================
 
 #ifndef CTL_ZONE_HPP
 #define CTL_ZONE_HPP
 
-#include <dbm/dbm.h>
-#include <dbm/constraints.h>
+#include "ptctlmc/dbm_ops.hpp"
+#include "ptctlmc/dbm_pool.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -31,8 +33,17 @@ namespace tctl {
 // ── ClockId ─────────────────────────────────────────────────────────────────
 // Identifier for a clock. Clock 0 is reserved as the reference clock (always 0).
 
-using ClockId = cindex_t;
+using ClockId = std::uint32_t;
 inline constexpr ClockId kReferenceClock = 0;
+
+/// DBM entry, encoded as HDBM encodes it: @c (value<<1)|weak, weak=1 for @c <=.
+using raw_t = ptctlmc::raw_t;
+
+/// The raw entry standing for an absent upper bound.
+inline constexpr raw_t kRawInfinity = ptctlmc::kInf;
+/// The bound value @c Bound::infinity() carries; any @c value at or above it is
+/// treated as unbounded, so arithmetic never has to special-case the sentinel.
+inline constexpr std::int32_t kInfinityBound = ptctlmc::kInf >> 1;
 
 // ── RelOp ───────────────────────────────────────────────────────────────────
 // Relational operator for constraints.
@@ -46,7 +57,7 @@ enum class RelOp : std::uint8_t {
 
 // ── Bound ───────────────────────────────────────────────────────────────────
 // Represents a bound value with strictness (for DBM entries).
-// Compatible with UDBM's raw_t encoding.
+// Compatible with HDBM's raw_t encoding.
 
 struct Bound {
     std::int32_t value;
@@ -54,24 +65,24 @@ struct Bound {
     
     static Bound less_eq(std::int32_t v) { return Bound{v, false}; }
     static Bound less(std::int32_t v) { return Bound{v, true}; }
-    static Bound infinity() { return Bound{dbm_INFINITY, false}; }
+    static Bound infinity() { return Bound{kInfinityBound, false}; }
     
-    bool is_infinity() const { return value == dbm_INFINITY; }
+    bool is_infinity() const { return value >= kInfinityBound; }
     
     bool operator==(const Bound& o) const {
         return value == o.value && is_strict == o.is_strict;
     }
     
-    // Convert to UDBM's raw_t encoding
+    // Convert to HDBM's raw_t encoding
     raw_t to_raw() const {
-        if (is_infinity()) return dbm_LS_INFINITY;
-        return dbm_boundbool2raw(value, is_strict);
+        if (is_infinity()) return kRawInfinity;
+        return is_strict ? ptctlmc::lt(value) : ptctlmc::le(value);
     }
     
-    // Create from UDBM's raw_t encoding
+    // Create from HDBM's raw_t encoding
     static Bound from_raw(raw_t raw) {
-        if (raw >= dbm_LS_INFINITY) return infinity();
-        return Bound{dbm_raw2bound(raw), (raw & 1) == dbm_STRICT};
+        if (raw >= kRawInfinity) return infinity();
+        return Bound{ptctlmc::raw_bound(raw), ptctlmc::raw_is_strict(raw)};
     }
     
     std::string to_string() const;
@@ -79,7 +90,7 @@ struct Bound {
 
 // ── Zone ────────────────────────────────────────────────────────────────────
 // Represents a zone (set of clock valuations) using a Difference Bound Matrix.
-// Uses UDBM library directly for all DBM operations.
+// Uses HDBM directly for all DBM operations.
 //
 // The zone maintains a canonical form after each operation.
 // The number of clocks is fixed at construction time.
@@ -146,7 +157,7 @@ public:
     
     /// Extrapolate using max bounds per clock. Abstracts away clock values
     /// beyond the maximum constant they are compared against, ensuring
-    /// finitely many distinct zones. Uses UDBM's dbm_extrapolateMaxBounds.
+    /// finitely many distinct zones. Uses HDBM's dbm_extrapolate (Extra_M).
     /// @param max: array of size num_clocks(), max[0]=0, max[i]=max constant for clock i.
     void extrapolate(const std::vector<std::int32_t>& max);
     
@@ -156,7 +167,7 @@ public:
     std::size_t num_clocks() const { return dim_; }
 
     /// Raw DBM matrix (row-major, dim*dim raw_t entries). Valid only when
-    /// !is_empty(); used to bridge to UDBM's fed_t / dbm_t (see ZoneSet).
+    /// !is_empty(); used to bridge to HDBM's Federation / Dbm (see ZoneSet).
     const raw_t* raw_data() const { return dbm_.data(); }
 
     /// Build a zone from a raw DBM matrix (copies dim*dim entries).
@@ -175,17 +186,22 @@ public:
     
 private:
     // Dimension (number of clocks including reference)
-    cindex_t dim_;
+    std::uint32_t dim_;
     
-    // The DBM using UDBM's raw_t format
-    // Size is dim_ * dim_, accessed as dbm_[i * dim_ + j]
-    std::vector<raw_t> dbm_;
+    // The DBM using HDBM's raw_t format.
+    // Size is dim_ * dim_, accessed as dbm_[i * dim_ + j].
+    //
+    // Zones are copied on every rule application and discarded in the millions,
+    // so the buffer is drawn from HDBM's per-thread free list: recycling one is
+    // a lock-free pop/push instead of a malloc/free pair on the process-global
+    // allocator lock.
+    std::vector<raw_t, ptctlmc::PoolAllocator<raw_t>> dbm_;
     
     // Flag indicating if this is the empty zone
     bool empty_;
     
     // Private constructor for internal use
-    Zone(cindex_t dim, bool is_empty);
+    Zone(std::uint32_t dim, bool is_empty);
 };
 
 // ── Zone utilities ──────────────────────────────────────────────────────────

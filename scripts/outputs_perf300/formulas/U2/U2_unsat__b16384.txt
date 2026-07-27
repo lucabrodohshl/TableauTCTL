@@ -1,2 +1,0 @@
-# U2/U2_unsat  b=16384  expected=UNSAT
-AG[0,inf) (q) & EF[1,16384] (!q)

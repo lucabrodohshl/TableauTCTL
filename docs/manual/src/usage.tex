@@ -1,0 +1,82 @@
+\section{Running the tool}
+
+\subsection{Input}
+
+A formula can be given directly, or in a file with one formula per line:
+
+\begin{lstlisting}
+./build/tctl_sat 'AG[0,2] p'          # a single formula
+./build/tctl_sat properties.txt       # a file of them
+\end{lstlisting}
+
+\noindent
+In a file, blank lines are skipped and everything after \texttt{\#} is a
+comment.  Each formula is answered independently, prefixed by its line number:
+
+\begin{lstlisting}
+# properties.txt -- a small specification
+EF[1,3] request                  # a request is possible in [1,3]
+AG (request -> AF[0,5] grant)    # every request is granted within 5
+AG[0,10] !error                  # no error in the first 10 units
+\end{lstlisting}
+
+\begin{lstlisting}
+$ ./build/tctl_sat properties.txt
+1: SATISFIABLE
+2: SATISFIABLE
+3: SATISFIABLE
+\end{lstlisting}
+
+\noindent
+Answering each line separately asks whether each property is satisfiable
+\emph{on its own}.  To ask whether they are \emph{jointly} satisfiable --- the
+usual specification sanity-check --- conjoin them with \texttt{--tot}:
+
+\begin{lstlisting}
+$ ./build/tctl_sat --tot properties.txt
+1: SATISFIABLE
+\end{lstlisting}
+
+\noindent
+This is how an inconsistent specification is caught.  Each of the following is
+satisfiable alone, but not together:
+
+\begin{lstlisting}
+$ printf 'EF[1,2] p\nAG[0,3] !p\n' > bad.txt
+$ ./build/tctl_sat bad.txt
+1: SATISFIABLE
+2: SATISFIABLE
+$ ./build/tctl_sat --tot bad.txt
+1: UNSATISFIABLE
+\end{lstlisting}
+
+\subsection{Options}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Option & Effect \\
+\midrule
+\texttt{--tot}, \texttt{--all} & conjoin every input formula and decide the conjunction \\
+\texttt{--model} & extract a witness automaton (Section~\ref{sec:witness}) \\
+\texttt{--stats} & report the number of tableau nodes explored \\
+\texttt{--output <dir>} & directory for extracted witnesses \\
+\texttt{--real-vars a,b} & treat the named arithmetic variables as reals \\
+\texttt{--selftest} & run the built-in semantic test suite \\
+\texttt{--help} & full option list \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Environment flags}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Variable & Effect \\
+\midrule
+\texttt{TCTL\_DEBUG=1} & trace every expanded node and each component, to stderr \\
+\texttt{TCTL\_LEGACY\_LOOP=1} & use the earlier path-local loop acceptance (comparison only) \\
+\bottomrule
+\end{tabular}
+\end{center}

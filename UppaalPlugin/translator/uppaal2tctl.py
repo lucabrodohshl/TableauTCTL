@@ -354,8 +354,12 @@ class Parser:
         else:
             b = int(self.expect("INT").val)
         self.expect("RBRK")
-        if b != "inf" and a >= b:
-            raise TranslationError(f"punctual/empty time bound [{a},{b}] (need a<b)")
+        # Punctual bounds [a,a] ARE allowed: the tableau is sound, terminating
+        # and — for the flat (depth-1) query shapes this translator emits
+        # (E<>, A[], E[], A<>) — complete even with punctuality.  Only a genuinely
+        # empty bound (a > b) is rejected.
+        if b != "inf" and a > b:
+            raise TranslationError(f"empty time bound [{a},{b}] (need a<=b)")
         return (a, b)
 
     # ---- predicate level (precedence climbing) ----
@@ -639,14 +643,25 @@ def translate(query: str, model: Optional[Model]) -> Result:
         ast = Parser(toks).parse_query()
         em = Emit(model)
 
+        completeness_note = None
         if isinstance(ast, Quant):
             body = em.render(ast.pred)
             core = _path_str(ast.quant, ast.path, ast.bound, body)
+            # E<>, A[], E[], A<> are flat (timed-nesting depth 1): the tableau is
+            # complete for them, INCLUDING punctual bounds [a,a].
+            completeness_note = ("flat (depth-1) query: decision is complete, "
+                                 "including punctual [a,a] time bounds")
         elif isinstance(ast, LeadsTo):
             lhs = em.render(ast.lhs)
             rhs = em.render(ast.rhs)
             # p --> q  ==  AG( p -> AF q )
             core = f"AG (({lhs}) -> AF ({rhs}))"
+            # Leads-to nests AF under AG (timed-nesting depth 2).  It is emitted
+            # unbounded (non-punctual), so completeness still holds; a *punctual*
+            # depth-2 query would leave the complete fragment.
+            completeness_note = ("leads-to is depth-2 (AG(p -> AF q)); emitted "
+                                 "unbounded, so within the complete non-punctual "
+                                 "fragment")
         else:
             return Result(False, reason="unrecognised query shape")
 
@@ -658,6 +673,8 @@ def translate(query: str, model: Optional[Model]) -> Result:
             formula = core
 
         warns = list(em.warnings)
+        if completeness_note:
+            warns.append(completeness_note)
         if model is None:
             warns.append("no model supplied: identifiers treated as opaque "
                          "atoms; structural contradictions (e.g. two locations "

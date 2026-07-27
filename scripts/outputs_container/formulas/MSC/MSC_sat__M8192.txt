@@ -1,2 +1,0 @@
-# MSC/MSC_sat  M=8192  expected=SAT
-E(true U[8191,8192] (E(true U[8191,8192] (E(true U[8191,8192] (p))))))

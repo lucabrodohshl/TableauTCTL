@@ -36,6 +36,8 @@
 #ifndef CTL_AST_HPP
 #define CTL_AST_HPP
 
+#include "ptctlmc/dbm_pool.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -210,6 +212,15 @@ class FormulaFactory {
 public:
     FormulaFactory();
 
+    /// Identity of this factory, unique for the life of the process.
+    ///
+    /// FormulaIds are per-factory indices, so anything caching them must be
+    /// able to tell two factories apart.  A pointer cannot do that: a factory
+    /// is typically a short-lived local, and the next one is very likely to be
+    /// allocated at the same address, which would silently validate a stale
+    /// cache keyed by the previous factory's ids.
+    std::uint64_t serial() const noexcept { return serial_; }
+
     // ── Constructors ────────────────────────────────────────────────────
     FormulaId make_true();
     FormulaId make_false();
@@ -271,6 +282,7 @@ public:
     std::string to_string(FormulaId id) const;
 
 private:
+    std::uint64_t serial_;
     // Intern a node: return existing id when structurally equal, otherwise
     // allocate a new slot.  Takes exclusive lock internally.
     FormulaId intern(FormulaNode node);
@@ -288,22 +300,83 @@ private:
 // Canonical sorted vector of FormulaIds.  Provides deterministic iteration
 // and O(log n) membership.
 
+/// Vector drawn from HDBM's per-thread free list.
+///
+/// The tableau copies a node on every rule application, and each copy would
+/// otherwise cost one malloc per member vector on the process-global allocator
+/// lock.  Recycling a pooled buffer is a lock-free pop/push instead.  (The pool
+/// is a generic utility that happens to live in the DBM layer.)
+template <class T>
+using PooledVec = std::vector<T, ptctlmc::PoolAllocator<T>>;
+
+/// Sorted, unique sequence of formula ids.
+using FormulaIdVec = PooledVec<FormulaId>;
+
+/// Discard every interned formula set on this thread.
+///
+/// **Invalidates every existing FormulaSet**: handles are indices into the
+/// table this clears, so a FormulaSet built before the call denotes a different
+/// set (or none) after it.  Call it only where no FormulaSet is live --- the
+/// engine calls it when entering Tableau::check, which is such a point because
+/// a set never escapes the check that built it.
+///
+/// Offered for embedders that check many formulas in one process and want the
+/// table bounded.  The engine does not call it: measured on a 480-formula run
+/// it cost 40% of the runtime to reclaim 2% of peak RSS, the peak being
+/// dominated by the search graph rather than by interned sets.
+void reset_formula_sets() noexcept;
+
+/// Generation counter of this thread's interning table, bumped by
+/// reset_formula_sets().  Anything caching a FormulaSet::handle() must also
+/// record the epoch it cached under and discard its entries when the epoch
+/// moves, since handles are reused after a reset.
+std::uint64_t formula_set_epoch() noexcept;
+
 class FormulaSet {
 public:
-    FormulaSet() = default;
+    FormulaSet() = default;                      // the empty set
 
     void insert(FormulaId id);
     bool contains(FormulaId id) const noexcept;
     bool empty() const noexcept;
     std::size_t size() const noexcept;
 
-    const std::vector<FormulaId>& elements() const noexcept;
+    const FormulaIdVec& elements() const noexcept;
 
-    bool operator==(const FormulaSet& o) const noexcept;
+    /// Build the set from an already sorted, duplicate-free sequence.
+    /// One interning step instead of one per element.
+    static FormulaSet from_sorted(const FormulaIdVec& sorted);
+
+    /// Rebuild the set denoted by an interned handle.
+    ///
+    /// Handles are stable for as long as the interning table lives, so a node
+    /// key that stores one can be decoded back into the set it came from --
+    /// which is what lets the witness extractor recover a node the search has
+    /// already discarded.  The handle must come from this thread and predate
+    /// any reset_formula_sets().
+    static FormulaSet from_handle(std::uint32_t h) noexcept;
+
+    /// The interned identity of this set: equal handles iff equal sets.
+    /// Usable directly as a hash-map key, and as a node key's contribution.
+    std::uint32_t handle() const noexcept { return h_; }
+
+    bool operator==(const FormulaSet& o) const noexcept { return h_ == o.h_; }
+    bool operator!=(const FormulaSet& o) const noexcept { return h_ != o.h_; }
     bool operator<(const FormulaSet& o) const noexcept;
 
 private:
-    std::vector<FormulaId> data_;  // sorted, unique
+    /// Index into the per-thread interning table; 0 is always the empty set.
+    ///
+    /// The tableau copies a node -- and hence its three formula sets -- on every
+    /// rule application, hashes each node once, and compares sets constantly.
+    /// A handle makes the copy a word, the comparison an integer test, and the
+    /// set's share of a node key one word instead of |S|.
+    ///
+    /// A handle is meaningful only on the thread that interned it.  The search
+    /// is single-threaded (Tableau::set_num_threads is a documented no-op) and a
+    /// FormulaSet never escapes the check() that built it, so none ever crosses
+    /// a thread.
+    std::uint32_t h_ = 0;
 };
 
 }  // namespace tctl

@@ -1,5 +1,5 @@
 // ============================================================================
-// tctl/satisfaction_set.hpp — S_X(mu) satisfaction sets (ETAPS2026 §4.2, §5.1)
+// tctl/satisfaction_set.hpp — S_X(mu) satisfaction sets (§4.2, §5.1)
 // ============================================================================
 //
 // The cover rule discharges a demanded timed modality mu against S_X(mu): the
@@ -47,9 +47,9 @@ inline ClockId clock_of(const ClockMap& cmap, FormulaId mu) {
 // Persistent memo for S_X(mu, X): the fixpoint is otherwise recomputed at every
 // cover node — and recursively for nested modalities — which blows up
 // exponentially with nesting depth.  Keyed by (mu, X).
-using SatCache = std::unordered_map<std::string, ZoneSet>;
+using SatCache = std::unordered_map<std::uint64_t, ZoneSet>;
 
-// ── Task 1: leaf region + node closure ──────────────────────────────────────
+// ── Leaf regions and node closure ───────────────────────────────────────────
 
 /// Clock-valuation region where a *modality-free* state predicate psi holds
 /// under the propositional part of context X.  Returns the full universe (over
@@ -62,7 +62,7 @@ ZoneSet sat_leaf(FormulaId psi, const FormulaSet& X, FormulaFactory& f,
 /// leaves Gamma_prop is Z3-UNSAT.  Temporal formulas in gamma are ignored.
 bool node_closed(const FormulaSet& gamma, FormulaFactory& f);
 
-// ── Task 2: satisfaction set S_X(mu) ────────────────────────────────────────
+// ── Satisfaction sets S_X(mu) ───────────────────────────────────────────────
 
 /// S_X(mu) over a fixed clock space (num_clocks dims, extrapolation vector max),
 /// with `cmap` assigning a clock to mu and to every modality inside it.  Least
@@ -92,7 +92,7 @@ ZoneSet satisfaction_set(FormulaId mu, const FormulaSet& X, FormulaFactory& f,
 
 // ── Small helpers exposed for testing / reuse ───────────────────────────────
 
-/// True for the temporal modalities of the paper's fragment (EU/AU/ER/AR and
+/// True for the temporal modalities of the fragment of §3 (EU/AU/ER/AR and
 /// their timed forms).  After normalisation no sugar / object next remains.
 bool is_modality(NodeKind k) noexcept;
 

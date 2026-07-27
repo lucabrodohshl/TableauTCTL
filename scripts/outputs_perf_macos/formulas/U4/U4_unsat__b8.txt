@@ -1,2 +1,0 @@
-# U4/U4_unsat  b=8  expected=UNSAT
-EF[0,8] (p) & AG[0,inf) ((p) -> AF[1,8] (q)) & AG[0,16] (!q)

@@ -89,7 +89,7 @@ FormulaId normalize(FormulaId id, FormulaFactory& f);
 
 // ── Punctuality / nesting-depth analysis ────────────────────────────────────
 //
-// The ETAPS2026 procedure is sound and terminating for all of TCTL, and
+// The procedure is sound and terminating for all of TCTL, and
 // complete for the non-punctual fragment; for depth-1 TCTL it is complete even
 // with punctual intervals [a,a].  It is NOT guaranteed complete for punctual
 // intervals nested inside another timed modality (timed-nesting depth > 1).

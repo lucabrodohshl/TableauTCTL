@@ -1,2 +1,0 @@
-# MSC/MSC_unsat  M=16  expected=UNSAT
-E(true U[15,16] (E(true U[15,16] (E(true U[15,16] (p)))))) & AG[0,49] (!p)

@@ -1,2 +1,0 @@
-# ZEN/ZEN_unsat_false  M=128  expected=UNSAT
-AG[1,128] false

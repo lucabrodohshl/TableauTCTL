@@ -1,0 +1,71 @@
+\section{Examples}
+
+Each example below was run with the version of \tool this manual ships with.
+
+\subsection{Reachability and safety in conflict}
+
+\begin{lstlisting}
+$ ./build/tctl_sat 'EF[1,2] q & AG[0,3] !q'
+1: UNSATISFIABLE
+\end{lstlisting}
+
+\noindent
+The first conjunct demands $q$ somewhere in $[1,2]$; the second forbids it
+everywhere in $[0,3]$.  Since $[1,2]\subseteq[0,3]$ there is no model.  Widen
+the safety window so the two no longer overlap and a model appears:
+
+\begin{lstlisting}
+$ ./build/tctl_sat 'EF[2,2] q & AG[0,1] !q'
+1: SATISFIABLE
+\end{lstlisting}
+
+\subsection{Strictness matters}
+
+\begin{lstlisting}
+$ printf 'EF[1,2] p & AG[0,1] !p\nEF(1,2) p & AG[0,1] !p\n' > s.txt
+$ ./build/tctl_sat s.txt
+1: SATISFIABLE
+2: SATISFIABLE
+\end{lstlisting}
+
+\noindent
+Both hold: $p$ can be placed strictly after $1$.  The zone layer tracks the
+open/closed endpoint exactly rather than rounding it to an integer.
+
+\subsection{A leads-to specification}
+
+The classic response property, \texttt{AG(request -> AF[0,5] grant)}, is the
+shape most often written for \textsc{Uppaal}.  It is satisfiable on its own, and
+stays so together with a bounded-response requirement:
+
+\begin{lstlisting}
+$ ./build/tctl_sat --tot leadsto.txt
+1: SATISFIABLE
+\end{lstlisting}
+
+\noindent
+where \texttt{leadsto.txt} contains
+
+\begin{lstlisting}[style=formula]
+AG (request -> AF[0,5] grant)
+AG[0,20] !error
+EF[1,3] request
+\end{lstlisting}
+
+\subsection{Nested timed modalities}
+
+Nesting is where the procedure does real work.  The following is satisfiable,
+and the node count shows the cost:
+
+\begin{lstlisting}
+$ ./build/tctl_sat --stats 'EG[1,5] (EF[2,4] (EG[6,8] p))'
+1: SATISFIABLE
+  Stats: nodes=261
+\end{lstlisting}
+
+\subsection{A contradiction the tool must catch}
+
+\begin{lstlisting}
+$ ./build/tctl_sat 'EF p & !EF p'
+1: UNSATISFIABLE
+\end{lstlisting}

@@ -1,13 +1,13 @@
 // ============================================================================
-// tctl/zoneset.hpp — ZoneSet: a finite union of zones (UDBM federation wrapper)
+// tctl/zoneset.hpp — ZoneSet: a finite union of zones (HDBM federation wrapper)
 // ============================================================================
 //
-// The ETAPS2026 tableau reasons about satisfaction sets S_X(μ) that are, in
+// The tableau reasons about satisfaction sets S_X(μ) that are, in
 // general, finite unions of ≅_M-zones (Knaster–Tarski fixpoints over unions of
 // DBMs).  A single `Zone` (one DBM) cannot represent such a union, nor the
 // convex decomposition cvx(·) demanded by the partial-cover rule (Cov*).
 //
-// `ZoneSet` wraps UDBM's `dbm::fed_t` (a federation = finite set of DBMs) to
+// `ZoneSet` wraps HDBM's `ptctlmc::Federation` (a finite set of DBMs) to
 // provide exactly the operations the construction needs:
 //
 //   * set algebra           : ∪ (unite), ∩ (intersect), \ (subtract)
@@ -25,7 +25,7 @@
 
 #include "tctl/zone.hpp"
 
-#include <dbm/fed.h>
+#include "ptctlmc/fed.hpp"
 
 #include <cstdint>
 #include <string>
@@ -93,8 +93,13 @@ public:
     std::string to_string() const;
 
 private:
-    explicit ZoneSet(dbm::fed_t fed) : fed_(std::move(fed)) {}
-    dbm::fed_t fed_;
+    ZoneSet(ptctlmc::Federation fed, std::size_t nclk)
+        : fed_(std::move(fed)), nclk_(nclk) {}
+
+    // A federation carries no dimension of its own once it is empty, so the
+    // clock count is tracked alongside it.
+    ptctlmc::Federation fed_;
+    std::size_t         nclk_ = 1;
 };
 
 }  // namespace tctl

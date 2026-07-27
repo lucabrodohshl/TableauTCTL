@@ -1,2 +1,0 @@
-# MSC/MSC_sat  M=4  expected=SAT
-E(true U[3,4] (E(true U[3,4] (E(true U[3,4] (p))))))

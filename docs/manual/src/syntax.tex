@@ -1,0 +1,76 @@
+\section{Syntax}\label{sec:syntax}
+
+\subsection{Grammar}
+
+\begin{center}
+\begin{tabular}{rcl}
+$\varphi$ &::=& \texttt{true} $\mid$ \texttt{false} $\mid$ $p$
+              $\mid$ \texttt{\{} \textit{arith} \texttt{\}} \\
+          &$\mid$& \texttt{!}$\varphi$ $\mid$ $\varphi$ \texttt{\&} $\varphi$
+              $\mid$ $\varphi$ \texttt{|} $\varphi$
+              $\mid$ $\varphi$ \texttt{->} $\varphi$
+              $\mid$ $\varphi$ \texttt{<->} $\varphi$ \\
+          &$\mid$& \texttt{EF}$I\,\varphi$ $\mid$ \texttt{AF}$I\,\varphi$
+              $\mid$ \texttt{EG}$I\,\varphi$ $\mid$ \texttt{AG}$I\,\varphi$ \\
+          &$\mid$& \texttt{E(}$\varphi$ \texttt{U}$I$ $\varphi$\texttt{)}
+              $\mid$ \texttt{A(}$\varphi$ \texttt{U}$I$ $\varphi$\texttt{)} \\
+          &$\mid$& \texttt{E(}$\varphi$ \texttt{R}$I$ $\varphi$\texttt{)}
+              $\mid$ \texttt{A(}$\varphi$ \texttt{R}$I$ $\varphi$\texttt{)} \\[4pt]
+$I$       &::=& $\varepsilon$ $\mid$ \texttt{[}$a$\texttt{,}$b$\texttt{]}
+              $\mid$ \texttt{(}$a$\texttt{,}$b$\texttt{)}
+              $\mid$ \texttt{[}$a$\texttt{,}$b$\texttt{)}
+              $\mid$ \texttt{(}$a$\texttt{,}$b$\texttt{]}
+              $\mid$ \texttt{[}$a$\texttt{,inf)} \\
+\end{tabular}
+\end{center}
+
+\noindent
+Atoms are identifiers such as \texttt{p}, \texttt{q}, \texttt{p1}.  An omitted
+interval means $[0,\infty)$, so \texttt{EF p} and \texttt{EF[0,inf) p} are the
+same formula.
+
+\subsection{Operators}
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+Written & Means & Timed form & Reading \\
+\midrule
+\texttt{EF} $\varphi$ & $\exists\Diamond$ & \texttt{EF[1,5] p} & some run reaches $p$ within $[1,5]$ \\
+\texttt{AF} $\varphi$ & $\forall\Diamond$ & \texttt{AF[0,3] p} & every run reaches $p$ within $[0,3]$ \\
+\texttt{EG} $\varphi$ & $\exists\Box$     & \texttt{EG[1,5] p} & some run keeps $p$ throughout $[1,5]$ \\
+\texttt{AG} $\varphi$ & $\forall\Box$     & \texttt{AG[0,2] p} & every run keeps $p$ throughout $[0,2]$ \\
+\texttt{E(}$\varphi$ \texttt{U} $\psi$\texttt{)} & $\exists\,\mathbf{U}$ &
+  \texttt{E(p U[1,3] q)} & some run holds $p$ until $q$, in $[1,3]$ \\
+\texttt{A(}$\varphi$ \texttt{R} $\psi$\texttt{)} & $\forall\,\mathbf{R}$ &
+  \texttt{A(p R[2,5] q)} & $\psi$ holds until released by $\varphi$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{There is no next operator.}
+TCTL has none, and \texttt{EX}/\texttt{AX} are rejected by the parser.  They
+exist only as internal markers inside the construction.
+
+\subsection{Intervals}
+
+Bounds are non-negative integers.  Both closed and open endpoints are supported,
+and the strictness is respected exactly: \texttt{EF[1,2] p} and
+\texttt{EF(1,2) p} are different questions.
+
+A \emph{punctual} interval $[a,a]$ is accepted --- see the completeness note in
+Section~\ref{sec:syntax}'s preceding chapter.  An empty interval (a lower bound
+above the upper one, or an open singleton) is a parse error.
+
+\subsection{Arithmetic leaves}
+
+Constraints in braces are handed to Z3 rather than to the temporal machinery:
+
+\begin{lstlisting}[style=formula]
+{x <= 5} & {x > 10}          % unsatisfiable: no such x
+EF ({x <= 10} & p)           % satisfiable
+\end{lstlisting}
+
+\noindent
+Variables are integer-sorted by default; \texttt{--real-vars x,y} makes the
+named ones reals.

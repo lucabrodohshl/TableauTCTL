@@ -1,53 +1,80 @@
-// ============================================================================
-// tctl/paper_tableau.hpp — ETAPS2026 cover-rule / launch-pursuit tableau
-// ============================================================================
-//
-// Decision procedure of Brodo, Scalora, Henkler, "A Tableau for TCTL"
-// (ETAPS 2026, ../../ETAPS2026.pdf).  On-the-fly AND–OR graph over symbolic
-// nodes N = <Gamma, X, Z, O, D>; a cover rule discharges each timed modality mu
-// against its satisfaction set S_X(mu); acceptance is a marking computed by node
-// elimination.  Verdict-first: this returns SAT/UNSAT; witness timed-automaton
-// extraction (paper Theorem 2) is a separate, later deliverable.
-//
-// Fragment (paper §3): TCTL in NNF over  T | F | p | !p | & | | |
-//   E(phi U_I psi) | E(phi R_I psi) | A(phi U_I psi) | A(phi R_I psi).
-// There is no object-level next; EX/AX arise only as internal pursuit markers.
-//
-// Z3 is used only as the node closure oracle (arithmetic/propositional leaves);
-// it never encodes temporal operators, clocks, or fixpoints.  All clock
-// reasoning stays in the DBM / ZoneSet layer.
-//
-// The public Result / result_to_string API is preserved from the retired engine
-// so the self-test (src/test.cpp) and benchmark (src/benchmark.cpp) harnesses
-// re-point at this engine with minimal churn.
-//
-// See docs/superpowers/specs/2026-07-23-tctl-paper-tableau-design.md.
-// ============================================================================
+/// @file tableau.hpp
+/// @brief Tableau decision procedure for TCTL satisfiability.
+///
+/// Implements the calculus of L. Brodo, G. Scalora and S. Henkler,
+/// *A Tableau for TCTL*: an on-the-fly, zone-based proof search that explores
+/// only the demanded part of the symbolic state space.
+///
+/// The search builds an AND–OR graph over symbolic nodes
+/// @f$N = \langle \Gamma, X, Z, O, D \rangle@f$ (§4.1) and looks for a
+/// successful marking.  Four groups of rules drive it (§4.2):
+///
+/// - **saturation** decomposes the goals in @f$\Gamma@f$;
+/// - the **cover rule** discharges a demanded timed modality @f$\mu@f$ against
+///   its satisfaction set @f$S_X(\mu)@f$ (see satisfaction_set.hpp);
+/// - the **pursuit rules** unfold a launched modality one step at a time;
+/// - **successor generation** expands a saturated node in time (Delay) and
+///   across edges (EX).
+///
+/// A marking is successful when it contains no closed node and every candidate
+/// loop in it is accepting: every until pursuit active at the loop head is
+/// discharged on the segment, and the loop is time-progressing, which excludes
+/// Zeno witnesses (§4.3).
+///
+/// **Fragment.** TCTL in negation normal form (§3):
+/// @f$\top \mid \bot \mid p \mid \neg p \mid \varphi \wedge \varphi \mid
+/// \varphi \vee \varphi \mid E(\varphi U_I \varphi) \mid E(\varphi R_I \varphi)
+/// \mid A(\varphi U_I \varphi) \mid A(\varphi R_I \varphi)@f$.
+/// The logic has no object-level next operator; the @c EX and @c AX markers used
+/// below are proof-theoretic and internal to the construction.
+///
+/// **Guarantees.** Sound and terminating for all of TCTL; complete over the
+/// non-punctual fragment, where the procedure runs in ExpTime (§5).
+///
+/// **Division of labour.** All clock reasoning stays in the DBM and ZoneSet
+/// layer (zone.hpp, zoneset.hpp).  An SMT solver is consulted only as the node
+/// closure oracle for propositional and arithmetic leaves; it never encodes
+/// temporal operators, clocks or fixpoints.
+///
+/// The procedure is verdict-first: it decides SAT/UNSAT.  Extraction of the
+/// witness timed automaton (§5, Theorem 2) is not part of this interface.
 
-#ifndef TCTL_PAPER_TABLEAU_HPP
-#define TCTL_PAPER_TABLEAU_HPP
+#ifndef TCTL_TABLEAU_HPP
+#define TCTL_TABLEAU_HPP
 
 #include "tctl/ast.hpp"
 #include "tctl/satisfaction_set.hpp"
+#include "tctl/timed_automaton.hpp"
 #include "tctl/zone.hpp"
 
 #include <chrono>
 #include <cstdint>
 #include <map>
+#include <utility>
 #include <string>
 #include <vector>
 
 namespace tctl {
 
-// ── Node model (paper §4.1) ──────────────────────────────────────────────────
-// N = <Gamma, X, Z, O, D> plus the pursuit state.
+// ─── Node model (§4.1) ──────────────────────────────────────────────────────
 
-// A deadline (x_mu, bound, strict) contributes  x_mu <= bound  (strict: <) to
-// Inv(N) = AND over D.  Applied only for a universal until (paper §4.2 p.6).
+/// @brief A deadline @f$(x_\mu, \sup I)@f$ contributing to the node invariant.
+///
+/// Every deadline in a node's set @f$D@f$ contributes one conjunct
+/// @f$x_\mu \leq b@f$ (strictly @f$<@f$ when #strict) to
+/// @f$Inv(N) = \bigwedge_{(x_\mu,b) \in D} x_\mu \leq b@f$, which bounds how
+/// long time may elapse in the node.
+///
+/// A deadline is issued only for a universal until: that modality obliges every
+/// run to satisfy its target within the window, so time must be forced forward
+/// or a run could idle past the window with the eventuality unmet.  An
+/// existential until is discharged by a single witnessing run, and a release of
+/// either quantifier is discharged by lapsing past its window rather than by
+/// acting within it, so neither needs one (§4.2).
 struct Deadline {
-    ClockId       x_mu;
-    std::int64_t  bound;
-    bool          strict;
+    ClockId      x_mu;    ///< The formula-clock the deadline bounds.
+    std::int64_t bound;   ///< The bound @f$\sup I@f$.
+    bool         strict;  ///< @c true for @f$x_\mu < b@f$, @c false for @f$\leq@f$.
 
     bool operator==(const Deadline& o) const noexcept {
         return x_mu == o.x_mu && bound == o.bound && strict == o.strict;
@@ -59,15 +86,32 @@ struct Deadline {
     }
 };
 
-// A launched pursuit mu•.  `stage` is the current proof-theoretic marker
-// (mu• here / EXmu• / AXmu•); `part` is the R^split region being pursued
-// (Whole for an until).  Condition (i) of acceptance applies to until pursuits.
+/// @brief A launched pursuit @f$\mu^\bullet@f$ of a timed modality.
+///
+/// The cover rule launches a pursuit to unfold @f$\mu@f$ in search of a witness,
+/// measuring its window from the demanding configuration via the dedicated
+/// formula-clock #x_mu.  Pursuits are held in a node's own list rather than as
+/// synthetic formulas in @f$\Gamma@f$, which keeps the EX/AX residual and the
+/// release region explicit.
 struct Pursuit {
-    FormulaId mu;           // launched modality Q(phi o_I psi)
-    ClockId   x_mu;         // its formula-clock (also a key in O)
-    enum class Stage : std::uint8_t { Here, DeferEX, DeferAX } stage = Stage::Here;
-    enum class Part  : std::uint8_t { Whole, BeforeI, InI }   part  = Part::Whole;
-    bool      is_until = true;   // true → until (acceptance condition (i) applies)
+    /// Where the pursuit stands relative to the current node.
+    enum class Stage : std::uint8_t {
+        Here,      ///< @f$\mu^\bullet@f$ — to be unfolded at this node.
+        DeferEX,   ///< @f$EX\,\mu^\bullet@f$ — residual carried to one successor.
+        DeferAX    ///< @f$AX\,\mu^\bullet@f$ — residual carried to all successors.
+    };
+    /// Which part of the release partition (Rsplit) is being pursued.
+    enum class Part : std::uint8_t {
+        Whole,     ///< Not yet partitioned; also the only value an until takes.
+        BeforeI,   ///< @f$Z^{\prec I}@f$ — the window has not opened yet.
+        InI        ///< @f$Z^{\in I}@f$ — inside the window, the obligation applies.
+    };
+
+    FormulaId mu;                    ///< The launched modality @f$Q(\varphi \circ_I \psi)@f$.
+    ClockId   x_mu;                  ///< Its formula-clock; also a key in @f$O@f$.
+    Stage     stage = Stage::Here;   ///< Current proof-theoretic marker.
+    Part      part  = Part::Whole;   ///< Region being pursued (releases only).
+    bool      is_until = true;       ///< Until pursuits are subject to loop condition (i).
 
     bool operator==(const Pursuit& o) const noexcept {
         return mu == o.mu && x_mu == o.x_mu && stage == o.stage &&
@@ -82,58 +126,119 @@ struct Pursuit {
     }
 };
 
-// Successor phase: an Elapse node lets time pass (Delay rule), a Discrete node
-// takes the discrete step (EX rule).  Alternating them lets a launched clock
-// x_mu grow into its window before the pursuit's stop is tested.
-enum class Phase : std::uint8_t { Elapse, Discrete };
+/// @brief Which successor rule a saturated node is due to apply.
+///
+/// The two successor rules alternate, so that a launched clock @f$x_\mu@f$ can
+/// grow into its window across a chain of delays before the pursuit's stop
+/// guard is tested: a pure-delay witness waits in one location until
+/// @f$x_\mu \in I@f$ and then stops.
+enum class Phase : std::uint8_t {
+    Elapse,   ///< Time may pass: apply (Delay).
+    Discrete  ///< Edges may be taken: apply (EX).
+};
 
-// A tableau node.  Pursuit markers live in `pursuits` (not as synthetic AST
-// nodes in Gamma) so the EX/AX residual and R-region stay explicit.
+/// @brief A tableau node @f$\langle \Gamma, X, Z, O, D \rangle@f$.
+///
+/// A node carries the formulas to be realised at a configuration.  It is
+/// *closed* when its propositional part is inconsistent or its zone is empty,
+/// and *saturated* when no saturation or cover rule applies; only saturated
+/// nodes generate successors.
 struct Node {
-    FormulaSet                    Gamma;     // goal formulas + literals
-    FormulaSet                    X;         // universal context (AX obligations)
-    Zone                          Z;         // canonical ~=_M-extrapolated DBM
-    std::map<FormulaId, ClockId>  O;         // launched mu ↦ x_mu
-    std::vector<Deadline>         D;         // ⇒ Inv(N) = AND x_mu </<= bound
-    std::vector<Pursuit>          pursuits;  // active mu• (stage / part)
-    Phase                         phase = Phase::Elapse;
-    std::vector<ClockId>          just_reset;  // clocks reset creating this node
-                                               // (metadata; excluded from node key)
-    FormulaId                     discharges_until = kInvalidId;
-                                  // set on a (U•) stop child: the until mu it
-                                  // discharges here (metadata; excluded from key)
+    FormulaSet                   Gamma;      ///< @f$\Gamma@f$: goal formulas and literals.
+    FormulaSet                   X;          ///< @f$X@f$: context holding at every successor.
+    Zone                         Z;          ///< @f$Z@f$: the node's clock valuations, canonical modulo @f$\cong_M@f$.
+    /// @f$O@f$: clock map, launched @f$\mu \mapsto x_\mu@f$.
+    ///
+    /// A sorted vector rather than a node-based map: a node is copied on every
+    /// rule application, and a red-black tree costs one allocation per entry
+    /// where a vector costs one in total.
+    PooledVec<std::pair<FormulaId, ClockId>> O;
+    PooledVec<Deadline>          D;          ///< @f$D@f$: deadlines inducing @f$Inv(N)@f$.
+    PooledVec<Pursuit>           pursuits;   ///< Active pursuits @f$\mu^\bullet@f$.
+    Phase                        phase = Phase::Elapse;  ///< Successor rule due next.
+
+    /// Clocks reset on the edge that created this node.
+    /// Diagnostic metadata for the loop test; excluded from the node key.
+    PooledVec<ClockId> just_reset;
+
+    /// Modalities already witnessed on this branch: a pursuit for each was
+    /// launched and then settled (an until stopped, a release lapsed past its
+    /// window).  A persistent context re-demands such a modality at uncountably
+    /// many onsets; §4.2 has one formula-clock serve them all, and one witness
+    /// serves them likewise, so a re-demand is discharged against the completed
+    /// pursuit instead of launching a fresh one.  Part of the node key.
+    FormulaSet witnessed;
+
+    /// On a (U•) stop child, the until it discharges here.
+    /// Diagnostic metadata; excluded from the node key.
+    FormulaId discharges_until = kInvalidId;
 };
 
-// ── Cover rule result (paper §4.2) ──────────────────────────────────────────
-// Classifying a demanded modality mu against S_X(mu):
-//   Cover        — Z ⊆ S_X(mu): children = {discharge, launch} (an AND).
-//   PartialCover — Z ∩ S_X(mu) ≠ ∅ but ⊄: children = one narrowed OR-child per
-//                  convex component of Z ∩ S_X(mu).
-//   Close        — Z ∩ S_X(mu) = ∅: no children.
+// ─── Cover rule (§4.2) ──────────────────────────────────────────────────────
+
+/// @brief Outcome of testing a demanded modality against its satisfaction set.
+///
+/// A node that demands @f$\mu@f$ must show that @f$\mu@f$ holds at *every*
+/// valuation of its zone.  Because the window is measured from the demanding
+/// configuration, a persistent context such as @f$AG\,\mu@f$ would issue a
+/// demand at uncountably many configurations; the rule instead tests the zone
+/// symbolically against @f$S_X(\mu)@f$.
 struct CoverResult {
-    enum class Kind { Cover, PartialCover, Close };
-    Kind              kind = Kind::Close;
-    std::vector<Node> children;
+    /// How the zone sits relative to @f$S_X(\mu)@f$.
+    enum class Kind {
+        /// @f$Z \subseteq S_X(\mu)@f$ — rule (Cov) applies.  Children
+        /// are an AND of the *discharge*, which drops @f$\mu@f$ so the node can
+        /// continue with the rest of @f$\Gamma@f$, and the *launch*, which
+        /// starts a pursuit of @f$\mu@f$ on a fresh formula-clock.
+        Cover,
+        /// The cover is partial.  The node narrows to a convex component of the
+        /// covered part — sound by monotonicity of realisability under
+        /// narrowing — and the children are an OR, since it suffices to build a
+        /// model over one component.
+        PartialCover,
+        /// @f$Z \cap S_X(\mu) = \emptyset@f$ — neither rule applies
+        /// and the node is closed.
+        Close
+    };
+
+    Kind              kind = Kind::Close;  ///< Which of the three cases applies.
+    std::vector<Node> children;            ///< Resulting children; empty for #Kind::Close.
 };
 
-// Apply the cover rule to node `n` for the demanded modality `mu`, using the
-// engine's global clock map / dimension / extrapolation vector (so `n.Z` and
-// S_X(mu) share one clock space).  The onset is taken at x_mu = 0.
+/// @brief Apply the cover rule to @p n for the demanded modality @p mu.
+///
+/// @param n           The node demanding @p mu.
+/// @param mu          The demanded timed modality.
+/// @param cmap        Clock map assigning a formula-clock to each modality; must
+///                    be the engine-wide map, so that @c n.Z and
+///                    @f$S_X(\mu)@f$ share one clock space.
+/// @param num_clocks  Dimension of that clock space, including the reference clock.
+/// @param max         Per-clock extrapolation bounds.
+/// @param f           Formula factory owning @p mu.
+/// @param sx_cache    Memo for satisfaction sets, shared across cover sites.
+/// @return The classification and the resulting children.
+///
+/// The onset is taken at @f$x_\mu = 0@f$: the launch resets the formula-clock,
+/// so the window is measured from this configuration onward.
 CoverResult apply_cover(const Node& n, FormulaId mu,
                         const std::map<FormulaId, ClockId>& cmap,
                         std::size_t num_clocks,
                         const std::vector<std::int32_t>& max, FormulaFactory& f,
                         SatCache& sx_cache);
 
-// ── Result ───────────────────────────────────────────────────────────────────
-// Verdict + wall-clock time.  Same public shape as the retired engine's Result
-// (Value enum, verdict, elapsed_s, operator==, static aliases) so existing
-// call-sites `r == Result::Satisfiable` and `r.elapsed_s` compile unchanged.
-struct Result {
-    enum class Value { Satisfiable, Unsatisfiable, Timeout };
+// ─── Result ─────────────────────────────────────────────────────────────────
 
-    Value  verdict   = Value::Unsatisfiable;
-    double elapsed_s = 0.0;
+/// @brief Verdict of a satisfiability check, with the wall-clock time it took.
+struct Result {
+    /// The three possible outcomes of a check.
+    enum class Value {
+        Satisfiable,    ///< A witness timed automaton exists.
+        Unsatisfiable,  ///< No timed automaton satisfies the formula.
+        Timeout         ///< The configured time budget was exhausted first.
+    };
+
+    Value  verdict   = Value::Unsatisfiable;  ///< The outcome.
+    double elapsed_s = 0.0;                   ///< Wall-clock seconds spent deciding.
 
     Result() = default;
     Result(Value v, double t = 0.0) : verdict(v), elapsed_s(t) {}
@@ -146,53 +251,103 @@ struct Result {
     static constexpr Value Timeout       = Value::Timeout;
 };
 
-/// "SATISFIABLE" / "UNSATISFIABLE" / "TIMEOUT".
+/// @brief Render a verdict as @c "SATISFIABLE", @c "UNSATISFIABLE" or @c "TIMEOUT".
+/// @param r The result to render.
+/// @return A static, null-terminated string; never @c nullptr.
 const char* result_to_string(const Result& r) noexcept;
 
-// ── PaperStats ───────────────────────────────────────────────────────────────
-// Deterministic, machine-independent counters (search-space proxy).  Fleshed
-// out in the graph/acceptance tasks; zero at the scaffolding stage.
-struct PaperStats {
-    std::uint64_t nodes_created     = 0;
-    std::uint64_t distinct_zones    = 0;
-    std::uint64_t loop_checks       = 0;
-    std::uint64_t peak_memory_bytes = 0;
+// ─── Statistics ─────────────────────────────────────────────────────────────
 
-    void reset() noexcept { *this = PaperStats{}; }
+/// @brief Deterministic search counters, usable as a machine-independent proxy
+///        for the size of the explored search space.
+struct SearchStats {
+    std::uint64_t nodes_created     = 0;  ///< Node expansions performed.
+    std::uint64_t distinct_zones    = 0;  ///< Distinct @f$\cong_M@f$-zones encountered.
+    std::uint64_t loop_checks       = 0;  ///< Candidate loops tested for acceptance.
+    std::uint64_t peak_memory_bytes = 0;  ///< Peak resident size observed.
+
+    /// Reset every counter to zero.
+    void reset() noexcept { *this = SearchStats{}; }
+
+    /// @brief Format the counters as a single @c key=value line.
     std::string to_string() const;
 };
 
-// ── PaperTableau ─────────────────────────────────────────────────────────────
-// The satisfiability engine.  Grows task-by-task; at scaffolding stage it
-// decides only modality-free state predicates (via Z3) and returns
-// Unsatisfiable for anything temporal.
-class PaperTableau {
-public:
-    explicit PaperTableau(FormulaFactory& factory);
+// ─── Engine ─────────────────────────────────────────────────────────────────
 
-    /// Decide satisfiability of a normalised TCTL formula (measures elapsed_s).
+/// @brief The TCTL satisfiability engine.
+///
+/// Typical use:
+/// @code
+/// tctl::Tableau engine(factory);
+/// engine.set_timeout(std::chrono::seconds{30});
+/// const tctl::Result r = engine.check(normalise(phi, factory));
+/// if (r == tctl::Result::Satisfiable) { /* ... */ }
+/// @endcode
+///
+/// The formula passed to #check must already be in negation normal form over the
+/// fragment of §3; see normalization.hpp.
+class Tableau {
+public:
+    /// @brief Construct an engine over @p factory.
+    /// @param factory Owns every formula the engine will see, including those it
+    ///                builds while unfolding.  Must outlive the engine.
+    explicit Tableau(FormulaFactory& factory);
+
+    /// @brief Decide satisfiability of a normalised TCTL formula.
+    /// @param normalized_formula The formula, in negation normal form.
+    /// @return The verdict, together with the elapsed wall-clock time.  A
+    ///         Result::Timeout verdict means the budget set by #set_timeout ran
+    ///         out; it is not a claim about satisfiability.
     Result check(FormulaId normalized_formula);
 
-    /// Timeout for the next check() (0 = none).
+    /// @brief Set the time budget for subsequent calls to #check.
+    /// @param timeout The budget; zero disables the limit.
     void set_timeout(std::chrono::seconds timeout) { timeout_ = timeout; }
 
-    /// Enable/disable ~=_M zone extrapolation.  (No-op until the graph task.)
+    /// @brief Enable or disable @f$\cong_M@f$ zone extrapolation.
+    /// @param enable Whether to extrapolate.
+    ///
+    /// Extrapolation is what keeps the set of reachable zones finite, so
+    /// disabling it forfeits the termination guarantee.  Provided for the
+    /// ablation runs of the benchmark harness.
     void set_extrapolation(bool enable) { extrapolation_ = enable; }
 
-    /// Thread hint.  The paper engine is single-threaded for now; kept so the
-    /// benchmark harness compiles.  (No-op.)
+    /// @brief Accepted for interface compatibility with the benchmark harness.
+    ///
+    /// The search is single-threaded, so this is a no-op.
     void set_num_threads(int) {}
 
-    const PaperStats& get_stats() const { return stats_; }
+    /// @brief Ask #check to read a witness automaton off the successful
+    ///        marking (paper Theorem 2).
+    ///
+    /// Off by default: extraction walks the finished graph and decodes the
+    /// nodes it needs, which costs nothing when it is not wanted.
+    void set_extract_witness(bool enable) { extract_witness_ = enable; }
+
+    /// @brief Whether the last #check produced a witness.
+    bool has_witness() const { return has_witness_; }
+
+    /// @brief The witness automaton of the last satisfiable #check.
+    /// @pre #has_witness returns @c true.
+    const TimedAutomaton& witness() const { return witness_; }
+
+    /// @brief Counters gathered during the most recent #check.
+    const SearchStats& get_stats() const { return stats_; }
+
+    /// @brief Those counters, formatted as one line.
     std::string stats() const { return stats_.to_string(); }
 
 private:
     FormulaFactory&      factory_;
     std::chrono::seconds timeout_{0};
     bool                 extrapolation_ = true;
-    PaperStats           stats_;
+    bool                 extract_witness_ = false;
+    bool                 has_witness_ = false;
+    TimedAutomaton       witness_;
+    SearchStats          stats_;
 };
 
 }  // namespace tctl
 
-#endif  // TCTL_PAPER_TABLEAU_HPP
+#endif  // TCTL_TABLEAU_HPP

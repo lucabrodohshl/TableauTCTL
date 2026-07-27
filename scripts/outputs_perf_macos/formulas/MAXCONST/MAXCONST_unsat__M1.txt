@@ -1,2 +1,0 @@
-# MAXCONST/MAXCONST_unsat  M=1  expected=UNSAT
-AG[0,2] (E(p U[1,2] (q))) & AG[0,3] (!q)

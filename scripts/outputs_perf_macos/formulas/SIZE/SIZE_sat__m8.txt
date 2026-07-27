@@ -1,2 +1,0 @@
-# SIZE/SIZE_sat  m=8  expected=SAT
-EF[1,4] (p1 & p2 & p3 & p4 & p5 & p6 & p7 & p8)

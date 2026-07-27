@@ -1,2 +1,0 @@
-# ZEN/ZEN_sat  M=32  expected=SAT
-EG p & AF[1,32] (q)

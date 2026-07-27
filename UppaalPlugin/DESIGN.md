@@ -36,6 +36,18 @@ Decisions confirmed with the user:
 Rejected property forms (skipped with a message): `sup{}/inf{}`, `Pr[...]`,
 `simulate`, `E[...]` (expected value), `strategy`/`control:`/Stratego.
 
+**Completeness of these shapes.** `E<>`, `A[]`, `E[]`, `A<>` are flat —
+timed-nesting depth 1 — so the tableau's decision is **complete for them,
+including punctual bounds `E<>[a,a] φ`** (the depth-1 completeness holds even
+in the punctual case). Punctual bounds are therefore accepted, and only empty
+bounds (`a > b`, or open coincident endpoints) are rejected. Leads-to
+`p --> q` maps to `AG(p -> AF q)`, which is depth-2, but is emitted **unbounded**
+(non-punctual), so it remains inside the fragment the tableau is complete for.
+Consequently **every query this plugin emits is decided completely**; the
+procedure is in addition sound and terminating for all of TCTL. The translator
+attaches a per-query completeness note, and the results window shows a footer
+saying the same.
+
 ## 2. State-predicate mapping
 
 | UPPAAL | ours |

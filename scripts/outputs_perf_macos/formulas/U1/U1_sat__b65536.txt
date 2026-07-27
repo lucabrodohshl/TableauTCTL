@@ -1,2 +1,0 @@
-# U1/U1_sat  b=65536  expected=SAT
-EF[0,65536] (q1 | q2 | q3 | q4)

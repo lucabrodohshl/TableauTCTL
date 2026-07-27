@@ -28,10 +28,6 @@
 
 namespace tctl {
 
-// Forward declarations.
-class TableauEngine;
-struct TableauNode;
-
 // ── TAConstraint ────────────────────────────────────────────────────────────
 // A single clock constraint of the form  x op c  or  x - y op c.
 
@@ -93,10 +89,22 @@ private:
     static std::string xml_escape(const std::string& s);
 };
 
-// ── Builder ─────────────────────────────────────────────────────────────────
-// Extract a TA from a fully-explored tableau engine.
+// ── Structural validation ───────────────────────────────────────────────────
 
-TimedAutomaton build_from_tableau(const TableauEngine& engine);
+/// @brief Result of checking an extracted witness against the properties
+///        Theorem 2 guarantees.
+///
+/// A certificate nobody checks is worth little, so the extractor validates what
+/// can be validated structurally: that the automaton is non-blocking, that no
+/// location asserts a proposition and its negation, and that the clocks a guard
+/// reads are ones the automaton declares.
+struct TAValidation {
+    bool                     ok = true;
+    std::vector<std::string> problems;
+};
+
+/// @brief Check @p ta for the structural properties a witness must have.
+TAValidation validate(const TimedAutomaton& ta);
 
 }  // namespace tctl
 

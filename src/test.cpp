@@ -10,7 +10,7 @@
 //   - Arithmetic islands with {} syntax
 //   - Desugaring (EF[a,b], AF[a,b], EG[a,b], AG[a,b])
 //   - NNF conversion for TCTL
-//   - Zone operations (UDBM integration)
+//   - Zone operations (HDBM integration)
 //
 // ============================================================================
 
@@ -19,7 +19,7 @@
 #include "tctl/lexer.hpp"
 #include "tctl/normalization.hpp"
 #include "tctl/parser.hpp"
-#include "tctl/paper_tableau.hpp"
+#include "tctl/tableau.hpp"
 #include "tctl/satisfaction_set.hpp"
 #include "tctl/utils.hpp"
 #include "tctl/zone.hpp"
@@ -341,7 +341,7 @@ static void test_tctl_with_arithmetic(TestContext& ctx) {
 
 static void test_parse_errors_intervals(TestContext& ctx) {
     ctx.check(parse_fails("EF[5,3] p"), "EF[5,3] fails (5 > 3, empty)");
-    // Punctual (closed point) intervals [a,a] are now ADMITTED: the ETAPS2026
+    // Punctual (closed point) intervals [a,a] are ADMITTED: the
     // procedure is sound & terminating on punctual TCTL (and complete at depth 1).
     ctx.check(!parse_fails("EF[3,3] p"), "EF[3,3] parses (punctual point interval [a,a])");
     // Half-open / open coincident endpoints are still empty and rejected.
@@ -437,7 +437,7 @@ static void test_normalize_timed_sugar(TestContext& ctx) {
 }
 
 // ============================================================================
-// TCTL Zone/DBM Tests (UDBM Integration)
+// TCTL Zone/DBM Tests (HDBM Integration)
 // ============================================================================
 
 static void test_zone_smoke(TestContext& ctx) {
@@ -603,7 +603,7 @@ static Result check_sat(const std::string& formula_str,
     FormulaFactory f;
     FormulaId parsed = parse_formula(formula_str, f);
     FormulaId norm = normalize(parsed, f);
-    PaperTableau engine(f);
+    Tableau engine(f);
     if (timeout_s > 0) {
         engine.set_timeout(std::chrono::seconds(timeout_s));
     }
@@ -667,7 +667,7 @@ static void test_tctl_unsat3_lower_bound_impossible(TestContext& ctx) {
 }
 
 // ── Punctual (point) interval semantics ─────────────────────────────────────
-// [a,a] is admitted (ETAPS2026: sound & terminating on punctual TCTL, complete
+// [a,a] is admitted (sound & terminating on punctual TCTL, complete
 // at depth 1).  Only the empty coincident-endpoint intervals (a,a)/[a,a)/(a,a]
 // stay rejected.  Verdicts below are justified semantically, not by the old
 // "parser rejects it" behaviour.
@@ -691,7 +691,7 @@ static void test_tctl_punctual_point_intervals(TestContext& ctx) {
 }
 
 // ── Paper Fig. 1 oracle + boundary/punctual discriminators ──────────────────
-// The engine must decide the ETAPS2026 paper's own worked examples correctly.
+// The engine must decide the paper's own worked examples correctly.
 // Every verdict below is justified from TCTL semantics (does a witness TA
 // exist?), NOT from any prior behaviour of the tool.  ν = E(p U[1,2] q),
 // μ1 = AG[0,4] ν, μ2 = AG[0,3] ¬q.
@@ -2431,12 +2431,12 @@ static void test_parallel_equivalence(TestContext& ctx) {
     };
 
     FormulaFactory f1;
-    PaperTableau eng1(f1);
+    Tableau eng1(f1);
     eng1.set_num_threads(1);   // force single-thread
     eng1.set_timeout(std::chrono::seconds(5));
 
     FormulaFactory f2;
-    PaperTableau eng2(f2);
+    Tableau eng2(f2);
     eng2.set_num_threads(0);   // OMP default (>1 if available)
     eng2.set_timeout(std::chrono::seconds(5));
 
@@ -2493,7 +2493,7 @@ static bool onset_in_sx(FormulaId mu, const FormulaSet& X, FormulaFactory& f) {
 }
 
 static void test_satisfaction_set(TestContext& ctx) {
-    // ── Task 1: node closure via Z3 (arithmetic + propositional) ─────────
+    // ── Node closure via Z3 (arithmetic + propositional) ─────────────────
     {   FormulaFactory f;
         FormulaId c = normalize(parse_formula("(x<=2) & (x>=5)", f), f);
         FormulaSet g; g.insert(c);
@@ -2508,7 +2508,7 @@ static void test_satisfaction_set(TestContext& ctx) {
         ctx.check(node_closed(g, f), "node_closed: p & !p is inconsistent");
     }
 
-    // ── Task 1: sat_leaf (jointly Z3-consistent ⇒ universe, else empty) ──
+    // ── sat_leaf (jointly Z3-consistent ⇒ universe, else empty) ──────────
     {   FormulaFactory f; FormulaId p = f.make_atom("p"); FormulaSet X;
         ctx.check(!sat_leaf(p, X, f, 1).is_empty(), "sat_leaf(p) is non-empty");
     }
@@ -2517,7 +2517,7 @@ static void test_satisfaction_set(TestContext& ctx) {
         ctx.check(sat_leaf(conj, X, f, 1).is_empty(), "sat_leaf(p & !p) is empty");
     }
 
-    // ── Task 2: S_X onset membership (hand-computed) ─────────────────────
+    // ── S_X onset membership (hand-computed) ─────────────────────────────
     // From the onset you can delay to x_mu ∈ [1,2] and satisfy q.
     {   FormulaFactory f; FormulaSet X;
         FormulaId mu = normalize(parse_formula("E(true U[1,2] q)", f), f);
@@ -2541,7 +2541,7 @@ static void test_satisfaction_set(TestContext& ctx) {
     }
 }
 
-// ── Cover-rule unit tests (Task 3) ──────────────────────────────────────────
+// ── Cover-rule unit tests ───────────────────────────────────────────────────
 
 // A node demanding `mu` at the onset (Z = all clocks zero over S_X's space).
 static Node make_demand_node(FormulaId mu, const FormulaSet& X, FormulaFactory& f) {
@@ -2656,7 +2656,7 @@ int run_selftests() {
     runner.run("nnf_negated_timed",          test_nnf_negated_timed);
     runner.run("normalize_timed_sugar",      test_normalize_timed_sugar);
 
-    // Zone tests (UDBM)
+    // Zone tests (HDBM)
     runner.run("zone_smoke",                 test_zone_smoke);
     runner.run("zoneset_federation",         test_zoneset);
     runner.run("zone_universe_empty",        test_zone_universe_empty);

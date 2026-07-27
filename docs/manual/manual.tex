@@ -1,0 +1,51 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=2.6cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{shell}{gray}{0.96}
+\lstdefinestyle{sh}{
+  basicstyle=\ttfamily\small, backgroundcolor=\color{shell},
+  frame=single, framerule=0pt, breaklines=true, columns=fullflexible,
+  xleftmargin=4pt, xrightmargin=4pt, aboveskip=8pt, belowskip=8pt,
+}
+\lstdefinestyle{formula}{
+  basicstyle=\ttfamily\small, breaklines=true, columns=fullflexible,
+  xleftmargin=10pt, aboveskip=6pt, belowskip=6pt,
+}
+\lstset{style=sh}
+
+\newcommand{\tool}{\texttt{tctl\_sat}\xspace}
+\usepackage{xspace}
+
+\title{\tool --- User Manual\\[2pt]
+  \large A tableau decision procedure for TCTL satisfiability}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\noindent
+\tool answers one question: given a TCTL formula, \emph{is there a timed
+automaton that satisfies it?}  On success it can also hand back such an
+automaton as a certificate.  This manual covers the syntax it accepts, how to
+run it, and what it produces.
+
+\tableofcontents
+
+\input{src/getting-started.tex}
+\input{src/syntax.tex}
+\input{src/usage.tex}
+\input{src/examples.tex}
+\input{src/witness.tex}
+
+\end{document}

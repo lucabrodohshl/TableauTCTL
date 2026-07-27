@@ -4,6 +4,8 @@
 
 #include "tctl/ast.hpp"
 
+#include <atomic>
+
 #include <algorithm>
 #include <cassert>
 #include <shared_mutex>
@@ -89,7 +91,14 @@ std::size_t FormulaNodeHash::operator()(const FormulaNode& n) const noexcept {
 
 // ── FormulaFactory ──────────────────────────────────────────────────────────
 
-FormulaFactory::FormulaFactory() {
+namespace {
+std::uint64_t next_factory_serial() {
+    static std::atomic<std::uint64_t> counter{0};
+    return ++counter;
+}
+}  // namespace
+
+FormulaFactory::FormulaFactory() : serial_(next_factory_serial()) {
     // Reserve slot 0 and 1 for canonical true/false so they always exist.
     // This also warms the intern table.
     make_true();
@@ -553,35 +562,102 @@ std::string FormulaFactory::to_string_unlocked(FormulaId id) const {
 // Maintains a sorted, unique vector of FormulaIds for deterministic
 // representation of formula sets (e.g., tableau states).
 
-void FormulaSet::insert(FormulaId id) {
-    auto pos = std::lower_bound(data_.begin(), data_.end(), id);
-    if (pos == data_.end() || *pos != id) {
-        data_.insert(pos, id);
+namespace {
+
+// Interning table for formula sets, one per thread and alive for the life of
+// the thread.  Handle 0 is always the empty set.
+struct SetTable {
+    std::uint64_t epoch = 0;
+    std::vector<FormulaIdVec> sets;                                     // handle -> elements
+    std::unordered_map<std::size_t, std::vector<std::uint32_t>> index;  // hash -> handles
+    FormulaIdVec scratch;                                               // insert() workspace
+};
+
+std::size_t hash_ids(const FormulaIdVec& v) noexcept {
+    std::size_t h = 1469598103934665603ull;
+    for (FormulaId id : v) {
+        h ^= static_cast<std::size_t>(id);
+        h *= 1099511628211ull;
     }
+    return h;
+}
+
+SetTable& set_table() {
+    // Deliberately never destroyed.  The table holds pooled buffers, and the
+    // pool is itself a thread-local; leaking the table keeps it alive past any
+    // thread-local that might still hand a buffer back at thread exit.
+    static thread_local SetTable* t = [] {
+        auto* p = new SetTable();
+        p->sets.emplace_back();          // handle 0 = the empty set
+        p->index[hash_ids(p->sets[0])].push_back(0);
+        return p;
+    }();
+    return *t;
+}
+
+std::uint32_t intern_ids(const FormulaIdVec& v) {
+    SetTable& t = set_table();
+    std::vector<std::uint32_t>& bucket = t.index[hash_ids(v)];
+    for (std::uint32_t h : bucket)
+        if (t.sets[h] == v) return h;
+    const auto id = static_cast<std::uint32_t>(t.sets.size());
+    t.sets.push_back(v);                 // may reallocate `sets`, never `index`
+    bucket.push_back(id);
+    return id;
+}
+
+}  // namespace
+
+std::uint64_t formula_set_epoch() noexcept { return set_table().epoch; }
+
+void reset_formula_sets() noexcept {
+    SetTable& t = set_table();
+    ++t.epoch;
+    t.sets.clear();
+    t.index.clear();
+    t.scratch.clear();
+    t.sets.emplace_back();               // handle 0 = the empty set
+    t.index[hash_ids(t.sets[0])].push_back(0);
+}
+
+void FormulaSet::insert(FormulaId id) {
+    SetTable& t = set_table();
+    const FormulaIdVec& cur = t.sets[h_];
+    const auto pos = std::lower_bound(cur.begin(), cur.end(), id);
+    if (pos != cur.end() && *pos == id) return;               // already present
+    const auto at = pos - cur.begin();
+    t.scratch.assign(cur.begin(), cur.end());                 // copy before interning:
+    t.scratch.insert(t.scratch.begin() + at, id);             // intern_ids may move `sets`
+    h_ = intern_ids(t.scratch);
+}
+
+FormulaSet FormulaSet::from_handle(std::uint32_t h) noexcept {
+    FormulaSet s;
+    s.h_ = (h < set_table().sets.size()) ? h : 0;
+    return s;
+}
+
+FormulaSet FormulaSet::from_sorted(const FormulaIdVec& sorted) {
+    FormulaSet s;
+    s.h_ = intern_ids(sorted);
+    return s;
 }
 
 bool FormulaSet::contains(FormulaId id) const noexcept {
-    return std::binary_search(data_.begin(), data_.end(), id);
+    const FormulaIdVec& v = set_table().sets[h_];
+    return std::binary_search(v.begin(), v.end(), id);
 }
 
-bool FormulaSet::empty() const noexcept {
-    return data_.empty();
-}
+bool FormulaSet::empty() const noexcept { return h_ == 0; }
 
-std::size_t FormulaSet::size() const noexcept {
-    return data_.size();
-}
+std::size_t FormulaSet::size() const noexcept { return set_table().sets[h_].size(); }
 
-const std::vector<FormulaId>& FormulaSet::elements() const noexcept {
-    return data_;
-}
-
-bool FormulaSet::operator==(const FormulaSet& o) const noexcept {
-    return data_ == o.data_;
-}
+const FormulaIdVec& FormulaSet::elements() const noexcept { return set_table().sets[h_]; }
 
 bool FormulaSet::operator<(const FormulaSet& o) const noexcept {
-    return data_ < o.data_;
+    const FormulaIdVec& a = elements();
+    const FormulaIdVec& b = o.elements();
+    return std::lexicographical_compare(a.begin(), a.end(), b.begin(), b.end());
 }
 
 }  // namespace tctl

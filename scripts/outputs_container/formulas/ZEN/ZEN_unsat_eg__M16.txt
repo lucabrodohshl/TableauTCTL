@@ -1,2 +1,0 @@
-# ZEN/ZEN_unsat_eg  M=16  expected=UNSAT
-EG p & AG[1,16] (!p)

@@ -1,22 +1,31 @@
 // ============================================================================
-// zone.cpp — Zone implementation using UPPAAL UDBM
+// zone.cpp — Zone implementation over HDBM
 // ============================================================================
 //
-// This file provides the Zone class implementation using the UPPAAL UDBM
-// library for Difference Bound Matrix operations.
+// This file provides the Zone class implementation using HDBM for Difference
+// Bound Matrix operations.
 //
 // ============================================================================
 
 #include "tctl/zone.hpp"
-
-#include <dbm/dbm.h>
-#include <dbm/constraints.h>
 
 #include <algorithm>
 #include <cassert>
 #include <sstream>
 
 namespace tctl {
+
+using ptctlmc::dbm_close;
+using ptctlmc::dbm_constrain;
+using ptctlmc::dbm_delay;
+using ptctlmc::dbm_down;
+using ptctlmc::dbm_empty;
+using ptctlmc::dbm_extrapolate;
+using ptctlmc::dbm_free;
+using ptctlmc::dbm_intersect;
+using ptctlmc::dbm_reset;
+using ptctlmc::dbm_universe;
+using ptctlmc::dbm_zero;
 
 // ── Bound ───────────────────────────────────────────────────────────────────
 
@@ -32,7 +41,7 @@ std::string Bound::to_string() const {
 
 Zone::Zone() : dim_(0), empty_(true) {}
 
-Zone::Zone(cindex_t dim, bool is_empty) 
+Zone::Zone(std::uint32_t dim, bool is_empty) 
     : dim_(dim), dbm_(static_cast<size_t>(dim) * dim), empty_(is_empty) {}
 
 Zone::Zone(const Zone& other)
@@ -70,29 +79,28 @@ Zone::~Zone() = default;
 
 Zone Zone::universe(std::size_t num_clocks) {
     assert(num_clocks > 0);
-    Zone z(static_cast<cindex_t>(num_clocks), false);
+    Zone z(static_cast<std::uint32_t>(num_clocks), false);
     
-    // Use UDBM's dbm_init to create a universe DBM
-    // dbm_init sets: diagonal to <= 0, first row to <= 0 (if CLOCKS_POSITIVE),
-    // everything else to < infinity
-    dbm_init(z.dbm_.data(), z.dim_);
+    // diagonal and row 0 to <= 0 (every clock non-negative), everything else
+    // unbounded above
+    dbm_universe(z.dbm_.data(), static_cast<int>(z.dim_));
     
     return z;
 }
 
 Zone Zone::empty(std::size_t num_clocks) {
     assert(num_clocks > 0);
-    Zone z(static_cast<cindex_t>(num_clocks), true);
+    Zone z(static_cast<std::uint32_t>(num_clocks), true);
     // DBM content doesn't matter for empty zones
     return z;
 }
 
 Zone Zone::zero(std::size_t num_clocks) {
     assert(num_clocks > 0);
-    Zone z(static_cast<cindex_t>(num_clocks), false);
+    Zone z(static_cast<std::uint32_t>(num_clocks), false);
     
-    // Use UDBM's dbm_zero to create a zone with all clocks = 0
-    dbm_zero(z.dbm_.data(), z.dim_);
+    // every clock pinned to 0
+    dbm_zero(z.dbm_.data(), static_cast<int>(z.dim_));
     
     return z;
 }
@@ -108,11 +116,9 @@ Zone Zone::intersect(const Zone& other) const {
     
     Zone result = *this;
     
-    // Use UDBM's dbm_intersection
-    // Returns true if result is non-empty
-    bool non_empty = dbm_intersection(result.dbm_.data(), other.dbm_.data(), dim_);
-    
-    if (!non_empty) {
+    // entrywise min, then re-close; the result may have collapsed
+    dbm_intersect(result.dbm_.data(), other.dbm_.data(), static_cast<int>(dim_));
+    if (dbm_empty(result.dbm_.data(), static_cast<int>(dim_))) {
         return Zone::empty(dim_);
     }
     
@@ -122,16 +128,8 @@ Zone Zone::intersect(const Zone& other) const {
 bool Zone::is_empty() const {
     if (empty_) return true;
     
-    // Check diagonal for negative values (inconsistent zone)
-    for (cindex_t i = 0; i < dim_; ++i) {
-        raw_t diag = dbm_[i * dim_ + i];
-        // If diagonal entry is negative or strict-zero, zone is empty
-        if (diag < dbm_LE_ZERO) {
-            return true;
-        }
-    }
-    
-    return false;
+    // a negative diagonal entry means the zone is inconsistent
+    return dbm_empty(dbm_.data(), static_cast<int>(dim_));
 }
 
 bool Zone::is_subset_of(const Zone& other) const {
@@ -141,7 +139,7 @@ bool Zone::is_subset_of(const Zone& other) const {
     if (other.empty_) return false;
     
     // This <= other iff for all entries, this.dbm[i][j] <= other.dbm[i][j]
-    // In UDBM encoding, smaller raw values are tighter bounds
+    // Smaller raw values are tighter bounds
     for (std::size_t i = 0; i < static_cast<std::size_t>(dim_) * dim_; ++i) {
         if (dbm_[i] > other.dbm_[i]) {
             return false;
@@ -157,9 +155,10 @@ void Zone::add_upper_bound(ClockId clock, std::int32_t bound, bool strict) {
     
     // Constraint: x_clock - x_0 <= bound (or <)
     // This means clock <= bound since x_0 = 0
-    raw_t constraint = dbm_boundbool2raw(bound, strict);
+    const raw_t constraint = Bound{bound, strict}.to_raw();
     
-    bool non_empty = dbm_constrain1(dbm_.data(), dim_, clock, 0, constraint);
+    const bool non_empty = dbm_constrain(dbm_.data(), static_cast<int>(dim_),
+                                         static_cast<int>(clock), 0, constraint);
     if (!non_empty) {
         empty_ = true;
     }
@@ -171,9 +170,10 @@ void Zone::add_lower_bound(ClockId clock, std::int32_t bound, bool strict) {
     
     // Constraint: x_0 - x_clock <= -bound (or <)
     // This means clock >= bound since x_0 = 0
-    raw_t constraint = dbm_boundbool2raw(-bound, strict);
+    const raw_t constraint = Bound{-bound, strict}.to_raw();
     
-    bool non_empty = dbm_constrain1(dbm_.data(), dim_, 0, clock, constraint);
+    const bool non_empty = dbm_constrain(dbm_.data(), static_cast<int>(dim_), 0,
+                                         static_cast<int>(clock), constraint);
     if (!non_empty) {
         empty_ = true;
     }
@@ -185,9 +185,11 @@ void Zone::add_difference_constraint(ClockId clock_x, ClockId clock_y,
     assert(clock_x < dim_ && clock_y < dim_);
     
     // Constraint: x_clock_x - x_clock_y <= bound (or <)
-    raw_t constraint = dbm_boundbool2raw(bound, strict);
+    const raw_t constraint = Bound{bound, strict}.to_raw();
     
-    bool non_empty = dbm_constrain1(dbm_.data(), dim_, clock_x, clock_y, constraint);
+    const bool non_empty = dbm_constrain(dbm_.data(), static_cast<int>(dim_),
+                                         static_cast<int>(clock_x),
+                                         static_cast<int>(clock_y), constraint);
     if (!non_empty) {
         empty_ = true;
     }
@@ -197,42 +199,38 @@ void Zone::reset(ClockId clock) {
     if (empty_) return;
     assert(clock > 0 && clock < dim_);  // Can't reset reference clock
     
-    // Use UDBM's dbm_updateValue to reset clock to 0
-    dbm_updateValue(dbm_.data(), dim_, clock, 0);
+    dbm_reset(dbm_.data(), static_cast<int>(dim_), static_cast<int>(clock));
 }
 
 void Zone::delay() {
     if (empty_) return;
     
-    // Use UDBM's dbm_up for delay operation
-    dbm_up(dbm_.data(), dim_);
+    dbm_delay(dbm_.data(), static_cast<int>(dim_));
 }
 
 void Zone::down() {
     if (empty_) return;
     
-    // Use UDBM's dbm_down for inverse delay
-    dbm_down(dbm_.data(), dim_);
+    dbm_down(dbm_.data(), static_cast<int>(dim_));
 }
 
 void Zone::free(ClockId clock) {
     if (empty_) return;
     assert(clock > 0 && clock < dim_);  // Can't free reference clock
     
-    // Use UDBM's dbm_freeClock to free the clock
-    dbm_freeClock(dbm_.data(), dim_, clock);
+    dbm_free(dbm_.data(), static_cast<int>(dim_), static_cast<int>(clock));
 }
 
 void Zone::extrapolate(const std::vector<std::int32_t>& max) {
     if (empty_) return;
     assert(max.size() == static_cast<std::size_t>(dim_));
-    dbm_extrapolateMaxBounds(dbm_.data(), dim_, max.data());
+    dbm_extrapolate(dbm_.data(), static_cast<int>(dim_), max.data());
 }
 
 // ── Zone: Accessors ─────────────────────────────────────────────────────────
 
 Zone Zone::from_raw(std::size_t dim, const raw_t* m) {
-    Zone z(static_cast<cindex_t>(dim), false);
+    Zone z(static_cast<std::uint32_t>(dim), false);
     std::copy(m, m + dim * dim, z.dbm_.begin());
     return z;
 }
@@ -257,12 +255,12 @@ std::string Zone::to_string() const {
     std::ostringstream oss;
     bool first = true;
     
-    for (cindex_t i = 0; i < dim_; ++i) {
-        for (cindex_t j = 0; j < dim_; ++j) {
+    for (std::uint32_t i = 0; i < dim_; ++i) {
+        for (std::uint32_t j = 0; j < dim_; ++j) {
             if (i == j) continue;
             
             raw_t raw = dbm_[i * dim_ + j];
-            if (raw >= dbm_LS_INFINITY) continue;
+            if (raw >= kRawInfinity) continue;
             
             Bound b = Bound::from_raw(raw);
             

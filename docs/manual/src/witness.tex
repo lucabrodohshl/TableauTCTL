@@ -1,0 +1,61 @@
+\section{Witness automata}\label{sec:witness}
+
+A \texttt{SATISFIABLE} verdict is a claim that a model exists.  With
+\texttt{--model}, \tool hands the model over as well, so the claim can be
+inspected or checked by another tool.
+
+\begin{lstlisting}
+$ ./build/tctl_sat --model 'EF[1,2] p'
+1: SATISFIABLE
+  Witness: 5 locations, 6 transitions, 2 clocks
+  wrote witness_1.{dot,json,xml}
+\end{lstlisting}
+
+\noindent
+Three files are written per satisfiable formula: Graphviz \texttt{.dot} for
+viewing, \texttt{.json} for further processing, and \texttt{.xml} in
+\textsc{Uppaal}'s format.
+
+\subsection{Reading the output}
+
+For \texttt{EF[1,2] p} the extracted automaton is
+
+\begin{lstlisting}
+L0 -> L1 [x_1 < 1]
+L1 -> L3 [x_1 <= 1 && x_1 >= 1]
+L3 -> L4 [x_1 >= 1]
+L4 -> L4 [x_1 >= 1]
+L0 -> L2 ; L2 -> L2
+\end{lstlisting}
+
+\noindent
+with \texttt{p} holding at \texttt{L3}.  Read left to right: let the clock run
+below $1$, step onto $x_1 = 1$ --- inside the window $[1,2]$ --- where $p$
+holds, then continue on a self-loop so that time diverges.  The
+\texttt{L0}--\texttt{L2} branch is the other half of the cover rule, where the
+obligation is discharged rather than pursued.
+
+The self-loop at the end matters: a witness must let time diverge, or the
+run would be Zeno and the semantics would not inspect it.
+
+\subsection{What is guaranteed}
+
+Locations are the marked nodes, labelled by the atoms they assert and carrying
+the deadline of any universal until as an invariant.  Transitions are the
+retained discrete successors, guarded by the target's zone, resetting a
+formula-clock exactly where its modality is launched.  Delay contributes no
+transition: time simply advances inside a location.
+
+Every extracted automaton is checked before it is written --- that it is
+non-blocking, that no location asserts both a proposition and its negation, and
+that guards only read declared clocks.  A failure is reported as
+\texttt{[INVALID]} together with the reason.
+
+\subsection{Limits}
+
+Extraction is a property of the component-based acceptance engine, which is the
+default, so it needs no extra flag.  It is the \emph{legacy} engine that cannot
+do it: \texttt{TCTL\_LEGACY\_LOOP=1} returns a bare verdict and never builds a
+marking, so there is nothing to read an automaton off.  The zone recorded for a node is
+the $\cong_M$-canonical one, so guards are read off the extrapolated zone rather
+than the raw one --- the same zone the procedure itself compares on.

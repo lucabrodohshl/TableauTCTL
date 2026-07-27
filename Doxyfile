@@ -1,0 +1,123 @@
+# Doxygen configuration for the TCTL satisfiability checker.
+#
+#   doxygen Doxyfile          # writes docs/api/html/index.html
+#   make -C docs/api/latex     # and then docs/api/latex/refman.pdf
+#
+# Or, from a configured build tree:
+#
+#   cmake --build build --target docs      # HTML
+#   cmake --build build --target docs-pdf  # HTML + PDF (needs pdflatex)
+
+PROJECT_NAME           = "TCTL Satisfiability Checker"
+PROJECT_BRIEF          = "A tableau decision procedure for TCTL satisfiability"
+PROJECT_NUMBER         =
+
+OUTPUT_DIRECTORY       = docs/api
+CREATE_SUBDIRS         = NO
+OUTPUT_LANGUAGE        = English
+
+INPUT                  = include src README.md
+FILE_PATTERNS          = *.hpp *.cpp *.md
+RECURSIVE              = YES
+EXCLUDE                = src/test.cpp \
+                         src/zoneset_test.cpp
+USE_MDFILE_AS_MAINPAGE = README.md
+
+# The headers carry the interface documentation; the sources carry the rule
+# derivations, which are worth publishing alongside it.
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+EXTRACT_PRIVATE        = YES
+EXTRACT_LOCAL_CLASSES  = YES
+HIDE_UNDOC_MEMBERS     = NO
+INTERNAL_DOCS          = YES
+
+JAVADOC_AUTOBRIEF      = YES
+QT_AUTOBRIEF           = YES
+MULTILINE_CPP_IS_BRIEF = NO
+TAB_SIZE               = 4
+MARKDOWN_SUPPORT       = YES
+AUTOLINK_SUPPORT       = YES
+BUILTIN_STL_SUPPORT    = YES
+SORT_MEMBER_DOCS       = NO
+SORT_BRIEF_DOCS        = NO
+
+# The documentation states the calculus in LaTeX, so formulas must render.
+USE_MATHJAX            = YES
+MATHJAX_VERSION        = MathJax_3
+FORMULA_FONTSIZE       = 10
+
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+HTML_DYNAMIC_SECTIONS  = YES
+GENERATE_TREEVIEW      = YES
+DISABLE_INDEX          = NO
+FULL_SIDEBAR           = NO
+GENERATE_LATEX         = YES
+LATEX_OUTPUT           = latex
+LATEX_CMD_NAME         = lualatex
+MAKEINDEX_CMD_NAME     = makeindex
+COMPACT_LATEX          = NO
+PAPER_TYPE             = a4
+PDF_HYPERLINKS         = YES
+USE_PDFLATEX           = YES
+LATEX_BATCHMODE        = NO
+LATEX_HIDE_INDICES     = NO
+
+# Call graphs need Graphviz; harmless to request, skipped when dot is absent.
+HAVE_DOT               = YES
+DOT_IMAGE_FORMAT       = svg
+INTERACTIVE_SVG        = YES
+CALL_GRAPH             = YES
+CALLER_GRAPH           = NO
+CLASS_GRAPH            = YES
+COLLABORATION_GRAPH    = YES
+INCLUDE_GRAPH          = YES
+INCLUDED_BY_GRAPH      = YES
+
+# UDBM ships C headers the parser does not need to descend into.
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = NO
+SEARCH_INCLUDES        = NO
+
+QUIET                  = NO
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_NO_PARAMDOC       = YES
+
+EXTRACT_ANON_NSPACES   = YES
+
+SOURCE_BROWSER         = YES
+
+REFERENCED_BY_RELATION = YES
+
+REFERENCES_RELATION    = YES
+
+STRIP_CODE_COMMENTS    = NO
+
+SORT_MEMBERS_CTORS_1ST = YES
+
+UML_LOOK               = YES
+
+UML_LIMIT_NUM_FIELDS   = 50
+
+TEMPLATE_RELATIONS     = YES
+
+GROUP_GRAPHS           = YES
+
+GRAPHICAL_HIERARCHY    = YES
+
+DIRECTORY_GRAPH        = YES
+
+DOT_GRAPH_MAX_NODES    = 120
+
+MAX_DOT_GRAPH_DEPTH    = 0
+
+DOT_MULTI_TARGETS      = YES
+
+DOT_NUM_THREADS        = 0
+
+DOT_TRANSPARENT        = YES
+
+GENERATE_LEGEND        = YES

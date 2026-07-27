@@ -171,8 +171,22 @@ public class SatWorkspace implements PluginWorkspace {
             }
             row++;
         }
+        // Completeness footer.  The flat UPPAAL query shapes (E<>, A[], E[],
+        // A<>) are timed-nesting depth 1, for which the tableau is COMPLETE —
+        // including punctual [a,a] time bounds.  Leads-to (p --> q) is depth-2
+        // but emitted unbounded (non-punctual), so it stays in the complete
+        // fragment.  Hence every query this plugin issues is decided completely.
+        c.gridx = 0; c.gridy = row; c.gridwidth = 3; c.weightx = 1;
+        c.insets = new Insets(10, 6, 3, 6);
+        JLabel foot = new JLabel("<html><i>Decisions are complete for these query"
+                + " shapes (flat E&lt;&gt;/A[]/E[]/A&lt;&gt;, incl. punctual [a,a]"
+                + " bounds; leads-to is unbounded). Sound and terminating for all"
+                + " TCTL.</i></html>");
+        foot.setForeground(Color.GRAY);
+        panel.add(foot, c);
+
         JScrollPane sp = new JScrollPane(panel);
-        sp.setPreferredSize(new Dimension(720, Math.min(80 + 28 * results.size(), 480)));
+        sp.setPreferredSize(new Dimension(720, Math.min(110 + 28 * results.size(), 480)));
         JOptionPane.showMessageDialog(root, sp, "Satisfiability results",
                 JOptionPane.PLAIN_MESSAGE);
     }

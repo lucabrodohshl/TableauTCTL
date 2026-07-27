@@ -276,7 +276,7 @@ Parser::TimeInterval Parser::parse_time_interval() {
     TimeBound lower{lower_val, lower_strict, false};
 
     // Validate the interval.  Punctual intervals [a,a] ARE allowed: the
-    // ETAPS2026 procedure is sound and terminating on all of TCTL, including
+    // procedure is sound and terminating on all of TCTL, including
     // punctual constraints (completeness holds for non-punctual TCTL, and for
     // depth-1 TCTL even with punctuality — see docs/PAPER_PORT.md).  Only
     // genuinely empty intervals are rejected.

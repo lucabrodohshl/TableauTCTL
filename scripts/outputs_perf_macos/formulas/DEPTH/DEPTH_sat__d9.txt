@@ -1,2 +1,0 @@
-# DEPTH/DEPTH_sat  d=9  expected=SAT
-AG[0,2] (E(p U[1,3] (AG[0,2] (E(p U[1,3] (AG[0,2] (E(p U[1,3] (AG[0,2] (E(p U[1,3] (AG[0,2] (E(p U[1,3] (AG[0,2] (E(p U[1,3] (AG[0,2] (E(p U[1,3] (AG[0,2] (E(p U[1,3] (AG[0,2] (E(p U[1,3] (q)))))))))))))))))))))))))))

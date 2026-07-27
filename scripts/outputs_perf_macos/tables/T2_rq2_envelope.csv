@@ -1,6 +1,0 @@
-shape,label,tctl,m_range,b_range,max_time_s,max_nodes,max_zones,max_mem_kb,n_solved,n_total,n_timeout
-U1,Reachability (EF),"$\mathrm{EF}_{[0,b]}\,\Phi$",1--1024,1--1048576,6.664096,2049,1025,800,52,52,0
-U2,Safety (AG),"$\mathrm{AG}_{[0,b]}\,\Phi$",1--1024,1--1048576,6.842905,2053,1027,994,52,52,0
-U3,Bounded liveness (AF),"$\mathrm{AF}_{[1,b]}\,\Phi$",1--1024,2--1048576,19.122806,4101,3074,1602,51,51,0
-U4,Leads-to (AG$\to$AF),"$\mathrm{AG}(p\!\to\!\mathrm{AF}_{[1,b]}q)$",1--1024,2--1048576,7.280354,444,317,366,51,51,0
-U5,"E[\,] (EG)","$\mathrm{EG}_{[0,\infty)}\,\Phi$",1--1024,--,6.974726,7,4,147,11,11,0

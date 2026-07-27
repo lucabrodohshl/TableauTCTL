@@ -1,2 +1,0 @@
-# DCM/DCM_unsat  M=8  expected=UNSAT
-AG[0,16] (E(p U[8,16] (q))) & AG[0,17] (!q)

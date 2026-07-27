@@ -1,0 +1,49 @@
+\section{Getting started}
+
+\subsection{Building}
+
+\tool needs a C++20 compiler, CMake $\geq 3.20$,
+Z3, and \texttt{git}.
+
+\begin{lstlisting}
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+\end{lstlisting}
+
+\noindent
+That is the whole process.  The zone layer (HDBM) is header-only and is cloned
+automatically on the first configure if it is not already present.  Z3 is the
+one external library and comes from the system: \texttt{brew install z3} on
+macOS, \texttt{apt install z3 libz3-dev} on Linux.
+
+\subsection{A first check}
+
+\begin{lstlisting}
+$ ./build/tctl_sat 'EF[1,2] p'
+1: SATISFIABLE
+\end{lstlisting}
+
+\noindent
+Each answer is \texttt{SATISFIABLE}, \texttt{UNSATISFIABLE} or
+\texttt{TIMEOUT}, prefixed by the input's line number.
+
+\subsection{What the answers mean}
+
+The procedure is \emph{sound} and \emph{terminating} for all of TCTL: a
+\texttt{SATISFIABLE} verdict always means a witness automaton exists.  It is
+\emph{complete} over the non-punctual fragment --- every interval $[a,b]$ with
+$a<b$ --- and also at temporal nesting depth one even with punctual intervals
+$[a,a]$.
+
+Outside that, a punctual interval nested inside another timed modality is
+accepted and warned about:
+
+\begin{lstlisting}
+$ ./build/tctl_sat 'EG[1,5] (EF[2,2] p)'
+1: warning: punctual interval [a,a] nested inside another timed modality ...
+1: SATISFIABLE
+\end{lstlisting}
+
+\noindent
+There, \texttt{SATISFIABLE} is still reliable; \texttt{UNSATISFIABLE} may be a
+false negative.

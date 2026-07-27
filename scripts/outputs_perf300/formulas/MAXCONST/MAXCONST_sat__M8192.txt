@@ -1,2 +1,0 @@
-# MAXCONST/MAXCONST_sat  M=8192  expected=SAT
-AG[0,16384] (E(p U[8192,16384] (q))) & AG[0,8191] (!q)

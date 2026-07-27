@@ -1,2 +1,0 @@
-# U1/U1_sat  m=1  expected=SAT
-EF[0,4] (q1)

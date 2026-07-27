@@ -1,8 +1,11 @@
 // ============================================================================
-// satisfaction_set.cpp — S_X(mu) satisfaction sets (ETAPS2026 §4.2, §5.1)
+// satisfaction_set.cpp — S_X(mu) satisfaction sets (§4.2, §5.1)
 // ============================================================================
 
 #include "tctl/satisfaction_set.hpp"
+
+#include <memory>
+#include <unordered_map>
 #include "tctl/z3_solver.hpp"
 
 #include <algorithm>
@@ -121,13 +124,130 @@ void free_clock(ZoneSet& zs, ClockId c) {
     zs = std::move(out);
 }
 
-// Joint Z3 consistency of {X_prop ∧ lits}.  UNKNOWN is treated as consistent.
+
+// ── Leaf decision procedure ─────────────────────────────────────────────────
+//
+// Every node the search touches is tested for closure, and every DNF clause of
+// a satisfaction set is tested for consistency.  Both were answered by building
+// a fresh z3::context, which allocates an ast_manager, a rewriter stack and a
+// tactic parameter table -- so context *construction*, not solving, dominated
+// the search.  Two changes remove it from the hot path: the common case is
+// decided by a complementary-literal scan with no solver at all, and the
+// remaining theory queries share one context per formula factory.
+
+// Complementary-literal scan over a node's leaves.  A saturated node carries
+// atoms, negated atoms, True/False and modalities; anything else (arithmetic,
+// or a connective left unsaturated) is beyond this scan and needs the theory.
+class LeafScan {
+public:
+    void add(FormulaId id, const FormulaFactory& f) {
+        if (theory_) return;
+        const FormulaNode& n = f.node(id);
+        switch (n.kind) {
+            case NodeKind::False: clash_ = true; return;
+            case NodeKind::True:  return;
+            case NodeKind::Atom:  pos_.push_back(&n.atom_name); return;
+            case NodeKind::Not: {
+                const FormulaNode& c = f.node(n.children[0]);
+                if (c.kind == NodeKind::Atom)      neg_.push_back(&c.atom_name);
+                else if (c.kind == NodeKind::True) clash_ = true;
+                else if (c.kind != NodeKind::False) theory_ = true;
+                return;
+            }
+            default:
+                // A modality is discharged by the cover rule, never by a leaf
+                // clash, so it neither closes the node nor needs the theory.
+                if (!is_modality(n.kind)) theory_ = true;
+                return;
+        }
+    }
+
+    bool needs_theory() const { return theory_; }
+
+    bool inconsistent() const {
+        if (clash_) return true;
+        for (const std::string* a : pos_)
+            for (const std::string* b : neg_)
+                if (*a == *b) return true;          // p AND NOT p
+        return false;
+    }
+
+private:
+    std::vector<const std::string*> pos_, neg_;
+    bool clash_ = false, theory_ = false;
+};
+
+struct IdVecHash {
+    std::size_t operator()(const FormulaIdVec& v) const noexcept {
+        std::size_t h = 1469598103934665603ull;
+        for (FormulaId id : v) { h ^= static_cast<std::size_t>(id); h *= 1099511628211ull; }
+        return h;
+    }
+};
+
+// One reused theory context per factory, plus memo tables for the two leaf
+// predicates.  Keyed on the factory so a second Tableau run starts clean.
+struct TheorySession {
+    std::uint64_t owner = 0;          // FormulaFactory::serial(), never an address
+    std::uint64_t epoch = 0;          // interning generation the handles belong to
+    std::unique_ptr<Z3Checker> checker;
+    std::unordered_map<std::uint32_t, bool> closed;        // Gamma handle -> closed
+    std::unordered_map<std::uint64_t, bool> consistent;    // clause+context -> consistent
+    std::uint64_t queries = 0;
+};
+
+TheorySession& session(const FormulaFactory& f) {
+    // The memo tables below are keyed by pooled vectors, and the pool is itself
+    // a thread-local destroyed in reverse order of construction.  Touching it
+    // first makes it the OLDER thread-local, so it outlives the tables that
+    // return buffers to it at thread exit.
+    ptctlmc::detail::tls_dbm_pool();
+    static thread_local TheorySession s;
+    // Both tables are keyed by interned set handles, which a reset recycles, so
+    // the epoch invalidates them just as the factory serial does.
+    const std::uint64_t ep = formula_set_epoch();
+    if (s.owner != f.serial() || s.epoch != ep) {
+        s = TheorySession{};
+        s.owner = f.serial();
+        s.epoch = ep;
+    }
+    return s;
+}
+
+// The shared context accumulates ASTs across resets, so it is rebuilt
+// periodically to keep the footprint flat on long runs.
+Z3Checker& theory(const FormulaFactory& f) {
+    TheorySession& s = session(f);
+    ++s.queries;
+    if (!s.checker || s.queries % 50000 == 0) s.checker = std::make_unique<Z3Checker>(f);
+    else                                      s.checker->reset();
+    return *s.checker;
+}
+
+// Joint consistency of {X_prop AND lits}.  UNKNOWN is treated as consistent.
 bool lits_consistent(const std::vector<FormulaId>& lits, const FormulaSet& X,
                      FormulaFactory& f) {
-    Z3Checker z3(f);
-    for (FormulaId x : X.elements()) z3.add_state_formula(x);
-    for (FormulaId l : lits)         z3.add_state_formula(l);
-    return z3.check() != Z3Result::UNSAT;
+    TheorySession& s = session(f);
+    std::size_t lit_hash = 1469598103934665603ull;
+    for (FormulaId l : lits) { lit_hash ^= static_cast<std::size_t>(l); lit_hash *= 1099511628211ull; }
+    const std::uint64_t key = (static_cast<std::uint64_t>(lit_hash) << 32) ^ X.handle();
+    if (auto it = s.consistent.find(key); it != s.consistent.end()) return it->second;
+
+    LeafScan scan;
+    for (FormulaId x : X.elements()) scan.add(x, f);
+    for (FormulaId l : lits)         scan.add(l, f);
+
+    bool result;
+    if (!scan.needs_theory()) {
+        result = !scan.inconsistent();
+    } else {
+        Z3Checker& z3 = theory(f);
+        for (FormulaId x : X.elements()) z3.add_state_formula(x);
+        for (FormulaId l : lits)         z3.add_state_formula(l);
+        result = z3.check() != Z3Result::UNSAT;
+    }
+    session(f).consistent.emplace(key, result);
+    return result;
 }
 
 }  // namespace
@@ -173,11 +293,11 @@ std::int32_t max_constant(FormulaId root, FormulaFactory& f) {
     return max_constant_impl(root, f);
 }
 
-// ── Task 1: leaf region + node closure ──────────────────────────────────────
+// ── Leaf regions and node closure ───────────────────────────────────────────
 
 ZoneSet sat_leaf(FormulaId psi, const FormulaSet& X, FormulaFactory& f,
                  std::size_t num_clocks) {
-    Z3Checker z3(f);
+    Z3Checker& z3 = theory(f);
     for (FormulaId x : X.elements()) z3.add_state_formula(x);
     bool supported = z3.add_state_formula(psi);
     if (!supported)
@@ -191,43 +311,28 @@ ZoneSet sat_leaf(FormulaId psi, const FormulaSet& X, FormulaFactory& f,
 // decide consistency by a complementary-literal scan and skip Z3 entirely —
 // Z3 context construction per node is otherwise the dominant cost.
 bool node_closed(const FormulaSet& gamma, FormulaFactory& f) {
-    std::vector<std::string> pos, neg;
-    bool has_arith = false;
-    for (FormulaId g : gamma.elements()) {
-        const FormulaNode& n = f.node(g);
-        switch (n.kind) {
-            case NodeKind::False: return true;
-            case NodeKind::True:  break;
-            case NodeKind::Atom:  pos.push_back(n.atom_name); break;
-            case NodeKind::Not: {
-                const FormulaNode& c = f.node(n.children[0]);
-                if (c.kind == NodeKind::Atom) neg.push_back(c.atom_name);
-                else if (c.kind != NodeKind::True && c.kind != NodeKind::False)
-                    has_arith = true;   // ¬(arithmetic) — let Z3 handle
-                else if (c.kind == NodeKind::True) return true;  // ¬true
-                break;
-            }
-            default:
-                if (is_modality(n.kind)) break;   // covered elsewhere, not a leaf clash
-                has_arith = true;                 // arithmetic / other predicate
-        }
+    TheorySession& s = session(f);
+    const std::uint32_t key = gamma.handle();
+    if (auto it = s.closed.find(key); it != s.closed.end()) return it->second;
+
+    LeafScan scan;
+    for (FormulaId g : gamma.elements()) scan.add(g, f);
+
+    bool result;
+    if (!scan.needs_theory()) {
+        result = scan.inconsistent();
+    } else {
+        Z3Checker& z3 = theory(f);
+        bool any = false;
+        for (FormulaId g : gamma.elements())
+            if (z3.add_state_formula(g)) any = true;
+        result = any && z3.check() == Z3Result::UNSAT;
     }
-    if (!has_arith) {
-        for (const std::string& a : pos)
-            for (const std::string& b : neg)
-                if (a == b) return true;          // p ∧ ¬p
-        return false;
-    }
-    // Arithmetic present: fall back to the Z3 theory oracle.
-    Z3Checker z3(f);
-    bool any = false;
-    for (FormulaId g : gamma.elements())
-        if (z3.add_state_formula(g)) any = true;
-    if (!any) return false;
-    return z3.check() == Z3Result::UNSAT;
+    session(f).closed.emplace(key, result);
+    return result;
 }
 
-// ── Task 2: fixpoints ────────────────────────────────────────────────────────
+// ── Fixpoints ───────────────────────────────────────────────────────────────
 
 namespace {
 
@@ -274,11 +379,10 @@ ZoneSet release_region(const ZoneSet& phiR, const ZoneSet& psiR, const Interval&
 
 namespace {
 // Cache key for S_X(mu, X): mu plus the sorted context formula ids.
-std::string sat_key(FormulaId mu, const FormulaSet& X) {
-    std::string k = std::to_string(mu);
-    k += '#';
-    for (FormulaId x : X.elements()) { k += std::to_string(x); k += ','; }
-    return k;
+// (mu, X) as one word: X is interned, so its identity is already a 32-bit
+// handle and the key needs no formatting.
+std::uint64_t sat_key(FormulaId mu, const FormulaSet& X) {
+    return (static_cast<std::uint64_t>(mu) << 32) | X.handle();
 }
 
 // holds_region threaded with the S_X cache.
@@ -320,7 +424,7 @@ ZoneSet satisfaction_set(FormulaId mu, const FormulaSet& X, const ClockMap& cmap
                          std::size_t num_clocks,
                          const std::vector<std::int32_t>& max, FormulaFactory& f,
                          SatCache& cache) {
-    const std::string key = sat_key(mu, X);
+    const std::uint64_t key = sat_key(mu, X);
     if (auto it = cache.find(key); it != cache.end()) return it->second;
 
     const FormulaNode& n = f.node(mu);

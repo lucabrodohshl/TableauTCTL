@@ -1,2 +1,0 @@
-# U4/U4_sat  b=64  expected=SAT
-AG[0,inf) ((p1 | p2 | p3 | p4) -> AF[1,64] (q))

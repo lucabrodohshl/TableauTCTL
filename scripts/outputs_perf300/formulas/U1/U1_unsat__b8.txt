@@ -1,2 +1,0 @@
-# U1/U1_unsat  b=8  expected=UNSAT
-EF[1,8] (q) & AG[0,8] (!q)

@@ -1,2 +1,0 @@
-# U2/U2_sat  b=1048576  expected=SAT
-AG[0,1048576] (p1 | p2 | p3 | p4)

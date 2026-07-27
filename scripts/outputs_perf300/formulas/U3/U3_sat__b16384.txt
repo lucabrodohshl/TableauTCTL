@@ -1,2 +1,0 @@
-# U3/U3_sat  b=16384  expected=SAT
-AF[1,16384] (q1 | q2 | q3 | q4)

@@ -1,2 +1,0 @@
-# DCM/DCM_sat  M=4  expected=SAT
-AG[0,8] (E(p U[4,8] (q))) & AG[0,3] (!q)

@@ -1,2 +1,0 @@
-# U2/U2_sat  m=1  expected=SAT
-AG[0,4] (p1)
