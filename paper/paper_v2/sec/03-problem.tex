@@ -1,0 +1,68 @@
+\section{Where the cost is}
+\label{sec:problem}
+
+The bound $2^{O(n)}\cdot M^{O(n^{2})}$ has two factors. We separate them by
+counting, for a run, the number of distinct \emph{discrete shapes} --- nodes
+taken up to their zone and their edge markers --- against the number of nodes.
+
+\begin{table}[t]
+\centering
+\caption{Which factor is multiplying. The first row is a conjunction of $16$
+independent bounded eventualities, the others nested $\AG(\EF\cdots)$ towers.}
+\label{tab:regimes}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+instance & shapes & nodes & zones per shape \\
+\midrule
+$16$ conjoined $\EF_{[a_j,b_j]}\,p_j$      & $262\,204$ & $263\,162$ & $\mathbf{1.00}$ \\
+depth-$7$ $\AG(\EF_{[0,2]}\cdots)$ tower   & $5\,841$   & $10\,785$  & $1.85$ \\
+$4$-level tower, varied windows            & $2\,635$   & $17\,370$  & $6.59$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:regimes} is the paper's starting point. On the most expensive
+instance the zone contributes nothing: one zone per discrete shape, and the
+$263\,162$ nodes are $263\,162$ distinct discrete states. Abstraction,
+widening and inclusion all act on the third column, and on the row that costs
+the most the third column is $1.00$.
+
+\paragraph{What the discrete states are.} Instrumenting the pursuit vector on a
+depth-$6$ tower gives at most $12$ simultaneous pursuits, exactly two per
+nesting level, with no modality duplicated, and a histogram of $|P|$ over the
+nodes of $5, 22, 77, 172, 323, 545, 824, 952, 903, 803, 485, 167, 25$:
+binomial, peaked in the middle. That is the signature of a search ranging over
+the \emph{subsets} of a set of independent obligations. For
+$\bigwedge_{j<k}\EF_{[a_j,b_j]}\,p_j$ the reading is immediate --- each
+conjunct is outstanding or witnessed, the conjuncts do not interact, and the
+node records the whole vector of $k$ bits. Measured node counts follow:
+$1\,247$, $16\,863$, $66\,179$, $262\,975$, $1\,049\,619$ for
+$k=8,12,14,16,18$.
+
+\paragraph{There is nothing to learn from.} The natural import from SAT and SMT
+is conflict-driven search. Counting how nodes end says it has no purchase.
+
+\begin{table}[t]
+\centering
+\caption{How nodes end. Conflict-driven techniques need the middle columns.}
+\label{tab:conflicts}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+instance & accepted & rejected & closed \\
+\midrule
+$16$ conjoined eventualities (SAT)  & $262\,975$ & $\mathbf{0}$ & $\mathbf{0}$ \\
+$4$-level tower (SAT)               & $12\,928$  & $1\,014$ & $790$ \\
+depth-$6$ tower (SAT)               & $4\,281$   & $609$   & $385$ \\
+$\AG(\EF_{[3,4]}p)\wedge\AG_{[4,5]}\neg p$ (UNSAT)
+                                    & $161$      & $108$   & $53$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+On the hardest instance every node is accepted and none is closed. The search
+is not thrashing through contradictory subtrees that a learned clause would cut;
+it is enumerating states that are all consistent. Asking a technique for
+\emph{failing faster} to speed up a search that never fails is the wrong
+request. What is needed is a technique for not enumerating a product --- and one
+exists in the same literature, in model counting rather than in
+solving~\cite{BacchusDalmaoPitassi2003,SangBeameKautz2005}.

@@ -1,0 +1,91 @@
+\section{Evaluation}
+\label{sec:eval}
+
+Two searches are selectable at the command line: \code{v1} is the baseline with
+the optional optimisations off, \code{v2} adds both decomposition forms and goal
+subsumption. Both carry the soundness fix of \S\ref{sec:engineering}, which is
+not an optimisation. All measurements are single-threaded on one machine; the
+medians of the suite families sit near $8$--$10$\,ms and are dominated by process
+start-up, so only $p95$, maxima and the large instances carry signal.
+
+\paragraph{The family the theorem targets.}
+Table~\ref{tab:wide} is $\bigwedge_{j<k}\EF_{[2+j,4+j]}\,p_j$.
+
+\begin{table}[t]
+\centering
+\caption{Independent obligations. The ratio is not a constant: the change is
+$O(2^{k})\to O(k)$, so any single figure quoted is a statement about which $k$
+was measured.}
+\label{tab:wide}
+\begin{tabular}{@{}rrrrrr@{}}
+\toprule
+$k$ & \code{v1} nodes & \code{v1} time & \code{v2} nodes & \code{v2} time & ratio\\
+\midrule
+$12$ & $16\,863$      & $0.08$\,s  & $551$    & $0.01$\,s & $13\times$ \\
+$16$ & $262\,975$     & $1.35$\,s  & $192$    & $0.00$\,s & $349\times$ \\
+$18$ & $1\,049\,619$  & $9.35$\,s  & $1\,249$ & $0.01$\,s & $1058\times$ \\
+$20$ & $4\,195\,583$  & $31.4$\,s  & $240$    & $0.00$\,s & $\mathbf{8309\times}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{The two forms compose.} They see different things.
+Table~\ref{tab:compose} adds \code{buried}, which is
+$\EF_{[0,1]}(\bigwedge_j \EF_{[a_j,b_j]}p_j)$: the independence is real but sits
+under a modality, so the root is not a conjunction and the preprocessing form
+returns the undecomposed count exactly. Running both takes the better of the two
+everywhere.
+
+\begin{table}[t]
+\centering
+\caption{Nodes under each form. \code{buried} is invisible to the root split;
+\code{wide} is where the per-node form pays bookkeeping the root split does not.}
+\label{tab:compose}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+ & none & root only & per-node & both \\
+\midrule
+\code{wide} $k{=}16$   & $262\,975$   & $192$      & $941$   & $\mathbf{192}$ \\
+\code{wide} $k{=}20$   & $4\,195\,583$& $240$      & $1\,869$& $\mathbf{240}$ \\
+\code{buried} $k{=}14$ & $66\,181$    & $66\,181$  & $731$   & $\mathbf{731}$ \\
+\code{mixed} $k{=}14$  & $132\,774$   & $176$      & $750$   & $\mathbf{176}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Verdicts.} A suite of $5000$ formulas over ten structural families
+carries expected verdicts wherever a window-containment argument settles them.
+\code{v1} and \code{v2} agree on all $5000$, and neither contradicts an
+expectation. A $700$-case sweep over
+$\AG(\EF_{[a,b]}p)\wedge\AG_{[c,d]}\neg p$, whose verdict is decided by an
+inequality on $(a,b,c,d)$, is exact for both. The regression suite passes
+$861/861$ checks under each. A witness automaton is extracted and structurally
+validated for all $4141$ satisfiable instances.
+
+\paragraph{The cost where it does not fire.} We wrote a second, adversarial
+suite specifically to break \code{v2}: families one symbol away from
+decomposing, chains whose transitive closure is a single component, deep towers,
+constants across six orders of magnitude, punctual intervals, and conjunction
+widths up to $80$. On the $1838$ instances that completed it found no wrong
+verdict, no crash, and no timeout that \code{v1} did not also hit; the only
+disagreements were $56$ instances where \code{v1} timed out at $30$\,s and
+\code{v2} answered in milliseconds.
+
+What it did find is a tax. On the families built so that decomposition never
+fires, \code{v2} was $9$--$11\%$ slower, consistently enough at $0.1$--$0.3$\,s
+runtimes not to be measurement noise. Hoisting three per-call allocations out of
+the partition, indexing the symbol memo by dense formula identifier, and the two
+changes noted in \S\ref{sec:algorithm} bring it to $2$--$6\%$: the ratio on a
+depth-$9$ tower moves from $0.91$ to $0.98$, and on the shared-symbol family from
+$0.89$ to $0.94$.
+
+\paragraph{Threats to validity.} The family that decomposes is one we wrote, and
+it has exactly the shape the technique targets; the defensible claim is about
+the mechanism and not about a speed-up on a workload. Conjunctions of
+independent properties are common in practice --- a safety property and a
+liveness property over different signals --- but this suite is not evidence for
+how common. The root-level form is preprocessing, and splitting a top-level
+conjunction is close to running the tool once per conjunct; we report it
+separately for that reason. Finally, witness extraction is disabled under
+decomposition, a witness for a decomposed node being the product of its
+components' automata, which the extractor does not build.

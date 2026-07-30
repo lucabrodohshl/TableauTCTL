@@ -1,0 +1,63 @@
+\section{The algorithm}
+\label{sec:algorithm}
+
+\paragraph{Partitioning a node.} Each goal, each context formula and each live
+pursuit is one \emph{item}. Union--find over the items joins two whenever their
+symbol sets meet; that is \ref{S1}. Symbol sets are bitmasks, one bit per symbol
+of the input, memoised per formula. The test compares items at every node whose
+shape is new, and as sets of strings it measured about a third of the run on
+formulas that never split; as words it is one \code{\&}. Union goes through a
+symbol-to-item index rather than over item pairs, which is
+$O(m\cdot\text{symbols per item})$ rather than $O(m^{2})$.
+
+\paragraph{Clock ownership, and a bug.} Ownership is read off the
+\emph{formulas}, not off the live pursuits: a modality still sitting in \Gam
+already owns its formula-clock. Deriving ownership from pursuits alone leaves
+such a clock owned by nobody, and the construction then frees it out of every
+component's zone --- a weakening. It is exactly what made
+$\AG(\EF_{[2,4]}p)\wedge\AG_{[4,7]}\neg p$ come back satisfiable: freeing the
+onset clock erases the constraint that distinguishes one onset from another. A
+clock owned by more than one group, or constrained and owned by none, aborts the
+split.
+
+\paragraph{The symbols are not only propositions.} A data variable couples its
+constraints exactly as an atom does. $\{x>3\}$ and $\{x<2\}$ mention no
+proposition, and grouping by propositions alone puts them in different
+components, each satisfiable alone. Twelve regression checks of the form
+$\{x\le 5\}\wedge\{x\ge 10\}$ failed on that, and no instance of the $5000$-formula
+suite did, having no data variables in it: a gap in our own benchmark, found by
+the regression suite rather than by the benchmark.
+
+\paragraph{Degenerate components.} A component mentioning no symbol at all --- a
+bare $\top$ or $\bot$ --- is folded into the first real one rather than split
+off. Peeling those off is all cost and no benefit.
+
+\paragraph{Deciding, and caching.} Each component is keyed on its node key and
+looked up in a cache shared with every sub-search; on a miss a fresh search runs
+from that node and stores the verdict, and one false component rejects. The
+cache is what makes this component \emph{caching} rather than component
+splitting: the same component recurs under many parents, which is precisely why
+the undecomposed search enumerated their product. Recursion terminates because
+every component is strictly smaller than the node it came from.
+
+\paragraph{Hooking into the search.} The test runs before a node is first
+visited. A node that splits is marked settled with the conjunction of its
+components' verdicts and is never expanded: it becomes a leaf, exactly like a
+node whose own strongly connected component has already closed, which the search
+already knows how to consume. No cycle can run through it, which is sound
+because Corollary~\ref{cor:search} decides it outright.
+
+\paragraph{Not re-asking.} Whether a node splits depends only on which formulas
+it carries, never on its zone, so a shape that did not split never will and its
+signature is remembered. Shapes repeat heavily --- a nested tower has roughly
+half as many shapes as nodes --- and without this the partition is recomputed at
+each of them. The signature is combined commutatively so that no sort is needed,
+since it is computed before the memo can be consulted and so is paid at every
+node; a collision can only make two shapes look alike and skip an available
+split, which costs an optimisation and never a verdict.
+
+\paragraph{At the root.} The same theorem applied once to the top-level
+conjunction is a preprocessing step, and it pays nothing per node. It sees
+nothing whose independence only emerges during the search. The two forms are
+complementary and compose: \S\ref{sec:eval} reports that running both takes the
+better of the two on every shape measured.

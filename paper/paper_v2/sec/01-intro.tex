@@ -1,0 +1,68 @@
+\section{Introduction}
+\label{sec:intro}
+
+Satisfiability for TCTL asks whether a formula has a timed model at all, rather
+than whether a given one satisfies it. A tableau answers the question by
+building an AND--OR graph whose nodes carry a set of goals and a zone, and by
+looking for a successful marking of that graph~\cite{Clarke99,tableau_ctl}. The
+graph is finite because zones are compared modulo a max-constant abstraction,
+and its size is bounded by $2^{O(n)}\cdot M^{O(n^{2})}$ for a formula of size
+$n$ over constants up to $M$.
+
+That bound has two factors, and the folklore reading is that the second is the
+one to attack: refine the abstraction, widen more aggressively, subsume zones
+against one another. We began there and got nowhere, so we measured instead.
+Counting distinct \emph{discrete} states against total nodes separates the two
+factors cleanly, and on the family that costs the most the ratio is $1.00$.
+Every node is a distinct combination of outstanding obligations, carrying one
+zone. Nothing in the symbolic machinery can help, because the symbolic part is
+not doing the multiplying.
+
+What is multiplying is a product of independent obligations. A conjunction of
+$k$ bounded eventualities over disjoint atoms has $2^{k}$ combinations of which
+are still outstanding, and the search enumerates all of them, though the $k$
+questions never interact. The same shape is what a verification engineer writes
+when checking several properties of a system at once.
+
+\paragraph{Contribution.} We show the enumeration is avoidable, and by how
+much.
+
+\begin{itemize}
+\item A \emph{decomposition theorem} (\S\ref{sec:theory}): if a node's goals,
+      context and pursuits split into groups mentioning disjoint symbols, the
+      node is realisable exactly when each group is. Two directions, one by
+      projecting a model and one by taking a product of timed automata in which
+      delays synchronise and edges interleave. The theorem needs no condition
+      relating the groups' clocks in the zone, which we had expected it to and
+      state explicitly because the expectation is natural and wrong.
+\item An algorithm (\S\ref{sec:algorithm}) that applies it at every node, with
+      a cache keyed on the component, so a component recurring under many
+      parents is decided once. Two side conditions carry the weight: clock
+      ownership must be read off the formulas rather than the live pursuits,
+      and the symbols that couple two groups include data variables, not only
+      atomic propositions. Getting either wrong makes an unsatisfiable formula
+      satisfiable, and we report both as measured failures.
+\item A measurement-driven account (\S\ref{sec:problem}, \S\ref{sec:eval}) of
+      what does \emph{not} work: conflict-driven search, zone subsumption,
+      coarser $LU$ abstraction, and four more. Each was implemented and
+      measured rather than argued about, and each is reported with the
+      structural reason it failed.
+\end{itemize}
+
+\paragraph{Results.} On conjunctions of independent obligations the growth
+changes from $2^{k}$ to $O(k)$: at $k=20$, $4\,195\,583$ nodes and $31.4$
+seconds become $240$ nodes and under ten milliseconds. On a suite of $5000$
+formulas across ten families the decomposing search returns exactly the same
+verdicts as the baseline, and it costs between two and six per cent on formulas
+that do not decompose. Independently of the decomposition, profiling removed a
+quartic step and two redundant closures from the zone layer, which is worth a
+factor of seven on its own.
+
+\paragraph{A bug, and how it was found.} The evaluation harness was built to
+carry expected verdicts wherever a window-containment argument settles them.
+It reported $39$ wrong answers on a $700$-case sweep. The cause was in the
+calculus rather than the implementation: the delay rule split a clock only at
+its own window endpoints, so the onsets whose demand is unsatisfiable sat inside
+a cell that also held satisfiable ones. We give the fix in
+\S\ref{sec:engineering}. It is the reason we think a satisfiability tool of this
+kind needs an oracle-carrying benchmark and not only a regression suite.

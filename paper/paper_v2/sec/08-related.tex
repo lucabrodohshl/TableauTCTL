@@ -1,0 +1,42 @@
+\section{Related work}
+\label{sec:related}
+
+\paragraph{Component caching.} The technique is imported from exact model
+counting, where a DPLL search that splits the residual formula into
+variable-disjoint components and caches their counts is what makes
+\#SAT tractable on structured
+inputs~\cite{BacchusDalmaoPitassi2003,SangBeameKautz2005}. The transfer is not
+mechanical. There the components partition a propositional formula and the
+results are multiplied; here they partition a tableau node carrying a symbolic
+zone, the results are conjoined, and soundness needs a model-theoretic argument
+(Theorem~\ref{thm:decomp}) because the components must be recombined into a
+single timed model that agrees with all of them about the passage of time. The
+clock-ownership condition has no counterpart in the propositional setting.
+
+\paragraph{What did not transfer.} Clause learning, backjumping and the rest of
+the conflict-driven apparatus~\cite{BiereEtAl2009Handbook} require conflicts,
+and \S\ref{sec:problem} measures none on the instances that cost the most. We
+record this because the reflex when a search is slow is to reach for CDCL, and
+here that reflex is measurably wrong.
+
+\paragraph{Zone abstractions.} Coarser abstractions than max-constant
+extrapolation are standard, in particular the $LU$
+bounds~\cite{BehrmannBLP2006Lower} and their
+refinements~\cite{HerbreteauSW2012Better}. They do not apply here as the
+construction stands: the split points a clock is tested against are used as
+equalities by the delay rule, so a clock's lower and upper bound sets coincide
+and $\mathrm{Extra}_{LU}$ collapses to $\mathrm{Extra}_{M}$. Reworking the
+splitting to be one-sided is the prerequisite, and we have not done it.
+Inclusion-based subsumption of zones, the passed-list test of a reachability
+tool, cannot fire either: the several zones a discrete state carries are the
+disjoint cells the delay rule produces, never nested ones.
+
+\paragraph{TCTL satisfiability.} The decision problem and its complexity are
+classical~\cite{AlurCourcoubetisDill1990,AlurHenzinger1994ReallyTemporal}, with
+tree-automata constructions giving matching upper
+bounds~\cite{LaTorreNapoli2001TimedTreeAutomata}; discrete-time quantitative
+CTL has its own tableau
+tradition~\cite{EmersonEtAl1992QuantitativeTemporalReasoning}. The present paper
+is not about the decision problem but about the cost of one construction for it,
+and everything here applies to any tableau whose nodes carry an independent
+set of obligations.

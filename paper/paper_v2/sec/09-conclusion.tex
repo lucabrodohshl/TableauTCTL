@@ -1,0 +1,27 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+The cost of a zone-based TCTL tableau has two sources, and they need different
+treatment. We measured which one dominates, found that on the most expensive
+instances it is the discrete one and that the symbolic machinery contributes a
+factor of exactly $1.00$, and removed a large part of the discrete factor with a
+decomposition theorem imported in spirit from model counting. Conjunctions of
+independent obligations go from $2^{k}$ to $O(k)$.
+
+What we could not move is nesting. An $\AG$ inside an $\EF$ inside an $\AG$
+shares atoms all the way down, decomposition does not apply, and eight further
+attempts --- zone subsumption, $LU$ abstraction, forced stops, collapsing the
+pursuit record, goal subsumption, encoding $\AG$ as context, and treating
+single-polarity atoms as non-linking --- either failed outright or bought a few
+per cent. Several failed instructively and are documented with the formula that
+breaks them. Our present belief is that the remaining growth on those shapes is
+the genuine $2^{O(n)}$ of the bound.
+
+Two methodological points seem worth more than the speed-ups. First, the
+profile was wrong three times running: the bottleneck was never where the
+literature's emphasis on abstraction suggested, and each time it moved after
+being fixed. Second, an evaluation suite that carries expected verdicts found a
+soundness bug in the calculus that a regression suite of the usual kind had not,
+and a regression check found a soundness bug in the decomposition that the
+evaluation suite could not, because the suite had no data variables in it. The
+two are complementary and we would not now build one without the other.

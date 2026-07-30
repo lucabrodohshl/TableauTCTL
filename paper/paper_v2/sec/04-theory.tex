@@ -1,0 +1,106 @@
+\section{Decomposition}
+\label{sec:theory}
+
+Write $\atoms{\varphi}$ for the atomic propositions and data variables occurring
+in $\varphi$, and $\clocks{\varphi}$ for the formula-clocks of the timed
+modalities occurring in it. For a set $C$ of clocks, $\proj{Z}{C}$ is the zone
+obtained by existentially quantifying away the clocks outside $C$.
+
+\begin{definition}[Split]\label{def:split}
+A node $N=\tup{\Gam}{\Ctx}{Z}{\obl}{\Dl}$ with pursuit set $P$ \emph{splits}
+into $N_1,\dots,N_r$ ($r\ge 2$) when
+\begin{enumerate}[label=\textup{(S\arabic*)},ref=\textup{(S\arabic*)}]
+\item\label{S1} \Gam, \Ctx and $P$ are partitioned among the $N_i$, and
+      $\atoms{N_i}\cap\atoms{N_j}=\emptyset$ for $i\ne j$;
+\item\label{S2} every clock constrained in $Z$ belongs to exactly one
+      $\clocks{N_i}$;
+\end{enumerate}
+and $N_i$ carries $\proj{Z}{\clocks{N_i}}$, the deadlines on its own clocks, and
+the phase of $N$.
+\end{definition}
+
+There is deliberately no condition on the zone, and this is worth dwelling on
+because the natural guess is that there should be. A reset leaves finite
+difference constraints in the matrix, so $Z$ can relate $x$ and $y$ even when
+the modalities owning them share no atom; it is tempting to require $Z$ to be
+the product of its projections and to refuse the split otherwise. That condition
+is sufficient and unnecessary --- Remark~\ref{rem:noproduct} --- and we
+implemented it before noticing.
+
+\begin{theorem}[Decomposition]\label{thm:decomp}
+If $N$ splits into $N_1,\dots,N_r$, then $N$ is realisable if and only if every
+$N_i$ is.
+\end{theorem}
+
+\begin{proof}
+($\Rightarrow$) Let $\mathcal T$ realise $N$ at location $s$. Fix $i$ and let
+$\mathcal T_i$ be $\mathcal T$ with its labelling restricted to $\atoms{N_i}$
+and its clocks to $\clocks{N_i}$. Every formula of $N_i$ mentions only atoms of
+$\atoms{N_i}$ and is evaluated against clocks of $\clocks{N_i}$, and the
+satisfaction relation inspects a configuration only through those two, so the
+truth of each is unchanged by the restriction; the runs and their delays are
+unchanged, so \Runsinf is the same set and the path quantifiers range over it
+unchanged. Each $\nu\in\proj{Z}{\clocks{N_i}}$ extends by definition of the
+projection to some $\nu'\in Z$, and $\mathcal T,(s,\nu')$ satisfies the formulas
+of $N_i$, hence so does $\mathcal T_i,(s,\nu)$.
+
+($\Leftarrow$) Let $\mathcal T_i$ be induced by a timed automaton
+$\mathcal A_i$ over $\clocks{N_i}$ realising $N_i$. The clock sets are pairwise
+disjoint, so form the product $\mathcal A=\prod_i\mathcal A_i$: locations are
+tuples, the invariant of a tuple is the conjunction of the components'
+invariants, the labelling is the union of theirs --- consistent, the atom sets
+being disjoint --- and edges interleave, each edge of one component lifting to
+an edge of the product that leaves the other components' locations and clocks
+untouched. Delays synchronise, and are admissible because each component's
+invariant permits them.
+
+\emph{Runs project and lift.} A run of $\mathcal A$ projects to a run of each
+$\mathcal A_i$ with the same delays, so it is non-Zeno exactly when its
+projections are. Conversely a run of one component and arbitrary runs of the
+others merge into a run of the product projecting to each: refine the delay
+sequences to their common refinement and interleave the discrete steps
+consistently with time. Non-blockingness of the components gives
+non-blockingness of the product, so \Runsinf is non-empty everywhere.
+
+\emph{Truth is componentwise.} By induction on $\varphi$ with
+$\atoms{\varphi}\subseteq\atoms{N_i}$. Literals are the definition of the
+product labelling and the boolean cases are immediate. For a formula under \Ev,
+take the witnessing run of $\mathcal A_i$ and lift it against arbitrary runs of
+the others; for one under \Av, take any run of the product and project it, where
+the hypothesis applies. A timed modality adds only a constraint on the elapsed
+time of a position, which projection preserves because delays are shared.
+
+\emph{The zone.} Let $\nu\in Z$. By \ref{S2} each coordinate belongs to exactly
+one component, so $\nu$ decomposes as $(\nu_1,\dots,\nu_r)$ with
+$\nu_i\in\proj{Z}{\clocks{N_i}}$, and $(s_i,\nu_i)$ realises $N_i$'s formulas.
+By the previous paragraph the product configuration satisfies every formula of
+every $N_i$, that is, all of $\Gam\cup\Ctx$. As $\nu$ was arbitrary,
+$\mathcal A$ realises $N$. \qed
+\end{proof}
+
+\begin{remark}[No zone-product condition is needed]\label{rem:noproduct}
+Let $Z$ be constrained by $x-y<1$ with $x$ and $y$ in different components. Both
+projections are universal and $Z$ is not, so $Z$ is a proper subset of the
+product of its projections. Splitting is still sound. Forwards, a valuation of a
+projection extends to one of $Z$ and a component's formulas read only its own
+clocks. Backwards, each component is asked to be realisable over its
+\emph{projection}, which is the larger demand: $Z\subseteq\bigcap_i
+\proj{Z}{\clocks{N_i}}$, so a product model meeting the projections meets $Z$ a
+fortiori.
+
+Dropping the condition costs nothing and buys nothing measurable: across the
+whole suite it never once blocked a split that \ref{S1} and \ref{S2} allowed,
+and node counts are identical with and without it. We report it because the
+condition is the natural first guess and a reader will otherwise wonder why it
+is absent.
+\end{remark}
+
+\begin{corollary}\label{cor:search}
+If $N$ splits, its verdict in the tableau is the conjunction of the verdicts of
+its components.
+\end{corollary}
+
+\begin{proof}
+The calculus is sound and complete, so a node lies in the greatest successful
+marking exactly when it is realisable; apply Theorem~\ref{thm:decomp}. \qed
+\end{proof}

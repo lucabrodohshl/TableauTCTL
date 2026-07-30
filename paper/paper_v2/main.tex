@@ -1,0 +1,84 @@
+% ===========================================================================
+%  "A Faster Tableau for TCTL"
+%
+%  Companion to the tableau paper: what makes the search expensive, which half
+%  of that is an artefact of representation, and how to remove it.
+%
+%  Build: latexmk -pdf main.tex
+% ===========================================================================
+\documentclass[runningheads]{llncs}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xspace}
+\usepackage[inline]{enumitem}
+\usepackage[hidelinks]{hyperref}
+
+% ---- notation -------------------------------------------------------------
+\newcommand{\kI}{\ensuremath{I}\xspace}
+\newcommand{\Gam}{\ensuremath{\Gamma}\xspace}
+\newcommand{\Ctx}{\ensuremath{\mathcal{X}}\xspace}
+\newcommand{\obl}{\ensuremath{\mathcal{O}}\xspace}
+\newcommand{\Dl}{\ensuremath{\mathcal{D}}\xspace}
+\newcommand{\atoms}[1]{\mathrm{at}(#1)}
+\newcommand{\clocks}[1]{\mathrm{cl}(#1)}
+\newcommand{\proj}[2]{#1{\downarrow}#2}
+\newcommand{\Runsinf}{\ensuremath{\mathrm{Runs}^{\infty}}\xspace}
+\newcommand{\tup}[5]{\ensuremath{\langle #1,#2,#3,#4,#5\rangle}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\EF}{\ensuremath{\mathrm{EF}}\xspace}
+\newcommand{\AG}{\ensuremath{\mathrm{AG}}\xspace}
+\newcommand{\Ev}{\ensuremath{\mathrm{E}}\xspace}
+\newcommand{\Av}{\ensuremath{\mathrm{A}}\xspace}
+
+\begin{document}
+
+\title{A Faster Tableau for TCTL}
+\author{}
+\institute{}
+\maketitle
+
+\begin{abstract}
+A zone-based tableau for TCTL satisfiability is exponential in the size of the
+formula, and in practice the exponent has two quite different sources. We
+separate them by measurement: on the family that costs the most, the symbolic
+part of a node contributes nothing at all --- there is exactly one zone per
+distinct discrete state --- and the quarter of a million nodes are a quarter of
+a million combinations of which obligations are still outstanding. No
+abstraction, no widening and no inclusion test can reduce that number, because
+there is nothing there to abstract.
+
+We show that a large part of it is an artefact of representation. When a node's
+goals fall into groups that mention disjoint symbols, those groups have disjoint
+formula-clocks, and the node is realisable exactly when each group is; deciding
+them separately replaces a product of state spaces by a sum. The theorem needs
+no condition on the zone, which we had expected it to. Applied at every node
+with a cache, and at the root as a preprocessing step, it turns $2^{k}$ into
+$O(k)$ on conjunctions of independent obligations: at $k=20$, $4\,195\,583$
+nodes and $31.4$ seconds become $240$ nodes and under ten milliseconds.
+
+We report what the same measurements rule out. Conflict-driven search, the
+obvious import from SAT, has nothing to work on: on the hardest instance every
+node is accepted and none is closed. Zone inclusion cannot fire, because the
+several zones a discrete state carries are disjoint cells rather than nested
+ones. We also record six further attempts that failed, with the reason each
+failed, and a soundness bug the evaluation harness found in the process.
+\end{abstract}
+
+\input{sec/01-intro}
+\input{sec/02-background}
+\input{sec/03-problem}
+\input{sec/04-theory}
+\input{sec/05-algorithm}
+\input{sec/06-engineering}
+\input{sec/07-evaluation}
+\input{sec/08-related}
+\input{sec/09-conclusion}
+
+\bibliographystyle{splncs04}
+\bibliography{refs}
+
+\end{document}

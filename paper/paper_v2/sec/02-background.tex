@@ -1,0 +1,36 @@
+\section{Background}
+\label{sec:background}
+
+We fix a finite set of atomic propositions and interpret TCTL over the timed
+transition system induced by a timed automaton, in the standard
+way~\cite{AlurCourcoubetisDill1990,Baier08}. A \emph{time bound} \kI is a
+non-empty interval with integer endpoints; formulas are in negation normal form
+over the timed until and release modalities, and $\AG$, $\EF$ and their
+relatives are the usual abbreviations. Satisfaction is evaluated over
+time-divergent runs \Runsinf.
+
+A \emph{zone} is a set of clock valuations defined by difference constraints and
+stored as a difference-bound matrix~\cite{AlurDill1994,Bouyer05TimedAutomata}.
+Zones are closed under intersection with a single-clock guard, reset, and
+time-successor, and are compared modulo max-constant extrapolation, which is
+what makes the set of reachable zones finite.
+
+\paragraph{The tableau.} A node is a tuple
+$N=\tup{\Gam}{\Ctx}{Z}{\obl}{\Dl}$: the goals \Gam to be satisfied at this
+configuration, the context \Ctx of formulas that must hold at every successor,
+a zone $Z$, a map \obl allocating a dedicated \emph{formula-clock} $x_\mu$ to
+each active timed modality $\mu$, and a set \Dl of deadlines on those clocks.
+Rules saturate the propositional structure, launch a \emph{pursuit} $\mu^\bullet$
+when a timed modality is demanded, unfold pursuits step by step, and advance
+time. A node is \emph{realisable} when some timed transition system satisfies
+$\bigwedge\Gam\wedge\bigwedge\Ctx$ at every valuation of its zone. The calculus
+is sound and complete, so a node lies in the greatest successful marking exactly
+when it is realisable; this is the only property of the calculus the present
+paper uses, and we use it in one place, to move between ``realisable'' and
+``accepted by the search''.
+
+Because a clock belongs to the modality that owns it, two formulas over disjoint
+atoms have disjoint formula-clocks. That observation is the whole of
+\S\ref{sec:theory}'s hypothesis, and it is worth stating here because it is what
+makes the atom-level test in \S\ref{sec:algorithm} sufficient to conclude
+something about clocks.

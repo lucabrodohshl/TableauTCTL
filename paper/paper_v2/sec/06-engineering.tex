@@ -1,0 +1,57 @@
+\section{Two fixes the benchmark forced}
+\label{sec:engineering}
+
+Neither belongs to the decomposition. Both were found by an evaluation harness
+that carries expected verdicts, and we report them because the first is a
+soundness bug in the calculus as published and the second is worth a factor of
+seven on its own.
+
+\paragraph{Onsets between split points.} Under a persistent context a modality
+is demanded at a continuum of onsets, and the tableau represents them by cells
+of the zone. The delay rule split a clock at the endpoints of its own window
+only. Under a ban on $\psi$ over $[c,d]$, an onset at $t$ demands $\psi$
+somewhere in $[t+a,t+b]$, and that demand is unsatisfiable exactly for
+$t\in[c-a,\,d-b]$; splitting the context clock at $c$ and $d$ alone leaves that
+interval inside a cell that also holds satisfiable onsets, and the cell's launch
+succeeds on one of those. On $\AG(\EF_{[3,4]}p)\wedge\AG_{[4,5]}\neg p$ the bad
+onset is the single point $t=1$, no cell isolates it, and the formula --- which
+is unsatisfiable --- was reported satisfiable.
+
+A clock must therefore also split at its own endpoints shifted by those of every
+\emph{other} modality. The relation is co-liveness, not nesting: in the formula
+above the ban and the demand are conjuncts, and a version restricted to
+syntactic nesting left every one of the $39$ wrong verdicts in a $700$-case
+sweep in place. There are two shifts per pair of modalities and none depends on
+the magnitude of a constant, so the count of split points stays quadratic in the
+formula and flat in $M$: node counts are $281$, $281$, $281$, $278$ for
+$M=4,64,1024,65536$.
+
+\paragraph{A quartic step and two redundant closures.} Profiling put $93\%$ of
+the run in the construction of a node's key. Eliminating the clocks a node no
+longer reads freed them one at a time, and each free re-closed the matrix, so
+the step was $O(K^{4})$. Batching the frees makes it cubic --- freeing only
+relaxes, and a closed matrix already carries the tightened value of $d[i][0]$,
+so the column each free writes can be read off the original matrix, with the one
+correction that a freed clock has lost its own upper bound.
+
+The closure then turns out to be unnecessary altogether. Checking
+$d[i][j]\le d[i][l]+d[l][j]$ on the updated matrix given it held on the old one:
+a path through a freed clock is $d[i][0]+\infty=\infty$; a freed row is $\infty$
+throughout; a freed column becomes $d[i][0]$, and old closure already gave
+$d[i][0]\le d[i][l]+d[l][0]$; and the reference row needs
+$d[0][l]+d[l][0]\ge 0$, which holds because a closed non-empty zone has no
+negative cycle. Max-constant extrapolation gets the same treatment: a zone none
+of whose bounds exceeds its clock's maximum is unchanged and arrived closed.
+
+A third defect in the same layer was a correctness one. The minimal-graph packer
+writes whole records but not whole words, so with $16$-bit bounds and an odd
+constraint count the final half-word was never written, and it sits inside the
+length the packer reports. The buffer being reused, the same zone encoded
+differently depending on what had been packed before it, and the search rebuilt
+the same node under several keys. Clearing the buffer makes the encoding a
+function of the zone, and removes $15\%$ of the nodes on a nested tower. The
+symptom that exposed it is worth recording: node counts moved when an unrelated
+cache size changed, which is not something a correct encoding can do.
+
+Together these take a $17$-clock instance from $12.45$\,s to $1.41$\,s with
+identical verdicts.
