@@ -1764,8 +1764,12 @@ private:
     /// per atom turns the whole test into a bitwise and.  Inputs with more
     /// atoms than a word simply do not decompose.
     std::uint64_t atoms_of(FormulaId id) const {
-        auto it = atom_memo_.find(id);
-        if (it != atom_memo_.end()) return it->second;
+        // Formula ids are dense, so the memo is an array, not a map.  This is
+        // read several times per item at every node whose shape is new, and a
+        // red-black tree lookup per read was the last thing left in the cost of
+        // asking a node that never decomposes whether it decomposes.
+        const std::size_t k = static_cast<std::size_t>(id);
+        if (k < atom_memo_.size() && atom_memo_ok_[k]) return atom_memo_[k];
         std::uint64_t out = 0;
         if (id != kInvalidId) {
             const FormulaNode& n = f_.node(id);
@@ -1776,7 +1780,12 @@ private:
             for (int c = 0; c < 2; ++c)
                 if (n.children[c] != kInvalidId) out |= atoms_of(n.children[c]);
         }
-        atom_memo_.emplace(id, out);
+        if (k >= atom_memo_.size()) {
+            atom_memo_.resize(k + 64, 0);
+            atom_memo_ok_.resize(k + 64, 0);
+        }
+        atom_memo_[k] = out;
+        atom_memo_ok_[k] = 1;
         return out;
     }
 
@@ -1799,7 +1808,7 @@ private:
     /// The formula-clocks of every timed modality inside a formula.
     const std::vector<ClockId>& clocks_of(FormulaId id) const {
         auto it = clock_memo_.find(id);
-        if (it != clock_memo_.end()) return it->second;
+        if (it != clock_memo_.end()) return it->second;   // rarer: kept a map
         std::vector<ClockId> out;
         if (id != kInvalidId) {
             const FormulaNode& n = f_.node(id);
@@ -1818,11 +1827,15 @@ private:
     std::vector<Node> components(const Node& n) const {
         // Items: the goals, the context entries, and the pursuits.  A pursuit
         // travels with the item that owns its modality.
-        struct Item { FormulaId id; bool in_ctx; };
-        std::vector<Item> items;
+        // The three working vectors are members, not locals: components() runs
+        // once per node visit, and three heap allocations per node was most of
+        // what the test cost on formulas that never decompose.
+        std::vector<Item>& items = items_;
+        items.clear();
         for (FormulaId id : n.Gamma.elements()) items.push_back({id, false});
         for (FormulaId id : n.X.elements())     items.push_back({id, true});
-        std::vector<FormulaId> pmu;
+        std::vector<FormulaId>& pmu = pmu_;
+        pmu.clear();
         for (const Pursuit& p : n.pursuits) pmu.push_back(p.mu);
         if (items.size() + pmu.size() < 2) return {};
 
@@ -1831,21 +1844,30 @@ private:
         // heavily -- a nested tower has roughly half as many shapes as nodes --
         // and without this the union-find below runs again at each of them,
         // which is pure loss on any formula that never decomposes.
-        std::uint64_t sig = 1469598103934665603ull;
+        // The signature is computed before the memo can be consulted, so it is
+        // paid at every node, not only at new shapes.  Combining the ids
+        // commutatively removes the sort the ordered version needed: each id is
+        // mixed on its own and the mixes are xor-ed, which is O(m) and needs no
+        // buffer.  A collision can only make two shapes look alike and so skip
+        // a split that was available, which costs an optimisation and never a
+        // verdict.
+        std::uint64_t sig = 0;
         {
-            sigbuf_.clear();
-            for (const Item& it : items) sigbuf_.push_back(it.id);
-            for (FormulaId mu : pmu) sigbuf_.push_back(mu);
-            std::sort(sigbuf_.begin(), sigbuf_.end());
-            for (FormulaId id : sigbuf_) {
-                sig ^= static_cast<std::uint64_t>(id);
-                sig *= 1099511628211ull;
-            }
+            auto mix = [](std::uint64_t x) {
+                x += 0x9e3779b97f4a7c15ull;
+                x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ull;
+                x = (x ^ (x >> 27)) * 0x94d049bb133111ebull;
+                return x ^ (x >> 31);
+            };
+            for (const Item& it : items) sig ^= mix(static_cast<std::uint64_t>(it.id));
+            for (FormulaId mu : pmu)
+                sig ^= mix(static_cast<std::uint64_t>(mu) | (1ull << 40));
             if (nosplit_.count(sig)) return {};
         }
         auto remember_nosplit = [&] { nosplit_.insert(sig); };
 
-        std::vector<std::uint64_t> at;
+        std::vector<std::uint64_t>& at = at_;
+        at.clear();
         at.reserve(items.size() + pmu.size());
         for (const Item& it : items) at.push_back(atoms_of(it.id));
         for (FormulaId mu : pmu)     at.push_back(atoms_of(mu));
@@ -1857,11 +1879,31 @@ private:
             while (up[x] != x) { up[x] = up[up[x]]; x = up[x]; }
             return x;
         };
-        for (std::size_t i = 0; i < m; ++i)
-            for (std::size_t j = i + 1; j < m; ++j) {
-                const bool share = (at[i] & at[j]) != 0 || (at[i] == 0 && at[j] == 0);
-                if (share) up[find(i)] = find(j);
+        // Union through an atom->item index rather than over item pairs.  Two
+        // items are joined exactly when some atom occurs in both, so walking
+        // each item's set bits and joining it to the first item seen carrying
+        // that bit computes the same partition in O(m * atoms-per-item) instead
+        // of O(m^2).  It matters because this runs at every node whose shape is
+        // new, and on the formulas that never decompose -- one shared atom
+        // across k conjuncts, or a chain of overlapping ones -- the quadratic
+        // version was the whole cost of asking.
+        std::array<std::size_t, 64> first_with;
+        first_with.fill(m);
+        std::size_t first_empty = m;
+        for (std::size_t i = 0; i < m; ++i) {
+            std::uint64_t bits = at[i];
+            if (bits == 0) {                    // symbol-free items group together
+                if (first_empty == m) first_empty = i;
+                else up[find(i)] = find(first_empty);
+                continue;
             }
+            while (bits) {
+                const int b = __builtin_ctzll(bits);
+                bits &= bits - 1;
+                if (first_with[b] == m) first_with[b] = i;
+                else up[find(i)] = find(first_with[b]);
+            }
+        }
         std::map<std::size_t, std::vector<std::size_t>> grp;
         for (std::size_t i = 0; i < m; ++i) grp[find(i)].push_back(i);
         if (grp.size() < 2) { remember_nosplit(); return {}; }
@@ -2522,9 +2564,14 @@ private:
     FormulaId root_formula_ = kInvalidId;
     std::shared_ptr<std::unordered_map<Key, bool, KeyHash>> decomp_cache_ =
         std::make_shared<std::unordered_map<Key, bool, KeyHash>>();
-    mutable std::map<FormulaId, std::uint64_t> atom_memo_;
+    mutable std::vector<std::uint64_t> atom_memo_;
+    mutable std::vector<unsigned char> atom_memo_ok_;
     std::map<std::string, std::size_t> atom_bit_;
     mutable std::map<FormulaId, std::vector<ClockId>> clock_memo_;
+    struct Item { FormulaId id; bool in_ctx; };
+    mutable std::vector<Item> items_;
+    mutable std::vector<FormulaId> pmu_;
+    mutable std::vector<std::uint64_t> at_;
     mutable std::vector<FormulaId> sigbuf_;
     mutable std::unordered_set<std::uint64_t> nosplit_;
     /// Treat AG psi as a context formula rather than a release pursuit.
