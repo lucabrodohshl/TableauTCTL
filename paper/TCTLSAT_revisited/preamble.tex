@@ -1,0 +1,125 @@
+% Core mathematical notation.
+\def\Gam{\ensuremath{\Gamma}\xspace}
+\def\clockSet{\ensuremath{\mathcal{C}}\xspace}
+\def\clockValuations#1{\ensuremath{\mathbb{R}_{\ge 0}^{#1}}\xspace}
+\def\Nat{\ensuremath{\mathbb{N}}\xspace}
+\def\Int{\ensuremath{\mathbb{Z}}\xspace}
+\def\Reals{\ensuremath{\mathbb{R}}\xspace}
+\def\kI{\ensuremath{I}\xspace}
+\def\ck{\ensuremath{c}\xspace}
+\def\DBM#1{\ensuremath{\mathbf{D}_{#1}}\xspace}
+\def\UP{\ensuremath{\uparrow}\xspace}
+\def\RESET#1{\ensuremath{[#1 \mathrel{:=} 0]}\xspace}
+\def\tEU#1#2#3{\ensuremath{\mathrm{E}(#1\mathbf{U}_{#3}#2)}\xspace}
+\def\tAU#1#2#3{\ensuremath{\mathrm{A}(#1\mathbf{U}_{#3}#2)}\xspace}
+\def\EU#1#2{\ensuremath{\mathrm{E}(#1\mathbf{U}#2)}\xspace}
+\def\AU#1#2{\ensuremath{\mathrm{A}(#1\mathbf{U}#2)}\xspace}
+\def\EX#1{\ensuremath{\mathit{EX}#1}\xspace}
+\def\AX#1{\ensuremath{\mathit{AX}#1}\xspace}
+\def\tAR#1#2#3{\ensuremath{\mathrm{A}(#1\mathbf{R}_{#3}#2)}\xspace}
+\def\tER#1#2#3{\ensuremath{\mathrm{E}(#1\mathbf{R}_{#3}#2)}\xspace}
+\def\ER#1#2{\ensuremath{\mathrm{E}(#1\mathbf{R}#2)}\xspace}
+\def\AR#1#2{\ensuremath{\mathrm{A}(#1\mathbf{R}#2)}\xspace}
+\def\Z{\ensuremath{Z}\xspace}
+\def\Deadline{\ensuremath{\mathcal{D}}\xspace}
+
+% Rule-name helpers and clickable cross-references.
+\makeatletter
+\newcommand{\DeclareRule}[2]{\expandafter\def\csname rule@#1\endcsname{#2}}
+\newcommand{\RuleLabel}[1]{{\ensuremath{#1}}}
+\newcommand{\UunfRuleName}{\RuleLabel{\mathbf{U}^\bullet}}
+\newcommand{\UstopRuleName}{\RuleLabel{\mathbf{U}\text{-stop}}}
+\newcommand{\UgoRuleName}{\RuleLabel{\mathbf{U}\text{-go}}}
+\newcommand{\UgoCarryRuleName}{\RuleLabel{\mathbf{U}^\ast\text{-go}}}
+\newcommand{\RsplitRuleName}{\RuleLabel{\mathbf{R}^{\mathsf{split}}}}
+\newcommand{\RbranchName}[1]{\RuleLabel{\mathbf{R}^\bullet_{#1}}}
+\newcommand{\RbranchStopName}[1]{\RuleLabel{\mathbf{R}^\bullet_{#1}\text{-stop}}}
+\newcommand{\RbranchGoName}[1]{\RuleLabel{\mathbf{R}^\bullet_{#1}\text{-go}}}
+\newcommand{\rulename}[1]{\ensuremath{(\csname rule@#1\endcsname)}}
+\newcommand{\ruleanchor}[1]{\hypertarget{rule:#1}{\rulename{#1}}}
+\newcommand{\ruleref}[1]{\ifcsname r@tag:#1\endcsname\hyperref[tag:#1]{\rulename{#1}}\else\hyperlink{rule:#1}{\rulename{#1}}\fi}
+\newcommand{\rname}[1]{\csname rule@#1\endcsname}
+\newcommand{\rlink}[1]{\ifcsname r@tag:#1\endcsname\hyperref[tag:#1]{\rulename{#1}}\else\hyperlink{rule:#1}{\rulename{#1}}\fi}
+\makeatother
+\DeclareRule{AND}{\land}
+\DeclareRule{OR}{\lor}
+\DeclareRule{AX}{\mathrm{AX}}
+\DeclareRule{EX}{\mathrm{EX}}
+\DeclareRule{Delay}{\mathrm{Delay}}
+\DeclareRule{Conj}{\land}
+\DeclareRule{Disj}{\lor}
+\DeclareRule{Cov}{\mathrm{Cov}}
+\DeclareRule{Covstar}{\mathrm{Cov}^{*}}
+\DeclareRule{Uunf}{\UunfRuleName}
+\DeclareRule{Runf}{\mathbf{R}^\bullet}
+\DeclareRule{Rsplit}{\RsplitRuleName}
+\DeclareRule{Runf_before}{\RbranchName{\prec\kI}}
+\DeclareRule{Runf_in}{\RbranchName{\in\kI}}
+\DeclareRule{Runf_after}{\RbranchName{\succ\kI}}
+\DeclareRule{Runf_lapse}{\RuleLabel{\mathbf{R}^\bullet_{\succ\kI}^{\mathsf{lapse}}}}
+\DeclareRule{Ustop}{\UstopRuleName}
+\DeclareRule{Ugo}{\UgoRuleName}
+\DeclareRule{Ugocarry}{\UgoCarryRuleName}
+\DeclareRule{Rbeforestop}{\RbranchStopName{\prec\kI}}
+\DeclareRule{Rbeforego}{\RbranchGoName{\prec\kI}}
+\DeclareRule{Rinstop}{\RbranchStopName{\in\kI}}
+\DeclareRule{Ringo}{\RbranchGoName{\in\kI}}
+\DeclareRule{Rstop}{\RuleLabel{\mathbf{R}^\bullet\text{-stop}}}
+\DeclareRule{Rgo}{\RuleLabel{\mathbf{R}^\bullet\text{-go}}}
+\DeclareRule{discharge}{\mathsf{discharge}}
+\DeclareRule{launch}{\mathsf{launch}}
+\DeclareRule{Rsplitbefore}{\RbranchName{\prec\kI}}
+\DeclareRule{Rsplitin}{\RbranchName{\in\kI}}
+\DeclareRule{Rsplitafter}{\RbranchName{\succ\kI}}
+\DeclareRule{openseg}{\mathsf{open seg.}}
+\DeclareRule{boundary}{\mathsf{boundary}}
+
+
+
+
+% Figure helpers.
+\newcommand{\myvdots}[4]{%
+  % #1 = x-coordinate
+  % #2 = y-coordinate of top dot
+  % #3 = vertical spacing
+  % #4 = dot radius
+  \foreach \i [evaluate=\i as \yy using #2-\i*#3] in {0,1,2}
+    \fill (#1,\yy) circle[radius=#4];
+}
+
+\newcommand{\lemitem}[2]{\hyperref[#1]{\ref*{#1}(\textup{#2})}}
+
+% Shared shorthand commands live in acronyms.tex.
+\input{acronyms.tex}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Algorithm procedure names.
+%% Declared after algorithm2e is loaded so the names type consistently in
+%% both the algorithm listings and the prose that refers to them.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\SetKwFunction{Decide}{Decide}
+\SetKwFunction{Explore}{Explore}
+\SetKwFunction{Eliminate}{Eliminate}
+\SetKwFunction{Expand}{Expand}
+\SetKwFunction{Settles}{Settles}
+\SetKwFunction{Retire}{Retire}
+
+% Rule keys this presentation adds; the rest are declared in preamble.tex.
+\DeclareRule{Carry}{\mathrm{Carry}}
+\DeclareRule{Absorb}{\mathrm{Abs}}
+\DeclareRule{Umiss}{\mathbf{U}\text{-miss}}
+\newcommand{\UstopCarryRuleName}{\mathbf{U}^{\ast}\text{-stop}}
+\newcommand{\UunfCarryRuleName}{\mathbf{U}^{\ast}}
+\DeclareRule{Ustopcarry}{\UstopCarryRuleName}
+\DeclareRule{Uunfcarry}{\UunfCarryRuleName}
+
+
+%% Algorithms 1 and 2 are tall floats; the LaTeX defaults defer anything over
+%% 70% of the text height to a float page at the end of the document, which put
+%% them eleven pages after the text that refers to them.
+%\renewcommand{\topfraction}{0.92}
+%\renewcommand{\bottomfraction}{0.85}
+%\renewcommand{\textfraction}{0.06}
+%\renewcommand{\floatpagefraction}{0.7}
+%\setcounter{topnumber}{3}
+%\setcounter{totalnumber}{5}

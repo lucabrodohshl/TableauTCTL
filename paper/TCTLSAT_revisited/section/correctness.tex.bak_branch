@@ -1,0 +1,347 @@
+\section{Termination, Soundness and Completeness }\label{sec:correct}
+
+
+We show the procedure terminates in deterministic exponential time (\S\ref{ss:term}) and is sound and
+complete for all non-punctual TCTL (\S\ref{ss:sound}). Throughout, $\varphi$ is the input, $n=|\FL(\varphi)|$, and $M$ the largest constant in its intervals.
+
+\subsection{Termination and complexity}\label{ss:term}
+
+First, we prove the procedure terminates and it is \textsc{ExpTime}-complete. To do so, we first bound the number of distinct nodes the procedure can generate.
+\begin{lemma}\label{lem:finiteness}
+The number of distinct nodes the procedure can generate is bounded above by $2^{O(n)}\cdot M^{O(n^2)}$.
+\end{lemma}
+
+\begin{proof}
+The propositional components $\Gamma,\Ctx$ range over subsets of $\FL(\varphi)$, hence
+$2^{O(n)}$ choices each; the clock map $\obligations$ over $2^{O(n)}$ assignments and $D$ over $2^{O(n)}$ choices. The cover rule allocates one
+formula-clock per timed subformula, bounded by $O(n)$. A canonical $\cong_M$-zone over $K$
+clocks is a $(K{+}1)^2$ DBM whose finite entries lie in $\{-M,\dots,M\}\times\{<,\le\}$,
+giving $M^{O(K^2)}\le M^{O(n^2)}$ distinct zones. Multiplying the components yields the
+bound.
+\end{proof}
+
+
+
+Now we can prove the main result of this section.
+
+
+
+\begin{theorem}\label{thm:complexity}
+Satisfiability of non-punctual TCTL is \textsc{ExpTime}-complete, and the tableau
+decides it in time $2^{\mathrm{poly}(n)}$.
+\end{theorem}
+\begin{proof}
+Let $m=2^{O(n)}\cdot M^{O(n^2)}$ be the node bound of Lemma~\ref{lem:finiteness}; since the
+encoding of $M$ occupies at most $n$ input symbols, $\log m=O(n)+O(n^2)\log M=\mathrm{poly}(n)$.
+Nodes are drawn from a set of size $m$, so the memoised AND--OR graph has at most $m^2$ edges;
+by the pigeonhole principle every infinite branch repeats a node, where the loop rule adds a
+back-edge or closes, and the construction halts after at most $m$ expansions. Memoisation ensures each node is expanded at most once, avoiding the doubly exponential
+blow-up of the naive ancestor-only unfolding.
+%
+%Memoisation is
+%essential rather than an optimisation: with ancestor-only loop detection the same graph unfolds
+%to a doubly-exponential tree.
+
+The satisfaction sets are computable within this budget. Each
+$\Sat_{\Ctx}(\mu)$ is a least ($\mathbf{U}$) or greatest ($\mathbf{R}$) fixpoint of a monotone map on unions of $\cong_M$-zones, which are at most $M^{O(n^2)}$ in number, thus finite, so by Knaster--Tarski the
+fixpoint exists and monotone iteration reaches it in as many steps, each a polynomial number of
+DBM operations, with a factor $O(n)$ over $\FL(\varphi)$.
+
+
+A successful marking is then found by the standard elimination procedure for
+AND--OR tableaux~\cite{Clarke99,tableau_ctl}: repeatedly delete every closed node,
+every OR-node whose children are all deleted, every AND-node with a deleted
+child, every node from which no surviving path reaches a time-progressing loop,
+and every node from which no surviving path takes the $(\text{divergence})$ branch of
+an until pursuit active there. The first three tests are local; the last two are
+reachability queries over the surviving subgraph, each decidable in time
+polynomial in $m$, and it is sound to recompute them each round because deletion
+only ever removes paths, never creates them. The two queries enforce conditions
+(ii) and (i) of \S\ref{ss:loop} respectively. Each round deletes at least one
+node, so at most $m$ rounds suffice, and $\varphi$ is satisfiable iff the root
+survives. The procedure therefore runs in $2^{\mathrm{poly}(n)}$.
+
+
+
+
+%
+%It remains to decide existence of a successful marking. A marking retains all AND-children, so
+%goodness of every infinite path is a universal condition over the AND-branching: an AND-fork into one good and one bad cycle is rejected. Existence is therefore
+%the winning condition of a two-player game on the finite graph --- the proponent resolving the
+%OR-choices, the opponent the AND-branches and the path --- won by the proponent iff every play
+%is an accepting lasso, every eventuality fulfilled and time-progressing by
+%Lemma~\ref{lem:nonzeno}. This is a Streett condition with $k=O(n)$ pairs, one per eventuality
+%and one per delay-bounding clock, solved by the standard nested-fixpoint algorithm in
+%$m^{O(k)}=2^{O(k\log m)}$, singly exponential in $n$.
+%
+%Hardness is inherited: fixing every interval to $[0,\infty)$ the procedure decides CTL
+%satisfiability, which is \textsc{ExpTime}-hard~\cite{Clarke99}.
+\end{proof}
+
+
+
+
+
+
+
+
+
+
+\subsection{Soundness and Completeness}\label{ss:sound}
+
+We now prove the procedure is sound, i.e., that if the tableau succeeds on $\varphi$, then $\varphi$ is \SAT, and complete, i.e., that if $\varphi$ is \SAT, then the tableau succeeds on $\varphi$. These results are supported by the following lemmas. 
+
+%
+%By finiteness a successful marking $\mathcal{M}$ is a finite AND--OR structure whose infinite paths are
+%lassos $\pi_{\mathsf{pref}}\cdot\pi_{\mathsf{loop}}^\omega$ with an accepting loop~\cite{Clarke99}. From
+%$\mathcal{M}$ we build a witness TTS $\mathcal{T}$, then verify it by induction. Three lemmas support the
+%construction: one makes the zones realisable as delays, one reconciles the discrete induction with the dense
+%semantics, and one guarantees time divergence.
+%
+
+\begin{lemma}\label{lem:feasible}
+Let $N_0,\dots,N_k$ be a finite path of $\mathcal{M}$ with non-empty zones. For every
+$\nu_k\in Z_k$ there are $\nu_0\in Z_0,\dots,\nu_{k-1}\in Z_{k-1}$ and positive delays
+realising every step.
+\end{lemma}
+\begin{proof}
+Each operation used along a path (intersection and guards,
+reset, time-successor and
+$\cong_M$-canonicalisation) admits back-propagation, non-empty
+precisely because the successor valuation lies in its image~\cite{Bouyer05TimedAutomata}; threading
+backward from $\nu_k$ gives the assignment.
+\end{proof}
+
+%\begin{lemma}[Feasibility]\label{lem:feasible}
+%Along any finite path of $\mathcal{M}$ whose nodes carry non-empty zones, there is a consistent assignment of
+%clock valuations and delays realising every time-elapse and reset step.
+%\end{lemma}
+%\begin{proof}
+%The zone operations the path uses -- intersection, single-clock guard $x\in\kI$, reset $Z[R{:=}0]$,
+%time-successor $\uparrow Z$, and $\cong_M$-canonicalisation -- each preserve non-emptiness and, given a
+%representative of the successor zone, admit a compatible representative of the predecessor zone (the standard
+%DBM back-propagation~\cite{AlurDill1994,Bouyer05TimedAutomata}). Threading representatives from the end of the
+%path backward yields valuations and positive delays consistent with every step.
+%\end{proof}
+%
+\begin{lemma}\label{lem:stability}
+Along a delay step $(s,\nu)\xrightarrow{t}(s,\nu+t)$ that crosses no integer hyperplane $x=b$ ($b\le M$), the
+truth of every subformula of $\varphi$ is constant over the relatively-open segment $(s,\nu+t')$,
+$t'\in(0,t)$.
+\end{lemma}
+
+\begin{proof}
+Crossing no hyperplane $x=b$ with $b\le M$, no clock crosses an integer at or below $M$, so
+no integer part changes and no fractional ordering wraps; clocks already above $M$ are
+identified by extrapolation and their exact values are immaterial. All $(s,\nu+t')$
+therefore lie in one clock region, and TCTL truth is constant on a
+region~\cite{AlurCourcoubetisDill1990,Bouyer05TimedAutomata}.
+\end{proof}
+\noindent
+The endpoints of the segment, where a clock may sit on a hyperplane, are made into nodes of
+their own by the integer split of \ruleref{Delay}, and are matched against the strictness
+flags of the interval bounds. 
+
+%\begin{proof}
+%Crossing no such hyperplane, no clock changes integer part below $M$ and no fractional ordering wraps, so all
+%$(s,\nu+t')$ lie in one clock region; TCTL truth is constant on a region (the region
+%theorem~\cite{AlurCourcoubetisDill1990,Bouyer05TimedAutomata}). The integer-split of successor generation
+%makes the segment endpoints, where a clock may sit on a hyperplane, into nodes, handled by the strictness
+%flags of the interval bounds. Diagonal-freeness and integer endpoints suffice; non-punctuality is not needed
+%here.
+%\end{proof}
+
+\begin{lemma}\label{lem:nonzeno}
+A candidate loop $N_i \equiv N_j$ has a non-Zeno unfolding iff it is {time-progressing}: it admits positive total elapsed time and every clock is either reset on the segment, replenishing its budget,
+or extrapolated above $M$, hence unbounded.
+When it is, a run exists in which every iteration elapses the same positive amount%, i.e. $\exists \delta >0$ such that every iteration elapses time $\delta$
+.
+\end{lemma}
+\begin{proof}
+($\Rightarrow$) If some clock $x$ is not reset on the segment yet keeps a finite bound $c\le M$, then along
+the loop $x$ only grows while staying $\le c$, so the total delay over all iterations is at most
+$c-\nu(x)<\infty$ and every unfolding is Zeno; likewise if the loop can elapse only zero time. ($\Leftarrow$) Suppose the loop elapses positive time. Lemma~\ref{lem:feasible} yields a
+traversal over the loop with some $\delta>0$. Since $N_i\equiv N_j$, no rule distinguishes
+the two visits and the traversal is repeated; no budget depletes either, each clock being
+reset on the segment or extrapolated above $M$. Hence $\delta$ recurs at every iteration and
+$\sum_i t_i\ge\sum_i\delta=\infty$.
+\end{proof}
+
+\begin{lemma}%[Adequacy of $\Sat$]
+    \label{lem:sat}
+Let $\mu$ be demanded at a node $N$ under context $\Ctx$.
+\begin{enumerate}
+\item[(i)] Let $\nu\in Z_N$. If $\nu\in\Sat_{\Ctx}(\mu)$, then $\mathcal{T},(s_N,\nu)\models\mu$, where
+  $\mathcal{T}$ is the model read off the pursuit branches of a successful marking and
+  $s_N$ the location of $N$.
+\item[(ii)] If $\mathcal{T}',(s,\nu)\models\mu$ for a model $\mathcal{T}'$ meeting $\Ctx$ at
+  $(s,\nu)$, then $\nu\in\Sat_{\Ctx}(\mu)$.
+\end{enumerate}
+\end{lemma}
+\begin{proof}
+
+By construction, $\Sat_{\Ctx}(\mu)$ tracks the path quantifier of \eqref{eq:until}--\eqref{eq:release}
+
+
+A valuation lies in $\Sat_{\Ctx}(\mu)$ if it lies in a base child of \ruleref{Uunf} or \ruleref{Runf}, or in
+a recursive child whose deferred successors lie in $\Sat_{\Ctx}(\mu)$, one successor when
+$\mathrm{Q}=\mathrm{E}$ and all of them when $\mathrm{Q}=\mathrm{A}$. This is
+\eqref{eq:until}--\eqref{eq:release} read one step at a time, the path quantifier tracked by
+where the residual travels, $\EX\mu^\bullet$ into $\Gamma$ and $\AX\mu^\bullet$ into $\Ctx$. By
+construction, $\Sat_{\Ctx}(\mu)$ is the least fixpoint of $F$ for an until and the greatest
+for a release, and Lemma~\ref{lem:stability} lifts each step from the nodes to the dense
+positions between them.
+
+
+$\Sat_{\Ctx}(\mu)$ is a fixpoint of the pursuit unfolding, and that unfolding mirrors the
+semantic clause one step at a time, relative to $\Ctx$. The quantifiers of \eqref{eq:sat_u}--\eqref{eq:sat_r} are matched by the $\EX/\AX$-successors of the pursuit and the operator fixes which fixpoint of that equation is
+taken: least for until, so membership means reaching a stop in finitely many steps; greatest
+for release, so membership means never violating the obligation. Using Lemma~\ref{lem:stability}, each step is lifted from the nodes to the dense positions between them. Accordingly:
+
+
+\textit{(i)}  The runs of $\mathcal{T}$ from $(s_N,\nu)$ correspond to the pursuit paths from $N$: the discrete
+edges of $\mathcal{T}$ are the pursuits' $\EX/\AX$-successors, while the discharge child of
+\ruleref{Cov} drops $\mu$ and contributes no edge. Now $\nu\in\Sat_{\Ctx}(\mu)$ means $\nu$ satisfies the fixpoint equation, hence entered the iteration at some stage via a specific branch of the pursuit; tracing that back selects a
+path through the pursuit graph, which the correspondence turns into a run of $\mathcal{T}$. For an until the least fixpoint bounds the unwinding, so the run
+reaches a stop in finitely many steps; for a release the greatest fixpoint means it never
+violates the obligation. For a universal until the deadline $x_\mu\le\sup\kI$ carried by
+$\Inv(N)$ caps every branch inside the window, so no run drifts past it; a release lapses
+instead.
+
+\textit{(ii)} By hypothesis the runs of $\mathcal{T}'$ from $(s,\nu)$ satisfy
+\eqref{eq:until}--\eqref{eq:release}, and each projects onto a pursuit path whose valuations
+lie in the corresponding zones. An until reaches its witness in finitely many discrete steps,
+since $\mathcal{T}'$ is non-Zeno and cannot accumulate infinitely many within the window, so
+$\nu$ enters the iteration at a finite stage and lies in the least fixpoint. A release yields a
+post-fixpoint, every in-window position carrying $\psi$ or having been released earlier by
+$\varphi$, and the greatest fixpoint contains it.
+\end{proof}
+
+\noindent
+Now we can establish that the tableau procedure is sound for non-punctual TCTL.
+
+\begin{theorem}%[Soundness]
+    \label{thm:soundness}
+The tableau procedure is sound.
+\end{theorem}
+%with induced TTS $\mathcal{T}$
+\begin{proof}
+Take a successful marking $\mathcal{M}$. We read off a witness TA $\mathcal{A}$ as follows.
+Its locations are the nodes of $\mathcal{M}$, each labelled by the atoms in its $\Gamma$ and
+carrying $\Inv(N)$ as its invariant, which is what forces time forward into demanded windows.
+Its discrete edges are the AND-children retained by $\mathcal{M}$, each guarded by
+$Z_N\cap\Inv(N)$ for its target $N$: every $\EX\psi$ obtains a successor satisfying $\psi$, with the corresponding
+formula-clocks reset on the edge, and every node's context $\Ctx$ is imposed on all its successors, so
+the universal obligations constrain the whole branching. Delays are supplied by \ruleref{Delay}, which generates no edges: the location is unchanged
+and only the zone advances, so a chain of such steps is one continuous elapse through
+successive zones of a single location. Lemma~\ref{lem:feasible} yields valuations and positive
+delays consistent with every time-elapse and reset step along a path.
+
+$\mathcal{A}$ is non-blocking. Its only invariants are the until deadlines in $\Inv(N)$,
+registered by \ruleref{Cov} when it launches the pursuit of a universal until and retired by
+the $(\text{stop})$ branch of \ruleref{Uunf}. The cap inherits the strictness of $\kI$, and so
+does the guard $x_\mu\in\kI$ of that same stop branch: the stop edge is enabled over exactly
+the range the invariant permits the location to be occupied, and no configuration is left with
+time blocked and no move available.
+
+Let $\mathcal{T}$ be the TTS induced by $\mathcal{A}$. We now show that every run of $\mathcal{T}$ is non-Zeno. Since $\mathcal{A}$ is finite, an infinite run traverses cycles of $\mathcal{A}$ infinitely often, and these are the back-edges of $\mathcal{M}$, which the loop rule adds
+only to accepting, hence time-progressing, loops. By Lemma~\ref{lem:nonzeno} each
+traversal elapses a fixed $\delta>0$, so the delays sum to $\infty$.
+
+Now we can show that $\mathcal{T},(s_0,\nu_0)\models\varphi$ by induction on $\varphi$. Booleans follow
+from saturation of $\Gamma$ and closure of contradictory nodes, $\EX\psi$ and $\AX\psi$ from
+the construction of the edges and the context. For a timed modality $\mu$ demanded at $N$ the
+cover rule succeeded, so $Z_N\subseteq\Sat_{\Ctx}(\mu)$ and Lemma~\ref{lem:sat}(i) gives
+$\mathcal{T},(s_N,\nu)\models\mu$ for every $\nu\in Z_N$, ensuring one zone discharges otherwise uncountably many onsets of $\mu$ in the dense semantics.
+Lemma~\ref{lem:stability} lifts each conclusion from the nodes to the dense positions between
+them, and since every run of $\mathcal{T}$ is non-Zeno the modalities hold over
+$\mathrm{Runs}^\infty$.%, as the semantics requires.
+\end{proof}
+
+\noindent Finally, we prove that the tableau procedure is complete for non-punctual TCTL.
+\begin{theorem}%[Completeness]
+    \label{thm:completeness}
+    The tableau procedure is complete.
+%If $\varphi$ is satisfiable, then the tableau succeeds on $\varphi$.
+\end{theorem}
+\begin{proof}
+
+
+
+Let $\mathcal{T},(s_0,\nu_0)\models\varphi$ with $\mathcal{T}$ non-Zeno. We construct a
+successful marking $\mathcal{M}$ by reading it off $\mathcal{T}$, maintaining at each node a
+configuration of $\mathcal{T}$ whose valuation lies in the node's zone and which satisfies its
+$\Gamma$ and $\Ctx$.
+
+
+
+At an OR-node a consistent child exists in each case. For $(\vee)$, $\mathcal{T}$ satisfies a
+disjunct. For \ruleref{Covstar}, $\mathcal{T},(s,\nu)\models\mu$ gives
+$\nu\in\Sat_{\Ctx}(\mu)$ by Lemma~\ref{lem:sat}(ii), so $\nu$ lies in some component of
+$Z\cap\Sat_{\Ctx}(\mu)$. For \ruleref{Uunf}, either the witness is at the current position
+with $x_\mu\in\kI$, giving stop, or it is strictly later, so $\varphi$ holds now and go
+applies. For \ruleref{Runf}, the before-part's continue child demands nothing, and in the
+window $\psi$ holds --- no earlier $\varphi$ has released $\mu^\bullet$, or it would not still
+be carried.
+
+%, with a pursuit $\mu^\bullet$ carried only while $\mathcal{T}$ has not yetdischarged $\mu$.
+
+%
+%
+%Let $\mathcal{T},(s_0,\nu_0)\models\varphi$ with $\mathcal{T}$ non-Zeno. We now construct a successful marking off of $\mathcal{M}$, maintaining at each node a configuration of $\mathcal{T}$ that satisfies the node's $\Gamma$ within its zone.  
+%%
+%For each OR-node, we selct the child consistent with $\mathcal{T}$ at the current configuration; one exists because $\mathcal{T}$ satisfies the disjunction, the unfolded fixpoint, or lies in some component of $Z\cap\Sat(\mu)$. 
+%
+%we read a successful marking off it,
+%maintaining at each node a configuration of $\mathcal{T}$ that satisfies the node's $\Gamma$ within its zone.
+
+
+
+At an OR-node -- a $(\vee)$, a pursuit branch, or a $(\mathrm{Chk}^{*})$ refinement -- select the child
+consistent with $\mathcal{T}$ at the current configuration; one exists because $\mathcal{T}$ satisfies the
+disjunction, the unfolded fixpoint, or lies in some component of $Z\cap\Sat(\mu)$. At a successor-generation
+(AND) node, realise {every} demanded $\EX\psi$ by a discrete successor of $\mathcal{T}$ satisfying
+$\psi$, and recurse on {all} of them; the context $\Ctx$ holds at each because $\mathcal{T}$ meets its
+$\AX$-obligations. Every chosen zone intersection is non-empty, witnessed by the model's valuations, so no
+selected node closes.
+
+A timed modality demanded at a configuration is verified on its own check, the formula-clock reset there;
+since $\mathcal{T}\models\mu$ at {that} configuration, $\Sat(\mu)$ -- computed under the same context --
+covers it (Lemma~\ref{lem:sat}) and the check succeeds. A persistent context re-imposes $\mu$ at a continuum
+of onsets, but the single universal test $Z\subseteq\Sat(\mu)$ over the demanding zone decides them together,
+no onset inspected on its own. By finiteness every path of the marking eventually repeats a node; because
+$\mathcal{T}$ fulfils each until in finite time and is non-Zeno, the repeating cycle is fulfilling and
+time-progressing, hence accepting (Lemma~\ref{lem:nonzeno}), and the marking is successful.
+
+This last step -- that a satisfying model projects onto the {finite} symbolic graph as an
+{accepting} lasso -- is where non-punctuality is essential. It is the finite-model property of the
+fragment~\cite{fsttcs2000-LN}, carried here by the $\cong_M$-extrapolation of
+zones~\cite{AlurCourcoubetisDill1990,Bouyer05TimedAutomata} (which handles invariants): non-punctuality makes
+the in-window stop set $\cong_M$-stable -- an open window retains a non-empty interior under extrapolation --
+so a satisfiable formula admits a model captured, up to $\cong_M$, by finitely many tableau nodes with
+fulfilling cycles, and our successful marking {is} such a finite timed automaton. Singular windows forfeit this property, the source of the undecidability of full TCTL
+satisfiability~\cite{AlurCourcoubetisDill1990,AlurHenzinger1994ReallyTemporal}. Accordingly our soundness and
+termination arguments invoke no property of the intervals; completeness, established here over the
+timed-automaton model, reaches the same decidable boundary that La~Torre and Napoli~\cite{fsttcs2000-LN}
+reach over dense trees, by a direct construction rather than an automata reduction. (Were the grammar to
+admit punctual bounds, the procedure would still run and terminate, but a satisfiable punctual formula may
+have no tableau-representable model, so we do not claim completeness there.)
+\end{proof}
+%
+%\begin{remark}[Zeno semantics]
+%Restricting to non-Zeno runs is the standard reading and the one our witnesses realise; the time-progress
+%test~(ii), shown necessary and sufficient by Lemma~\ref{lem:nonzeno}, is what enforces it. We do not claim a
+%free switch to the unrestricted semantics: admitting Zeno runs changes the meaning of {universal}
+%time-bounded eventualities -- a time-convergent run may never reach a window, so $\mathrm{A}(\varphi\,
+%\mathbf{U}_{[a,b]}\,\psi)$ can fail for reasons (ii) was designed to exclude -- and reconciling that needs more
+%than dropping the divergence step. The non-Zeno reading is the one we adopt and prove.
+%\end{remark}
+
+%\medskip\noindent
+%Together, Theorems~\ref{thm:complexity}, \ref{thm:soundness}, and \ref{thm:completeness} give a sound,
+%complete, and terminating decision procedure for non-punctual TCTL satisfiability, optimal in \textsc{ExpTime}
+%and returning a finite timed automaton on success. Its three mechanisms -- the AND--OR marking for branching,
+%the time-progress condition for Zeno-freedom, and the region-faithful check for dense deadlines -- are largely
+%independent and we expect them to transfer to related dense-time branching logics; we evaluate a prototype in
+%Section~\ref{sec:eval}. Natural next steps are a fully optimised implementation (ours is a prototype), the
+%extraction of minimal witnesses, and a study of the punctual boundary and of metric extensions.

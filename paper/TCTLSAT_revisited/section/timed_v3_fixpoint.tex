@@ -1,0 +1,108 @@
+% ============================================================================
+% FLAVOR 3 — FIXPOINT LENS (from fixpoint model checking to model building)
+% Entry point: the reader already knows CTL fixpoints; we lift them to dense time
+%   and to a model-free, witness-producing setting. Situates the contribution.
+% Most "TACAS-positioning" of the three.
+% Drop-in replacement for the "Timed modalities" + "Cover rule" subsections.
+% Reuses labels tag:Uunf, tag:Runf, tag:chk, tag:chkstar.
+% ============================================================================
+
+\subsection{Timed modalities and the cover rule}\label{sec:timed}
+
+\paragraph{The fixpoint view, lifted twice.}
+Branching-time model checking rests on fixpoints: $\mathrm{E}(\varphi\,\mathbf{U}\,\psi)$ is a least
+fixpoint (reachability of $\psi$), and $\mathrm{AG}\,\psi=\mathrm{A}(\bot\,\mathbf{R}\,\psi)$ a greatest
+fixpoint (safety), each evaluated over a fixed structure. Our procedure computes exactly these fixpoints,
+lifted in two directions that define the setting. Time is dense, so a fixpoint ranges over \emph{zones}
+rather than states. And there is \emph{no} structure, so a fixpoint is computed against the ambient context
+$\Ctx$, and its witnesses are what a model is later built from. Concretely, a timed modality
+$\mu=\mathrm{Q}(\varphi\,\odot_\kI\,\psi)$ is evaluated to the set
+\[
+\Sat(\mu)\ \subseteq\ \mathbb{R}_{\ge0}^{\clockSet}
+\]
+of clock valuations at which it holds under $\Ctx$, defined below as a fixpoint over zone-unions.
+
+\paragraph{The unfolding is the one-step operator.}
+Every fixpoint characterisation rests on an unfolding law; ours is the timed, symbolic form of
+$\mathrm{E}(\varphi\,\mathbf{U}\,\psi)\equiv \psi\vee(\varphi\wedge \mathrm{EX}\,\mathrm{E}(\varphi\,\mathbf{U}\,\psi))$.
+We \emph{pursue} $\mu$ against a formula-clock $x_\mu$ reset at the demand, and one unfolding step rewrites
+$\mu^\bullet$ into \emph{base} children, which realise the constant $\psi$-part of the law, and
+\emph{recursive} children, which realise the $\mathrm{EX}/\mathrm{AX}$-part by deferring $\nxQ\mu^\bullet$ to
+a successor ($\EX\mu^\bullet$ into $\Gamma$ for $\mathrm{Q}=\mathrm{E}$, $\AX\mu^\bullet$ into $\Ctx$ for
+$\mathrm{Q}=\mathrm{A}$). For an until, the base child is the stop, and the recursive child is the go, capped
+at $x_\mu\le\sup\kI$ in the universal case so that the eventuality cannot escape its window:
+\[
+\frac{\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\begin{array}{ll}
+\tup{\Gamma\cup\{\psi\}}{\Ctx}{Z\cap(x_\mu\!\in\!\kI)}{\obligations}{\eventualities\setminus\{\mu\}} & (\text{stop, base})\\[3pt]
+\tup{\Gamma\cup\{\varphi,\,\EX\mu^\bullet\}}{\Ctx}{Z}{\obligations}{\eventualities} & (\text{go},\ \mathrm{Q}{=}\mathrm{E})\\[3pt]
+\tup{\Gamma\cup\{\varphi\}}{\Ctx\cup\{\AX\mu^\bullet\}}{Z\cap(x_\mu\le\sup\kI)}{\obligations}{\eventualities} & (\text{go-A},\ \mathrm{Q}{=}\mathrm{A})
+\end{array}}
+\qquad \mu=\mathrm{Q}(\varphi\,\mathbf{U}_\kI\,\psi)
+\tag{$\mathbf{U}^\bullet$}\label{tag:Uunf}
+\]
+For a release the window forces a case split of the zone into before, in, and after $\kI$, with the
+discharging cases as base and the continuing cases as recursive:
+\[
+\frac{\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\begin{array}{ll}
+\tup{\Gamma\cup\{\varphi\}}{\Ctx}{Z^{<\kI}}{\obligations}{\eventualities} & (\text{before: }\varphi\text{ releases})\\[2pt]
+\tup{\Gamma\cup\{\nxQ\mu^\bullet\}}{\Ctx}{Z^{<\kI}}{\obligations}{\eventualities} & (\text{before: continue})\\[2pt]
+\tup{\Gamma\cup\{\psi,\,\nxQ\mu^\bullet\}}{\Ctx}{Z^{\in\kI}}{\obligations}{\eventualities} & (\text{in: }\psi,\text{ continue})\\[2pt]
+\tup{\Gamma\cup\{\varphi,\psi\}}{\Ctx}{Z^{\in\kI}}{\obligations}{\eventualities} & (\text{in: }\psi,\ \varphi\text{ releases})\\[2pt]
+\tup{\Gamma}{\Ctx}{Z^{>\kI}}{\obligations}{\eventualities} & (\text{after: lapsed})
+\end{array}}
+\qquad \mu=\mathrm{Q}(\varphi\,\mathbf{R}_\kI\,\psi)
+\tag{$\mathbf{R}^\bullet$}\label{tag:Runf}
+\]
+Writing $B_\mu$ for the union of the base-child zones, the recursive children define a monotone operator on
+unions of zones,
+\[
+F_\mu(X)\ =\ B_\mu\ \cup\ \{\,\nu : \text{the successors of $\nu$ required by $\mathrm{Q}$ lie in $X$}\,\},
+\]
+where ``required'' means \emph{some} successor when $\mathrm{Q}=\mathrm{E}$ and \emph{all} when
+$\mathrm{Q}=\mathrm{A}$.
+
+\paragraph{Least for eventualities, greatest for safety.}
+$\Sat(\mu)$ is the extremal fixpoint of $F_\mu$: least for an until, whose eventuality must be reached, and
+greatest for a release, whose invariant must be maintained,
+\[
+\Sat(\mu)\ =\
+\begin{cases}
+\mathrm{lfp}\,F_\mu & \text{if } \odot=\mathbf{U},\\[2pt]
+\mathrm{gfp}\,F_\mu & \text{if } \odot=\mathbf{R}.
+\end{cases}
+\]
+Because zones are compared up to $\cong_M$, the lattice of zone-unions is finite, so both fixpoints are
+reached by finite Kleene iteration, from $\emptyset$ upward for the least and from the full zone downward
+for the greatest, and $\Sat(\mu)$ is a finite union of zones. This is a model-free, context-relative
+fixpoint evaluation, and one clock $x_\mu$ absorbs the continuum of onsets of a persistent demand into a
+single zone union.
+
+\paragraph{The cover rule: fixpoint membership as a proof step.}
+Evaluating $\Sat(\mu)$ answers \emph{where} $\mu$ holds; the cover rule turns that into a step of the
+derivation. A demand for $\mu$ on zone $Z$ is met exactly when $Z$ lies inside the fixpoint,
+$Z\subseteq\Sat(\mu)$, in which case $\mu$ is discharged and the launched pursuit is retained as the
+fixpoint's witness, from which the model reads its runs:
+\[
+\frac{\tup{\Gamma\cup\{\mu\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\begin{array}{ll}
+\tup{\Gamma}{\Ctx}{Z}{\obligations}{\eventualities} & (\text{discharge})\\[2pt]
+\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z\cap(x_\mu{=}0)}{\obligations\cup\{x_\mu\}}{\eventualities\cup\{\mu\}} & (\text{launch-U})\\[2pt]
+\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z\cap(x_\mu{=}0)}{\obligations\cup\{x_\mu\}}{\eventualities} & (\text{launch-R})
+\end{array}}
+\quad Z\subseteq\Sat(\mu)
+\tag{\textrm{Cov}}\label{tag:chk}
+\]
+On partial cover the demand is refined to $Z\cap\Sat(\mu)$, component by component, and the residual outside
+the fixpoint closes:
+\[
+\frac{\tup{\Gamma\cup\{\mu\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\tup{\Gamma\cup\{\mu\}}{\Ctx}{Z_i}{\obligations}{\eventualities}}
+\qquad Z_i\in\mathsf{cc}\big(Z\cap\Sat(\mu)\big)
+\tag{\textrm{Cov}$^{*}$}\label{tag:chkstar}
+\]
+Where classical model checking tests membership in a fixpoint computed over a \emph{given} structure, here
+the identical test is a proof rule whose fixpoint is computed with \emph{no} structure in hand and whose
+witness constructs one. That shift, from checking a model to building one, is what the cover rule
+contributes.

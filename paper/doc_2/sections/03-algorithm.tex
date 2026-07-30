@@ -1,0 +1,108 @@
+% ---------------------------------------------------------------------------
+%  03-algorithm.tex -- turning the theorem into a test
+% ---------------------------------------------------------------------------
+\section{The algorithm}
+\label{sec:algorithm}
+
+\subsection{Partitioning a node}
+
+\code{components()} treats each goal of $\Gam$, each context formula of $\Ctx$
+and each live pursuit as one \emph{item}, and runs union--find over the items,
+joining two whenever their symbol sets meet. That is \ref{S1}.
+
+Atom sets are \textbf{bitmasks}, one bit per atom of the input, memoised per
+formula id. The test compares every pair of items at every node, so as sets of
+strings it is three nested loops with a string compare at the bottom, and it
+measured about a third of the run on formulas that never split. As words it is
+one \code{\&}. An input with more than $64$ atoms simply does not decompose.
+
+\subsection{The side conditions, and where each bites}
+
+\paragraph{Clock ownership (\ref{S2}).} Ownership is read off the
+\emph{formulas}, not off the live pursuits, via \code{clocks\_of()}: a modality
+still sitting in $\Gam$ already owns its formula-clock. Deriving ownership from
+pursuits alone leaves such a clock owned by nobody, and the component
+construction then frees it out of \emph{every} component's zone. That is a
+weakening, and it is the exact bug that made
+$\mathrm{AG}(\mathrm{EF}_{[2,4]}p)\wedge\mathrm{AG}_{[4,7]}\neg p$ come back
+satisfiable: freeing the onset clock erases the constraint that distinguishes
+one onset from another. A clock owned by more than one group, or constrained
+but owned by none, aborts the split.
+
+\paragraph{Shared symbols are not only propositions.} A data variable couples
+its constraints exactly as an atom does: $\{x>3\}$ and $\{x<2\}$ mention no
+proposition at all, and grouping by propositions alone puts them in different
+components, each satisfiable on its own. \code{IntVar} names therefore join the
+bitmask alongside \code{Atom} names. The self-test caught this on twelve checks
+of the form $\{x\le 5\}\wedge\{x\ge 10\}$; the sweeps did not, having no data
+variables in them.
+
+\paragraph{Degenerate components.} A component mentioning no atom at all --- a
+bare $\top$ or $\bot$ --- is folded into the first real component instead of
+being split off. Peeling those off is all cost and no benefit, and empirically
+it was also where the first version went wrong: every split it performed on
+$\mathrm{AG}(\mathrm{EF}_{[2,4]}p)\wedge\mathrm{AG}_{[4,7]}\neg p$ was
+degenerate, and the verdict was still wrong, which is what localised the fault
+to clock ownership rather than to the partition.
+
+\subsection{Deciding by components}
+
+\code{decide\_by\_components()} keys each component on its node key and looks it
+up in a cache shared with every sub-search. On a miss it runs a fresh engine
+from that node --- constructed from the original root formula, so the clock
+allocation, the maximum constants and the split points are identical --- and
+stores the verdict. One false component is enough to reject.
+
+The cache is what makes this component \emph{caching} rather than component
+\emph{splitting}: the same component recurs across many parent nodes, which is
+precisely why the undecomposed search enumerated their product.
+
+\subsection{Hooking it into the search}
+
+\code{try\_split} runs in \code{decide\_scc} before a node is first visited. A
+node that splits is marked settled with the conjunction of its components'
+verdicts and is never expanded: it becomes a leaf of the enclosing search,
+exactly like a node whose own SCC has already closed, which the search already
+knows how to consume. Tarjan never sees it, so no cycle can run through it ---
+which is sound because \cref{cor:search} decides it outright.
+
+Recursion terminates because every component is strictly smaller than the node
+it came from; a depth cap guards against pathology.
+
+\subsection{Not re-deciding shapes that never split}
+
+Whether a node splits depends only on \emph{which formulas it carries}, never on
+its zone. So a shape that did not split never will, and \code{nosplit\_} records
+its signature. Shapes repeat heavily --- a nested tower has roughly half as many
+shapes as nodes --- and without the memo the union--find runs again at each of
+them, which is pure loss on any formula that never decomposes. This is what
+brings the overhead on non-splitting inputs down to a few per cent
+(\cref{sec:eval}).
+
+\subsection{Two closures that were buying nothing}
+
+Two costs found by re-profiling after the decomposition work, both unrelated to
+it and both removed on a proof rather than a measurement.
+
+\emph{The dead-clock closure.} Eliminating the clocks a node no longer reads
+used to re-close the DBM, which was $30\%$ of the run. It is unnecessary. The
+update only relaxes, and the result is already canonical: checking
+$d[i][j]\le d[i][l]+d[l][j]$ on the new matrix given it held on the old one, a
+path through a freed clock is $d[i][0]+\infty=\infty$; a freed row is $\infty$
+throughout; a freed column becomes $d[i][0]$, and old closure already gave
+$d[i][0]\le d[i][l]+d[l][0]$. The reference row needs
+$d[0][l]+d[l][0]\ge 0$, which holds because a closed non-empty zone has no
+negative cycle.
+
+\emph{The extrapolation closure.} $\mathrm{Extra}_M$ closed unconditionally; a
+zone none of whose bounds exceeded its clock's maximum is unchanged and arrived
+closed, so a dirty flag skips the cubic step.
+
+\subsection{The static form}
+
+The same theorem applied once, at the root, to the top-level conjunction is a
+preprocessing step: split the conjuncts into atom-disjoint groups, solve each,
+conjoin. It costs one test and it is strictly stronger on the shapes it catches,
+because no per-node bookkeeping is paid at all. It catches nothing whose
+independence only emerges during the search. Both forms are implemented; see
+\cref{sec:eval} for the comparison.

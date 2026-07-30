@@ -1,0 +1,43 @@
+% ---------------------------------------------------------------------------
+%  00-how-to-read.tex
+% ---------------------------------------------------------------------------
+\section*{How to read this}
+\addcontentsline{toc}{section}{How to read this}
+
+Two audiences. Someone deciding whether the idea is worth a paper should read
+\cref{sec:problem} (what the measurement says the problem actually is),
+\cref{sec:theory} (the theorem), and \cref{sec:eval} (what it buys). Someone
+maintaining the code should read \cref{sec:algorithm} and keep
+\cref{sec:negative} nearby, because most of what looks like an optimisation here
+is not one, and that section says which.
+
+Every mechanism is traceable to one place in the source.
+
+\begin{center}\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+Mechanism & Where & Section \\
+\midrule
+partition a node into components   & \code{components()}            & \cref{sec:algorithm} \\
+decide a node by its components    & \code{decide\_by\_components()} & \cref{sec:algorithm} \\
+hook into the search               & \code{try\_split} in \code{decide\_scc} & \cref{sec:algorithm} \\
+atom sets as bitmasks              & \code{atoms\_of()}             & \cref{sec:algorithm} \\
+clock ownership                    & \code{clocks\_of()}            & \cref{sec:algorithm} \\
+shapes that never split            & \code{nosplit\_}               & \cref{sec:algorithm} \\
+root-level split (static form)     & \code{Tableau::check}          & \cref{sec:eval} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+Both forms are behind flags and default off: \code{TCTL\_COMPONENTS=1} for the
+per-node form, \code{TCTL\_DECOMPOSE=1} for the root-level one. With neither set
+the search is exactly what it was.
+
+\begin{intuition}
+The tableau's cost has two completely different causes, and they need different
+cures. One is that a node carries many clock regions; the other is that it
+carries many independent obligations. Everything anyone would normally try
+attacks the first. The measurement in \cref{sec:problem} says the expensive
+cases are the second, and the second has a clean fix.
+\end{intuition}

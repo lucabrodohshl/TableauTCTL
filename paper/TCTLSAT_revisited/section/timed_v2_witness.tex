@@ -1,0 +1,97 @@
+% ============================================================================
+% FLAVOR 2 — WITNESS-FIRST (construction: everything is a run of the model we build)
+% Entry point: a modality is a promise about runs; the machinery lays those runs down.
+% Leans into the paper's headline (the procedure RETURNS a timed-automaton witness).
+% Drop-in replacement for the "Timed modalities" + "Cover rule" subsections.
+% Reuses labels tag:Uunf, tag:Runf, tag:chk, tag:chkstar.
+% ============================================================================
+
+\subsection{Timed modalities and the cover rule}\label{sec:timed}
+
+\paragraph{Modalities as promises about runs.}
+Satisfiability asks for a timed automaton whose runs bear out the formula, and our procedure builds that
+automaton as it goes. Read each timed modality as a promise about the runs from a configuration:
+$\mathrm{E}(\varphi\,\mathbf{U}_\kI\,\psi)$ promises \emph{some} run on which $\varphi$ holds until $\psi$
+is reached with elapsed time in $\kI$; $\mathrm{A}(\varphi\,\mathbf{R}_\kI\,\psi)$ promises that on
+\emph{every} run $\psi$ holds throughout the window unless $\varphi$ has already released it. To satisfy a
+promise we must lay down the runs that keep it. The rules below are the run-builder; the cover rule is
+where the derivation asks it for a run.
+
+\paragraph{Pursuit: tracing a run that keeps the promise.}
+When a node demands $\mu$, we \emph{pursue} it: we start a stopwatch $x_\mu$ at that configuration and trace
+a keeping run forward, one step at a time. At each step the pursued $\mu^\bullet$ either \emph{stops},
+meaning the run has reached $\psi$ within the window and the promise is kept, or \emph{goes}, meaning the
+run asserts $\varphi$ now and carries the unfinished promise $\nxQ\mu^\bullet$ to its successor. Since time
+is dense, ``the run continues'' includes letting time pass, so $x_\mu$ advances along time-successors as
+well as across edges.
+\[
+\frac{\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\begin{array}{ll}
+\tup{\Gamma\cup\{\psi\}}{\Ctx}{Z\cap(x_\mu\!\in\!\kI)}{\obligations}{\eventualities\setminus\{\mu\}} & (\text{stop})\\[3pt]
+\tup{\Gamma\cup\{\varphi,\,\EX\mu^\bullet\}}{\Ctx}{Z}{\obligations}{\eventualities} & (\text{go},\ \mathrm{Q}{=}\mathrm{E})\\[3pt]
+\tup{\Gamma\cup\{\varphi\}}{\Ctx\cup\{\AX\mu^\bullet\}}{Z\cap(x_\mu\le\sup\kI)}{\obligations}{\eventualities} & (\text{go-A},\ \mathrm{Q}{=}\mathrm{A})
+\end{array}}
+\qquad \mu=\mathrm{Q}(\varphi\,\mathbf{U}_\kI\,\psi)
+\tag{$\mathbf{U}^\bullet$}\label{tag:Uunf}
+\]
+An existential until needs one keeping run, so its unfinished promise travels as a goal, $\EX\mu^\bullet$.
+A universal until needs \emph{every} run to keep it, so the promise travels through the context,
+$\AX\mu^\bullet$, and is capped at $x_\mu\le\sup\kI$: this is an urgency that forbids any run from letting
+the window close with $\psi$ still unseen. A release makes a safety promise, so the run is followed through
+the window, discharged the moment $\varphi$ releases and otherwise made to carry $\psi$; splitting the run
+by whether $x_\mu$ is before, inside, or past the window gives:
+\[
+\frac{\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\begin{array}{ll}
+\tup{\Gamma\cup\{\varphi\}}{\Ctx}{Z^{<\kI}}{\obligations}{\eventualities} & (\text{before: }\varphi\text{ releases})\\[2pt]
+\tup{\Gamma\cup\{\nxQ\mu^\bullet\}}{\Ctx}{Z^{<\kI}}{\obligations}{\eventualities} & (\text{before: continue})\\[2pt]
+\tup{\Gamma\cup\{\psi,\,\nxQ\mu^\bullet\}}{\Ctx}{Z^{\in\kI}}{\obligations}{\eventualities} & (\text{in: }\psi,\text{ continue})\\[2pt]
+\tup{\Gamma\cup\{\varphi,\psi\}}{\Ctx}{Z^{\in\kI}}{\obligations}{\eventualities} & (\text{in: }\psi,\ \varphi\text{ releases})\\[2pt]
+\tup{\Gamma}{\Ctx}{Z^{>\kI}}{\obligations}{\eventualities} & (\text{after: lapsed})
+\end{array}}
+\qquad \mu=\mathrm{Q}(\varphi\,\mathbf{R}_\kI\,\psi)
+\tag{$\mathbf{R}^\bullet$}\label{tag:Runf}
+\]
+
+\paragraph{Where a keeping run exists.}
+As the traced runs branch and rejoin, the valuations they pass through collapse, up to $\cong_M$, into
+finitely many zones. Collecting the valuations from which a keeping run exists gives the \emph{satisfaction
+set}
+\[
+\Sat(\mu)\ \subseteq\ \mathbb{R}_{\ge0}^{\clockSet}:
+\]
+for an until, the valuations from which some run reaches a stop; for a release, the valuations from which
+some run never violates. Read as a recursion, ``a valuation admits a keeping run if it stops now, or its
+continuation admits one,'' these are the least solution for an until (the run must \emph{reach} its stop)
+and the greatest for a release (the run must \emph{avoid} violation forever). Finiteness of the zones up to
+$\cong_M$ makes the computation terminate. Crucially, $\Sat(\mu)$ refers to no external model: it is read
+off the very runs the pursuit lays down, which are the runs of the automaton under construction, and a
+single $x_\mu$ covers the dense family of onsets of a persistent demand.
+
+\paragraph{Splicing runs into the derivation: the cover rule.}
+A demand for $\mu$ on zone $Z$ is the point where the derivation asks the run-builder for a witness. The
+cover rule checks that every valuation of $Z$ admits a keeping run, $Z\subseteq\Sat(\mu)$; if so it
+discharges $\mu$ and retains the launched pursuit, whose branches become actual edges of the witness
+automaton:
+\[
+\frac{\tup{\Gamma\cup\{\mu\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\begin{array}{ll}
+\tup{\Gamma}{\Ctx}{Z}{\obligations}{\eventualities} & (\text{discharge})\\[2pt]
+\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z\cap(x_\mu{=}0)}{\obligations\cup\{x_\mu\}}{\eventualities\cup\{\mu\}} & (\text{launch-U})\\[2pt]
+\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z\cap(x_\mu{=}0)}{\obligations\cup\{x_\mu\}}{\eventualities} & (\text{launch-R})
+\end{array}}
+\quad Z\subseteq\Sat(\mu)
+\tag{\textrm{Cov}}\label{tag:chk}
+\]
+The discharge child carries no run of its own; it lets the node's remaining obligations proceed while a
+persistent context re-demands $\mu$ at the next configuration. The launch child \emph{is} the run. Where
+the cover is only partial, the demand is refined to the components that do admit a run, and the residual,
+which admits none, closes:
+\[
+\frac{\tup{\Gamma\cup\{\mu\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\tup{\Gamma\cup\{\mu\}}{\Ctx}{Z_i}{\obligations}{\eventualities}}
+\qquad Z_i\in\mathsf{cc}\big(Z\cap\Sat(\mu)\big)
+\tag{\textrm{Cov}$^{*}$}\label{tag:chkstar}
+\]
+In one line: the timed operators lay the runs down, $\Sat(\mu)$ records where a keeping run exists, and the
+cover rule splices those runs into the model exactly where a modality is demanded.

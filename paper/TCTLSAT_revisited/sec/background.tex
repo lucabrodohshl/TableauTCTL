@@ -1,0 +1,100 @@
+\section{Background}\label{sec:back}
+
+%We fix a finite set $\mathcal{P}$ of atomic propositions and a finite set $\clockSet$ of {clocks}, that is real-valued variables that increase uniformly with time. 
+ 
+A {time bound} $\kI$ is a non-empty interval of $\mathbb{R}_{\ge 0}$ with integer endpoints of the form $[a,b],(a,b],[a,b),(a,b)$ with $a\le b$, $a\in\Int_{\ge0}$, $b\in\Int_{\ge0}\cup\{\infty\}$. Non-emptiness leaves $[a,a]$ as the only bound with $a=b$; we call it \emph{punctual}.
+
+%We only consider non-punctual bounds, so $[a,a]$ is excluded.
+Fix a finite set $\mathcal{P}$ of atomic propositions. We study TCTL in negation normal form over these time bounds, built according to the following grammar:
+%We study TCTL in negation normal form over the non-punctual fragment, built from two timed path modalities, {until} and {release}:
+\vspace{-0.1cm}
+\[
+\varphi ::= \top \mid \bot \mid p \mid \neg p \mid \varphi\land\varphi \mid \varphi\lor\varphi \mid
+\mathrm{E}(\varphi\mathbf{U}_\kI\varphi) \mid \mathrm{E}(\varphi\mathbf{R}_\kI\varphi) \mid \mathrm{A}(\varphi\mathbf{U}_\kI\varphi) \mid \mathrm{A}(\varphi\mathbf{R}_\kI\varphi).
+\]
+
+Other operators are expressible by the grammar: $\mathrm{EF}_\kI \varphi \equiv \mathrm{E}(\top\mathbf{U}_\kI\varphi)$, $\mathrm{AF}_\kI \varphi \equiv \mathrm{A}(\top\mathbf{U}_\kI\varphi)$, $\mathrm{EG}_\kI \varphi \equiv \mathrm{E}(\bot\mathbf{R}_\kI\varphi)$, and $\mathrm{AG}_\kI \varphi \equiv \mathrm{A}(\bot\mathbf{R}_\kI\varphi)$. 
+%Every other operator can be directly established through this grammar: $\mathrm{F}_\kI\varphi\equiv\top\mathbf{U}_\kI\varphi$ and $\mathrm{G}_\kI\varphi\equiv\bot\mathbf{R}_\kI\varphi$. Prefixed
+%by a path quantifier these give the familiar $\mathrm{EF}_\kI,\mathrm{AF}_\kI$ -- shorthand for
+%$\mathrm{E}(\top\mathbf{U}_\kI\cdot)$ and $\mathrm{A}(\top\mathbf{U}_\kI\cdot)$ -- and dually
+%$\mathrm{EG}_\kI,\mathrm{AG}_\kI$ for $\mathrm{E}(\bot\mathbf{R}_\kI\cdot)$ and
+%$\mathrm{A}(\bot\mathbf{R}_\kI\cdot)$; the {untimed} operators are the case $\kI=[0,\infty)$. 
+Unlike CTL the logic has {no next operator}:
+over dense time no configuration has an immediate successor~\cite{AlurCourcoubetisDill1990}. The symbols $\EX,\AX$ used by the tableau are proof-theoretic
+markers internal to the construction, never object operators. 
+Throughout, we consider a formula $\varphi$ of size $n=|\FL(\varphi)|$, where $\FL(\varphi)$ is its Fischer--Ladner closure.
+
+TCTL is interpreted over the timed transition system (TTS) induced by a TA~\cite{AlurCourcoubetisDill1990,Baier08}. A TA~\cite{BehrmannLarsenYi2004Uppaal,Bouyer05TimedAutomata} over set of clocks $\clockSet$ is a tuple $\mathcal{A}=\langle S,s_0,\mathsf{Inv},E,\mathcal{P},L\rangle$:
+locations $S$, initial $s_0$, a {location invariant} $\mathsf{Inv}(s)$ (that is, a downward-closed constraint on clock valuations), discrete edges
+$E\subseteq S\times 2^{\clockSet}\times S$ (each carrying the clocks it resets), and a labelling
+$L:S\to 2^{\mathcal{P}}$.  An
+invariant bounds how long time may elapse in a location: without it a run could idle in a location forever. Invariant-free locations are allowed, so the model expresses idling as well. $\mathcal{A}$ is {non-blocking} (time can always
+diverge, hence no timelock). 
+
+Any $\mathcal{A}$ induces a TTS $\mathcal{T}=\langle C,c_0,\xrightarrow{\cdot},\to\rangle$, whose configurations $C=\{(s,\nu)\in S\times\clockValuations{\clockSet}\mid \nu\models\mathsf{Inv}(s)\}$ pair a location with an admissible clock valuation, and whose initial configuration is $c_0=(s_0,\mathbf{0})$. Two relations act on configurations: $\xrightarrow{\ \cdot\ } \subseteq C\times\mathbb{R}_{\ge0}\times C$, the delay relation, which we write $(s,\nu)\xrightarrow{t}(s,\nu+t)$ for $t\in\mathbb{R}_{\ge0}$ such that $\nu+t'\models\mathsf{Inv}(s)$ throughout $t'\in[0,t]$; and $\to\subseteq C\times C$, the discrete relation, which we write $(s,\nu)\to(s',\nu[R:=0])$ for each edge $(s,R,s')\in E$ with $\nu\models\mathsf{Inv}(s)$ and $\nu[R:=0]\models\mathsf{Inv}(s')$, where the \emph{reset} $\nu[R:=0]$ zeroes every clock in $R\subseteq \clockSet$ and leaves the others unchanged. 
+%(i.e.\ $\nu[R:=0](x)=0$ if $x\in R$, and $\nu(x)$ otherwise).
+
+
+
+A {run} $\rho$ from any $c\in C$ is a maximal alternation of delays $t_0,t_1,\dots$ and discrete steps; a
+{position} $\pi=(i,\delta)$ with $0\le\delta\le t_i$ denotes the configuration $\rho(\pi)$ after the $i$-th
+discrete step plus delay $\delta$, at elapsed time $\mathit{time}(\pi)=T_i+\delta$ (with
+$T_i=\sum_{j<i}t_j$), positions ordered by the lexicographic $\preceq$. The run is {non-Zeno} when its delays sum to $\infty$; by non-blockingness the set
+$\mathrm{Runs}^\infty(c)$ of non-Zeno runs is non-empty. The TCTL satisfaction relation is the standard
+one~\cite{AlurCourcoubetisDill1990}, evaluated over $\mathrm{Runs}^\infty$; for a single run, timed until and release read:
+\vspace{-0.2cm}
+\begin{align}
+\rho&\models\varphi\mathbf{U}_\kI\psi \iff
+\exists\pi\big[\mathit{time}(\pi)\in\kI \wedge \rho(\pi)\models\psi \wedge
+\forall\pi'\prec\pi(\rho(\pi')\models\varphi)\big]
+\label{eq:sat_u}\\
+\rho&\models\varphi\mathbf{R}_\kI\psi \iff
+\forall\pi\big[\mathit{time}(\pi)\in\kI \Rightarrow
+\big(\rho(\pi)\models\psi \vee \exists\pi'\prec\pi(\rho(\pi')\models\varphi)\big)\big]
+\label{eq:sat_r}
+    \end{align}
+
+%at the level of a single run the
+%timed until reads
+%\begin{equation}
+%\rho\models\varphi\mathbf{U}_\kI\psi \iff
+%\exists\pi\big[\mathit{time}(\pi)\in\kI \wedge \rho(\pi)\models\psi \wedge
+%\forall\pi'\prec\pi(\rho(\pi')\models\varphi)\big],
+%\label{eq:sat_u}
+%\end{equation}
+%and release is its dual, $\varphi\mathbf{R}_\kI\psi\equiv\neg(\neg\varphi\mathbf{U}_\kI\neg\psi)$, or equivalently
+%\begin{equation}
+%\rho\models\varphi\mathbf{R}_\kI\psi \iff
+%\forall\pi\big[\mathit{time}(\pi)\in\kI \Rightarrow
+%\big(\rho(\pi)\models\psi \vee \exists\pi'\prec\pi(\rho(\pi')\models\varphi)\big)\big].
+%\label{eq:sat_r}
+%\end{equation}
+%
+%
+The path quantifier then lifts a run formula $\varphi$ to a configuration: $(s,\nu)\models\mathrm{E}(\varphi)$ iff
+{some} $\rho\in\mathrm{Runs}^\infty(s,\nu)$ satisfies $\varphi$, and $(s,\nu)\models\mathrm{A}(\varphi)$ iff
+{all} do. Quantifying over positions rather than absolute time keeps the clauses unambiguous at discrete
+jumps; restricting to $\mathrm{Runs}^\infty$ is the usual dense-time reading.%, which we adopt and revisit in Section~\ref{sec:correct}.
+
+
+
+The formula $\varphi$ is {satisfiable}, or \SAT, if there exists a TA whose induced TTS satisfies it at its initial configuration, $\mathcal{T},(s_0,\mathbf{0})\models\varphi$, otherwise we say it is {unsatisfiable}, or \UNSAT. We call such an automaton a {witness} for $\varphi$.
+
+
+The tableau reasons symbolically about timed valuations. A {zone} is a set
+$Z\subseteq\mathbb{R}_{\ge0}^{\clockSet}$ defined by a finite conjunction of difference constraints
+$x-y\prec c$ (with $x,y\in\clockSet\cup\{0\}$, $0$ a fictitious clock fixed at $0$, and the bound
+$(c,\prec)$ ranging over $(\Int\times\{<,\le\})\cup\{(\infty,<)\}$), stored as a difference-bound matrix
+(DBM)~\cite{AlurDill1994,Bouyer05TimedAutomata}; the strictness flag is needed to represent the open time
+bounds the rules intersect with. Zones are closed under intersection, intersection with a single-clock guard
+$x\in\kI$, reset $Z[R:=0]$, and {time-successor} $\uparrow Z=\{\nu+t\mid\nu\in Z,t\ge0\}$. Zones are compared modulo max-constant extrapolation: for $M$ the largest constant in the
+input, $\alpha_M$ relaxes every bound above $M$, and we store each zone as the canonical
+(shortest-path-closed) DBM of $\alpha_M(Z)$, writing $Z\cong_M Z'$ when these canonical forms coincide, so
+$\cong_M$-equivalent zones are syntactically identical. We keep the tableau construction diagonal-free, so that max-constant extrapolation is sound~\cite{Bouyer05TimedAutomata}.
+
+%
+%
+%Every guard the tableau tests is single-clock and every zone it builds is a conjunction of
+%single-clock constraints, so the construction is {diagonal-free}, for which max-constant
+%extrapolation is sound~\cite{Bouyer05TimedAutomata}.
+%

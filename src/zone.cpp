@@ -216,6 +216,11 @@ void Zone::down() {
     dbm_down(dbm_.data(), static_cast<int>(dim_));
 }
 
+void Zone::free_many(const std::vector<unsigned char>& dead) {
+    if (empty_) return;
+    ptctlmc::dbm_free_many(dbm_.data(), static_cast<int>(dim_), dead.data());
+}
+
 void Zone::free(ClockId clock) {
     if (empty_) return;
     assert(clock > 0 && clock < dim_);  // Can't free reference clock

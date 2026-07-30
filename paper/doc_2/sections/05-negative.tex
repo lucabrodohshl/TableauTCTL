@@ -1,0 +1,88 @@
+% ---------------------------------------------------------------------------
+%  05-negative.tex -- what was tried and did not work
+% ---------------------------------------------------------------------------
+\section{What does not work, and why}
+\label{sec:negative}
+
+This section exists so nobody spends a second week on these. Each was
+implemented and measured, not reasoned about.
+
+\subsection{Zone subsumption}
+
+Realisability is monotone under narrowing, so an accepted verdict transfers to
+every sub-zone and a rejected one to every super-zone --- the passed-list
+inclusion test of a reachability tool. Implemented, it gave $2\%$ fewer nodes
+and cost slightly more than it saved.
+
+The reason is structural: the several zones a discrete shape carries are the
+\emph{disjoint} cells that the delay rule produces, and disjoint zones are never
+subsets of one another. Inclusion has nothing to fire on.
+
+\subsection{Coarser abstraction ($\mathrm{Extra}_{LU}$)}
+
+Strictly coarser than $\mathrm{Extra}_M$ and already available in the DBM
+library. It cannot help as the construction stands: the split points a clock is
+tested against are used as \emph{equalities} by the delay rule, so a clock's
+lower and upper bound sets coincide and $\mathrm{Extra}_{LU}$ collapses to
+$\mathrm{Extra}_M$. It would need the splitting reworked to be one-sided first.
+
+\subsection{Forced stops}
+
+If $\psi$ is already a goal and the whole zone lies inside the window, the stop
+branch is available at every valuation and satisfies the until outright, so the
+deferral branch looks redundant. It is not. Two satisfiable formulas turn
+unsatisfiable:
+\[
+  \mathrm{AG}\,\mathrm{AF}_{[0,3]}q \wedge
+  \mathrm{AG}(q\rightarrow \mathrm{AG}_{(0,1]}\neg q),
+  \qquad
+  \mathrm{AG}(p\wedge \mathrm{A}(q\,\mathbf{U}_{[1,3]}\,r)) \wedge
+  \mathrm{EG}(r\rightarrow\mathrm{EG}\,r).
+\]
+Incomplete rather than unsound, so it never lies about \textsc{unsat} --- and
+the node counts before the check were tempting ($21\,025\to 7\,326$ on a
+depth-$8$ tower), which is the whole reason to record it here.
+
+\subsection{Collapsing the pursuit record}
+
+Of the fields a pursuit carries, \code{is\_until} and \code{x\_mu} are functions
+of the modality, and \code{rolled} is recoverable from the deadline (which is
+$b$ before the first witness and $b-a$ after; when $a=0$ the two coincide and so
+do the guards). All three are therefore \emph{functionally determined}, and
+dropping them from the key merges nothing --- a field determined by $\mu$ takes
+the same value at every node carrying $\mu$. Only \code{part} is genuinely
+recoverable from data that varies, and only when the zone lies wholly in one
+part of the window; canonicalising it there is worth a few per cent on timed
+releases and nothing elsewhere.
+
+\subsection{Goal subsumption}
+
+$\mathrm{Q}(\varphi\,\mathbf{R}_I\,\psi)$ with $0\in I$ asserts $\psi$ at this
+configuration, and a disjunction is implied by any disjunct already present, so
+both consequences can be dropped from $\Gam$. Worth $8\%$ on towers and $36\%$
+on shapes that actually carry the redundancy; roughly neutral on the suite.
+
+One trap: the first version dropped \emph{literals} too, and
+$\mathrm{EG}(\mathrm{AF}\,p\wedge\mathrm{AG}\,\neg p)$ came back satisfiable.
+Closure is decided on $\Gam_{\mathsf{prop}}$, so a literal removed here is a
+literal the contradiction test cannot see, and the release only restores it at
+the next expansion, by which time the complementary literal may have been
+consumed.
+
+\subsection{Treating $\mathrm{AG}\,\psi$ as context}
+
+$\mathrm{AG}\,\psi\equiv\psi\wedge\mathrm{AX}\,\mathrm{AG}\,\psi$, and the
+calculus already carries ``holds at every successor''. Encoding it that way
+removes a live pursuit per nesting level. It is a large win where such
+modalities sit \emph{side by side} ($106\,679\to 14\,809$ nodes on six parallel
+$\mathrm{AG}(\mathrm{EF}\cdots)$) and a growing loss where one sits
+\emph{inside} another ($-50\%$ at tower depth $9$), because an $\mathrm{AG}$
+under an until is re-demanded through the context at every onset that until
+relaunches. Restricting it to modalities under no enclosing until keeps the wins
+and caps the loss at $8\%$. Left behind a flag, default off; the regression is
+real and unbounded in depth.
+
+\subsection{Conflict-driven anything}
+
+See \cref{sec:problem}: zero rejected and zero closed nodes on the hardest
+instance. There are no conflicts to learn from.

@@ -1,0 +1,127 @@
+\section{Tableau}
+
+We define a depth-first, one-pass tableau procedure for satisfiability of TCTL with integer arithmetic constraints. Formulas are assumed to be in negation normal form and are represented by a globally interned DAG to ensure maximal structural sharing. Timing constraints are handled symbolically using zones represented as canonical Difference Bound Matrices (DBMs). No region construction is performed.
+
+\paragraph{Nodes.}
+A tableau node is a tuple
+\[
+N=\langle \Gamma,\mathcal{X},Z,\mathit{Act},\mathit{Ev}\rangle
+\]
+where:
+$\Gamma$ is a finite set of formulas required at the current abstract state,
+$\mathcal{X}$ is the set of universal successor obligations,
+$Z$ is a zone in canonical DBM form,
+$\mathit{Act}$ is a partial map from active timed eventualities to clocks,
+and $\mathit{Ev}$ is the set of postponed eventualities.
+
+Arithmetic constraints in $\Gamma$ are intersected with $Z$.  
+If the resulting DBM is empty, the node closes.
+
+A node is semantically satisfiable if there exists a TTS state $s$ and valuation $\nu\in Z$ such that $(s,\nu)\models\Gamma$ and every discrete successor $s'$ satisfies $(s',\nu)\models\mathcal{X}$.
+
+\paragraph{Closure.}
+\[
+\frac{\langle \Gamma,\mathcal{X},Z,\mathit{Act},\mathit{Ev}\rangle}
+{\;\otimes\;}
+\quad
+\text{if }
+\bot\in\Gamma
+\;\text{or}\;
+\{p,\neg p\}\subseteq\Gamma
+\;\text{or}\;
+Z=\emptyset.
+\]
+
+\paragraph{Boolean rules.}
+\[
+\frac{\langle \Gamma\cup\{\varphi\land\psi\},\mathcal{X},Z,\mathit{Act},\mathit{Ev}\rangle}
+{\langle \Gamma\cup\{\varphi,\psi\},\mathcal{X},Z,\mathit{Act},\mathit{Ev}\rangle}
+\]
+\[
+\frac{\langle \Gamma\cup\{\varphi\lor\psi\},\mathcal{X},Z,\mathit{Act},\mathit{Ev}\rangle}
+{\langle \Gamma\cup\{\varphi\},\mathcal{X},Z,\mathit{Act},\mathit{Ev}\rangle
+\;\Big|\;
+\langle \Gamma\cup\{\psi\},\mathcal{X},Z,\mathit{Act},\mathit{Ev}\rangle}
+\]
+
+\paragraph{Universal next extraction.}
+\[
+\frac{\langle \Gamma\cup\{\AX \varphi\},\mathcal{X},Z,\mathit{Act},\mathit{Ev}\rangle}
+{\langle \Gamma,\mathcal{X}\cup\{\varphi\},Z,\mathit{Act},\mathit{Ev}\rangle}
+\]
+
+\paragraph{Untimed until.}
+Let $e=\EU{\varphi}{\psi}$.
+\[
+\frac{\langle \Gamma\cup\{e\},\mathcal{X},Z,\mathit{Act},\mathit{Ev}\rangle}
+{\langle \Gamma\cup\{\psi\},\mathcal{X},Z,\mathit{Act},\mathit{Ev}\setminus\{e\}\rangle
+\;\Big|\;
+\langle \Gamma\cup\{\varphi,\EX e\},\mathcal{X},Z,\mathit{Act},\mathit{Ev}\cup\{e\}\rangle}
+\]
+
+The rule for $\AU{\varphi}{\psi}$ replaces $\EX$ by $\AX$.
+
+\paragraph{Release.}
+Using the fixpoint decomposition,
+\[
+\mathrm{E}(\varphi\mathbf{R}\psi)
+\equiv
+\psi\land(\varphi\lor \EX\,\mathrm{E}(\varphi\mathbf{R}\psi)),
+\]
+and analogously for $\mathrm{A}$, we obtain the corresponding branching rule. Release does not contribute to $\mathit{Ev}$.
+
+\paragraph{Timed until.}
+Let $\xi=\tEU{\varphi}{\psi}{I}$.  
+If $\xi\notin\mathrm{dom}(\mathit{Act})$, allocate a fresh clock $x_\xi$, extend $Z$, and reset:
+\[
+Z := Z[x_\xi := 0].
+\]
+
+Then:
+\[
+\frac{\langle \Gamma\cup\{\xi\},\mathcal{X},Z,\mathit{Act},\mathit{Ev}\rangle}
+{\langle \Gamma\cup\{\psi\},\mathcal{X},
+Z\cap(x_\xi\in I),
+\mathit{Act},\mathit{Ev}\setminus\{\xi\}\rangle
+\;\Big|\;
+\langle \Gamma\cup\{\varphi,\EX\xi\},\mathcal{X},Z,\mathit{Act},\mathit{Ev}\cup\{\xi\}\rangle}
+\]
+
+The rule for $\tAU{\varphi}{\psi}{I}$ replaces $\EX$ by $\AX$.
+
+\paragraph{Successor generation.}
+If $\mathrm{EXset}(\Gamma)=\{\EX\varphi_1,\dots,\EX\varphi_k\}$, then for each $i$:
+\[
+\frac{\langle \Gamma,\mathcal{X},Z,\mathit{Act},\mathit{Ev}\rangle}
+{\langle \{\varphi_i\}\cup\mathcal{X},\emptyset,Z,\mathit{Act},\mathit{Ev}\rangle}
+\]
+
+If $\mathrm{EXset}(\Gamma)=\emptyset$:
+\[
+\frac{\langle \Gamma,\mathcal{X},Z,\mathit{Act},\mathit{Ev}\rangle}
+{\langle \mathcal{X},\emptyset,Z,\mathit{Act},\mathit{Ev}\rangle}
+\]
+
+\paragraph{Time elapse.}
+\[
+\frac{\langle \Gamma,\mathcal{X},Z,\mathit{Act},\mathit{Ev}\rangle}
+{\langle \Gamma,\mathcal{X},\uparrow Z,\mathit{Act},\mathit{Ev}\rangle}
+\]
+
+\paragraph{Loop rule.}
+Let $\mathrm{can}(Z)$ denote the canonical DBM of $Z$ and define
+\[
+\mathsf{abs}(N)
+=
+\langle \Gamma,\mathcal{X},\mathrm{can}(Z),\mathit{Act}\rangle.
+\]
+
+If along a branch there exist $i<j$ with
+\[
+\mathsf{abs}(N_i)=\mathsf{abs}(N_j),
+\]
+then the loop is accepting iff every $e\in\mathit{Ev}_i$ is fulfilled between $i$ and $j$.  
+Accepting loops terminate the branch successfully; rejecting loops close it.
+
+\medskip
+Since canonical DBMs are unique and clock allocation is deterministic, only finitely many abstractions exist. The loop rule therefore guarantees termination. Soundness and completeness follow by induction on formula structure combined with fairness of accepting cycles.

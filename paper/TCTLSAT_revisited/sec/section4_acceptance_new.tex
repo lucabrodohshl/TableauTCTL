@@ -1,0 +1,115 @@
+%% Proposed replacement for \subsection{Acceptance} in sec/section4_nosat.tex.
+%% Keeps the label ss:loop and the labels M1, M2; adds def:children, def:graph.
+%% \input{sec/example2.tex} still follows it.
+
+\subsection{The Tableau Graph and Acceptance}\label{ss:loop}
+
+Through application of the rules, the tableau builds a graph of nodes, which can be used to establish satisfiability. 
+
+
+
+
+To build this graph we settle which rule fires at a node, since rule application is
+non-deterministic: several rules may apply to a node, which inherits the kind of the rule fired at it, and
+one rule may apply to several goals.
+Writing $\Subt(\varphi)$ for the timed modalities of $\FL(\varphi)$ and
+$P=\FL(\varphi)\cup\{\mu^\bullet,\mu^{\ast}\mid\mu\in\Subt(\varphi)\}$, we define
+$\FL^{\bullet}(\varphi)=P\cup\{\EX\chi,\AX\chi\mid\chi\in P\}$, with $|\FL^{\bullet}(\varphi)|=O(|\FL(\varphi)|)$. No rule produces a goal or a
+context formula outside $\FL^{\bullet}(\varphi)$.
+
+
+
+We fix, arbitrarily, a linear order \FormalSmaller{} on formulas (e.g., lexicographic)
+and fire on the \FormalSmaller-least goal of $\Gamma$ to which a rule applies: a conjunction \ruleref{Conj}, a disjunction \ruleref{Disj}, an
+$\AX\varphi$ \ruleref{AX}, a demanded modality \ruleref{Cov}, \ruleref{Carry} or \ruleref{Absorb}
+as their side conditions prescribe, an until pursuit past a bounded window \ruleref{Umiss}, an
+ordinary until pursuit $\mu^\bullet$ \ruleref{Uunf}
+and a persistent one $\mu^{\ast}$ \ruleref{Uunfcarry}, and a release pursuit
+\ruleref{Runf} when its zone lies wholly before or wholly inside
+the window and \ruleref{Rsplit} otherwise.
+
+This strategy produces for each node $N$ a set of children $\ch(N)$. A closed node has no children,
+and the children of a saturated one are the \ruleref{Delay}- and the
+\ruleref{EX}-children together, both successor rules being conjunctive, so it is an \ANDn-node.
+
+
+
+
+
+The tableau graph $\TabGraph = (\TabNode, \TabEdge)$ is then constructed from the nodes reachable under $\ch$ from the
+root $N_0=\tup{\{\varphi\}}{\emptyset}{\{\mathbf 0\}}{\emptyset}{\emptyset}$: its vertices $V$ are
+those nodes up to $\equiv$, and it has an edge $e\in E$ from $N$ to every $N'\in\ch(N)$. A \emph{path} of $\TabGraph$ is a sequence of vertices, each a child of the preceding one, and a \emph{cycle} is a path returning to its first vertex.
+
+
+\begin{lemma}%[Finiteness]
+  \label{lem:finiteness}
+$|\TabNode|\le 2^{O(n)}\cdot M^{O(n^{2})}$, and every node has $O(n)$ children.
+\end{lemma}
+\begin{proof}
+  Each component of a node ranges over a set of size $2^{O(n)}$: $\Gamma$ and $\Ctx$ over subsets
+of $\FL^{\bullet}(\varphi)$; $\obligations$ over subsets of $\Subt(\varphi)$, being determined by
+its domain; $\Deadline$ over the assignments to each $x_\mu$ of $\sup\kI$ or $\sup\kI-\inf\kI$ with a
+strictness flag; the reset set over subsets of $\clockSet$; and the discharged modality over
+$\Subt(\varphi)$. A $\cong_M$-zone over $K\le n+1$ clocks is a $(K{+}1)^{2}$ DBM whose
+entries are $\infty$ or lie in $\{-M,\dots,M\}\times\{<,\le\}$, so there are $M^{O(n^{2})}$ of
+them. Thus the bound is $2^{O(n)}\cdot M^{O(n^{2})}$. Every rule has at most three children except
+\ruleref{EX}, with one per $\EX\psi\in\Gamma$ and $|\Gamma|=O(n)$,.
+\end{proof}
+
+
+A \emph{marking} $\mathcal M \subseteq \TabNode$ is a set of vertices containing no closed node and containing, of each
+of its members, at least one child if that node is an \ORn-node and all of them if it is an
+\ANDn-node. A cycle of $\mathcal M$ is \emph{time-progressing} if it elapses positive time and every
+clock is either reset on it or extrapolated above $M$. 
+
+$\mathcal M$ is \emph{successful} if
+every $N\in\mathcal M$ satisfies
+\begin{enumerate*}[label={\textbf{(M\arabic*)}}, ref={\textbf{(M\arabic*)}},
+                   itemjoin={{; }}, itemjoin*={{; and }}]
+\item\label{M1} some path of $\mathcal M$ from $N$ meets a time-progressing cycle
+\item\label{M2} for every until pursuit $\mu$ active at $N$,  some path of
+$\mathcal M$ from $N$ that carries it throughout, with $x_\mu$ unreset along the way, takes a stop
+branch (\ruleref{Ustop} or
+\ruleref{Ustopcarry}) at a node $N_k$ with $Z_k\cap(x_\mu\in\kI)\neq\emptyset$.
+\end{enumerate*}
+\noindent
+A tableau \emph{succeeds} on $\varphi$ if $N_0$ lies in a successful marking.
+
+
+\ref{M2} ensures that an until pursuit is fulfilled rather
+than deferred for ever through \ruleref{Ugo}. Its clause on $x_\mu$ ties the stop to the onset
+the pursuit measures: a relaunch on the way restarts the clock, and a stop taken past it
+witnesses the later onset.
+\ref{M1} excludes Zeno witnesses. A clock never reset on a cycle and bounded there by some $k\le M$
+caps the delays of all its traversals at $k$, so infinitely many traversals elapse only finitely much
+time. The run they describe lies outside $\mathrm{Runs}^\infty$, on which satisfaction is defined,
+and is a behaviour no system exhibits. The requirement that a cycle elapse positive time rules out
+cycles built from expansion steps alone. Consider a persistent pursuit that has already carried over once: $\psi$ is a goal,
+$x_\mu=0$, and the deadline on $x_\mu$ is $b-a$. If $0\in\kI$, a second application of
+\ruleref{Ustopcarry} yields the same node, since the goal it adds is already present, the clock
+it resets is already zero, and the deadline it sets is already in force. The node is its own
+child, and the resulting self-loop elapses no time, so \ref{M1} keeps the node only if another
+path leaves it.
+
+
+
+
+%Both clauses read edges and not nodes: \ref{M1} inspects the clocks a cycle resets, \ref{M2} the
+%branch on which a pursuit stops. This is why Definition~\ref{def:graph} compares the two records a
+%node keeps of them. Without them a node reached through a reset and one reached without it would be
+%merged, and a cycle through the merged node could report a reset that it never performs.
+%
+
+%
+%Not every cycle of $\TabGraph$ crosses a successor step. \ruleref{Ustopcarry} re-imposes $\mu^{\ast}$
+%on a node whose zone it has just reset, and for $\inf\kI=0$ the result can be the node it started
+%from; Definition~\ref{def:graph} identifies the two, so a chain of rule applications that would
+%regress for ever closes a cycle instead. Such a cycle elapses no time, so \ref{M1} discards it, and
+%the calculus needs no separate argument that rule application terminates.
+%
+%Both clauses ask for reachability inside $\mathcal M$ rather than constraining every cycle
+%separately, which is what the semantics calls for: TCTL quantifies over time-divergent runs, so what
+%a witness owes at a reachable configuration is \emph{one} divergent continuation, not that every
+%continuation diverge. Example~\ref{ex:zeno} exhibits a node whose only local cycle is Zeno and which
+%belongs to a successful marking nonetheless.
+%

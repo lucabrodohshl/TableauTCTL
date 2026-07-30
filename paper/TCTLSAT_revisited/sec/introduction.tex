@@ -1,0 +1,76 @@
+\section{Introduction}\label{sec:intro}
+
+%The severe consequences of software failures in safety-critical domains necessitate rigorous verification workflows to establish system correctness. Model-checking is the established approach for this purpose~\cite{Baier08,Clarke99}. 
+
+
+%The model-checking workflow typically involves formalizing system requirements in a temporal logic and automatically verifying a formal model of the system against these specifications. In the context of real-time systems, where correctness depends not only on functional behaviour but also on timing, this workflow is commonly instantiated using timed automata~\cite{AlurDill1994} as the modelling formalism, Timed Computation Tree Logic (TCTL)~\cite{AlurCourcoubetisDill1990} as the specification language, and \textsc{Uppaal}~\cite{BehrmannLarsenYi2004Uppaal} as the verification tool, as demonstrated in various applications~\cite{Guo2014UPPAAL,Laursen2020Railway,Mikucionis2010Herschel}.
+
+
+
+Establishing the correctness of safety-critical software is a central concern of formal verification, for which model checking is the established approach~\cite{Baier08,Clarke99}. For real-time systems, where correctness depends not only on functional behaviour but also on timing, software is typically modelled as a timed automaton (TA)~\cite{AlurDill1994} and verified against requirements expressed in Timed Computation Tree Logic (TCTL)~\cite{AlurCourcoubetisDill1990} using efficient tools such as \textsc{Uppaal}~\cite{BehrmannLarsenYi2004Uppaal}, as exemplified by~\cite{Guo2014UPPAAL,Laursen2020Railway,Mikucionis2010Herschel}. 
+
+
+In this workflow, however, the verification step only establishes conformance between a system and a specification; it says nothing about the quality of the specification itself. A TCTL property may be unsatisfiable, valid or refined by another property in the sense of~\cite{10.1145/3808127,BrodoScaloraHenkler2026MinimalTemporalProperties}. Each of these defects is ultimately a question of satisfiability, and detecting them therefore requires a satisfiability procedure for TCTL. 
+
+
+The satisfiability problem for TCTL is known to be undecidable in
+general~\cite{AlurCourcoubetisDill1990,AlurHenzinger1994ReallyTemporal}. Finite
+satisfiability is nonetheless recursively
+enumerable, so enumerating candidate automata and model checking each is sound
+and eventually finds a model for every satisfiable formula; it simply never
+terminates on an unsatisfiable one. La~Torre and
+Napoli~\cite{fsttcs2000-LN,LaTorreNapoli2001TimedTreeAutomata} traced the source
+of undecidability to punctuality, showing that once singular intervals are
+forbidden, i.e., in the \emph{non-punctual} fragment, finite satisfiability
+becomes decidable in \textsc{ExpTime} by reduction to emptiness of timed tree
+automata, at the cost of a global construction, exponential in the formula. Subsequent work traded completeness
+for implementability: Penczek et al.~\cite{boundedTCTL} reduce satisfiability to
+the existence of a \emph{bounded} parametric TA, instantiated with
+\textsc{Imitator}~\cite{imitator3}; their method is sound but incomplete, does not
+handle nested modalities, and terminates by virtue of the imposed bound.
+
+To this day, no search-based, goal-directed procedure for TCTL satisfiability has been proposed, and the only practical approach is bounded and partial. 
+
+%To fill this gap, we present the first on-the-fly, symbolic and tableau-based decision procedure for satisfiability of TCTL. Contrary to previous work, not only is our procedure sound and complete for the non-punctual fragment, but it is also sound and terminating for the general TCTL as well as complete for TCTL formulae of temporal nesting equal to 1, thus deciding the typical properties engineers write in practice. Moreover, our procedure is directly implementable, matches the optimal \textsc{ExpTime} bound~\cite{LaTorreNapoli2001TimedTreeAutomata}, and returns a witnessing TA whenever the input formula is satisfiable.
+%
+%
+
+To fill this gap, we present the first on-the-fly, symbolic and tableau-based
+decision procedure for satisfiability of TCTL. Unlike previous work, not only is our procedure sound, but also terminating for the general TCTL. On the non-punctual fragment the procedure is in
+addition complete, matching the optimal \textsc{ExpTime}
+bound~\cite{Clarke99,fsttcs2000-LN}. Completeness moreover extends
+beyond that fragment, to every formula of temporal nesting depth~1, punctuality
+included, thus deciding most of the typical properties engineers write in practice. Finally, our procedure is directly implementable, matches the optimal \textsc{ExpTime} bound~\cite{LaTorreNapoli2001TimedTreeAutomata}, and returns a witnessing TA whenever the input formula is satisfiable.
+
+Unlike the classical tableau constructions for logics such as CTL or
+\emph{discrete}-time quantitative CTL~\cite{tableau_ctl,Clarke99,EmersonEtAl1992QuantitativeTemporalReasoning},
+our calculus must contend with two phenomena of the {dense-time} semantics.
+First, \emph{zenoness}: a cycle may be traversed infinitely often within a bounded
+total delay, so a branch defers a deadline for ever without ever reaching it, along a
+run no system exhibits. Second, an eventuality under a $\mathrm{AG}$ is demanded
+at a continuum of instants, each carrying its own deadline. We settle the first with an
+acceptance condition on the tableau graph itself, and the second by covering the continuum symbolically.
+
+We structure the paper as follows.  Section~\ref{sec:back} presents the background; Section~\ref{sec:tableau} presents our procedure; Section~\ref{sec:correct} establishes
+termination, soundness, completeness, and complexity; Section~\ref{sec:eval} evaluates a prototype.
+
+
+
+
+%
+%\section{Related Work}\label{sec:related_work}
+%
+%
+%Tableau methods are classical for untimed branching-time logics~\cite{Clarke99,tableau_ctl}, but handle neither dense clocks nor Zeno behaviour. The closest tableau in spirit targets a \emph{discrete}-time quantitative CTL~\cite{EmersonEtAl1992QuantitativeTemporalReasoning}, which, however, does not hanlde dense-time phenomena. 
+%
+%The only other decision procedure for non-punctual TCTL is the one proposed in~\cite{fsttcs2000-LN,LaTorreNapoli2001TimedTreeAutomata}, who settle its decidability with the same \textsc{ExpTime} bound. Their route is automata-theoretic and global: the formula is translated as a whole into a timed tree automaton and satisfiability is reduced to emptiness. This monolithic construction affords no goal-directed exploration and does not directly yield the TA \emph{system} model that verification tools consume. We instead obtain such a model directly: our tableau stays at the logical level throughout, building only the demanded fragment of the state space, maintaining clock valuations symbolically as zones, excluding Zeno witnesses explicitly, and extracting a concrete TA from a successful derivation.
+%
+%A synthesis-oriented alternative is the bounded method of Penczek et al.~\cite{boundedTCTL}, which reduces TCTL satisfiability to the existence of a bounded parametric TA, instantiated through the \textsc{Imitator}~\cite{imitator3} model checker. There, termination stems from an imposed structural bound rather than from the logic of the
+%procedure, so the method is inherently incomplete; and the fragment it addresses is incomparable
+%to ours, forbidding nesting yet admitting punctual constraints, for which satisfiability is
+%undecidable. Ours is the maximal \emph{decidable} fragment, which we decide completely, and our
+%calculus runs soundly on punctual input as well, so the two fragments are covered by one
+%procedure at differing guarantees.
+%
+
+

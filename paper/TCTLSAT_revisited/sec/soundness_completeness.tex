@@ -1,0 +1,33 @@
+
+\section{Soundness and Completeness}\label{ss:sound}
+We now prove the procedure is sound, i.e., that if the tableau succeeds on $\varphi$, then $\varphi$ is \SAT, and complete for non-punctual TCTL, i.e., that if $\varphi$ is \SAT, then the tableau succeeds on $\varphi$. These results are supported by the following lemma.
+\begin{lemma}\label{lem:zones}
+Let $N_0,\dots,N_k$ be a path of $\TabGraph$ with non-empty zones.
+\begin{enumerate*}[label=\emph{(\roman*)}, ref={(\roman*)}, itemjoin={{\ }}, itemjoin*={{\ }}]
+\item\label{zoneitem:feasible} For every $\nu_k\in Z_k$ there are $\nu_i\in Z_i$ and delays realising
+every step, positive at every \ruleref{Delay} step.
+\item\label{zoneitem:stability} If a delay crosses no integer hyperplane $x=b$ with $b\le M$, every
+subformula of $\varphi$ has constant truth on the open segment it sweeps.
+\item\label{zoneitem:nonzeno} A cycle of $\TabGraph$ has a non-Zeno unfolding iff it is
+time-progressing, and then one whose iterations elapse a constant positive amount.
+\end{enumerate*}
+\end{lemma}
+\begin{proof}
+\ref{zoneitem:feasible} Every zone operation a rule performs (intersection with a guard, reset, time-successor,
+$\cong_M$-canonicalisation) admits back-propagation, non-empty precisely because the successor
+valuation lies in its image~\cite{Bouyer05TimedAutomata}; thread backwards from $\nu_k$, the delay of
+a \ruleref{Delay} step being positive since $\Dopen Z$ and $\Dbd Z$ lie strictly ahead of $Z$.
+\ref{zoneitem:stability} No clock crosses an integer at or below $M$, so no integer part changes and no
+fractional ordering wraps, while clocks above $M$ are identified by extrapolation; the segment lies in
+one clock region, on which TCTL truth is
+constant~\cite{AlurCourcoubetisDill1990,Bouyer05TimedAutomata}, and its endpoints are nodes of their
+own by the integer split of \ruleref{Delay}.
+\ref{zoneitem:nonzeno} By contraposition, a cycle elapsing no time takes zero time over any number of
+traversals; and if some clock is neither reset on it nor extrapolated above $M$, it keeps a bound
+$c\le M$, grows by exactly the delay elapsed, and caps the total at $c$. Conversely \ref{zoneitem:feasible} yields
+a traversal elapsing some $\delta>0$, and the cycle returning to its first node, no rule distinguishes
+two visits and no clock depletes a budget, so $\delta$ recurs at every iteration.
+\end{proof}
+
+\input{sec/subsec/soundness.tex}
+\input{sec/subsec/completeness.tex}

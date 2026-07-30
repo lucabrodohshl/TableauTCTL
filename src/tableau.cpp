@@ -101,11 +101,15 @@ PooledVec<Deadline> drop_deadline(const PooledVec<Deadline>& D, ClockId x) {
 
 // ── Cover rule (paper §4.2) ─────────────────────────────────────────────────
 
-CoverResult apply_cover(const Node& n, FormulaId mu,
+
+// num_clocks/max/sx_cache fed the satisfaction-set side condition, which (Cov)
+// does not have.  They are kept so the call sites need not change.
+CoverResult apply_cover(const Node& n, FormulaId mu, bool ag_context_,
                         const std::map<FormulaId, ClockId>& cmap,
-                        std::size_t num_clocks,
-                        const std::vector<std::int32_t>& max, FormulaFactory& f,
-                        SatCache& sx_cache) {
+                        [[maybe_unused]] std::size_t num_clocks,
+                        [[maybe_unused]] const std::vector<std::int32_t>& max,
+                        FormulaFactory& f,
+                        [[maybe_unused]] SatCache& sx_cache) {
     // A persistent context such as AG μ re-demands μ at uncountably many onsets.
     // A single formula-clock x_μ serves them all (§4.2): the dense family of
     // onsets is absorbed into one finite union of zones, against which the cover
@@ -114,8 +118,32 @@ CoverResult apply_cover(const Node& n, FormulaId mu,
     // launching again would grow the pursuit set, and with it the node key,
     // without bound, so no two nodes would ever compare equal and the search
     // would not terminate.
+    // A re-demand may be discharged against the running pursuit only when the
+    // running obligation covers the new one.  Unbounded windows nest -- a later
+    // witness serves every earlier onset -- so there the discharge (the early
+    // return below) is sound.  A bounded universal until is rolled instead
+    // (persistent flag below).  Every other bounded pursuit -- an existential
+    // until, a release of either quantifier -- falls through to a full (Cov):
+    // the relaunch resets x_mu and pursues the new onset, while the discharge
+    // child of that (Cov) carries the running pursuit onward.
+    const NodeKind mk0 = f.node(mu).kind;
+    const Window mw0 = window_of(mu, f);
+    const bool recover_redemand =
+        clock_of(cmap, mu) != kNoClock && !mw0.hi_inf &&
+        !(is_until_modality(mk0) && is_universal(mk0));
+    // (Absorb).  The paper states this rule for an until: a re-demand whose
+    // window is unbounded is discharged against the running pursuit, because the
+    // pursuits still to be launched witness psi at unboundedly large times and an
+    // absorbed onset needs only one psi past a finite point.
+    //
+    // Here it also takes an unbounded *release*, which the paper leaves to a
+    // relaunch.  That is an optimisation, sound for the easier reason: a release
+    // demands psi throughout its window, so a later onset asks for it on a
+    // sub-interval of the running pursuit's and is already implied.  Measured:
+    // restricting this to untils keeps every verdict and the whole suite, and
+    // costs a couple of extra nodes per nested release (AG(AG p): 23 vs 21).
     for (const Pursuit& p : n.pursuits) {
-        if (p.mu == mu) {
+        if (p.mu == mu && !recover_redemand) {
             CoverResult only;
             only.kind = CoverResult::Kind::Cover;
             Node discharge;
@@ -143,7 +171,43 @@ CoverResult apply_cover(const Node& n, FormulaId mu,
         }
     }
 
-    ZoneSet SX = satisfaction_set(mu, n.X, cmap, num_clocks, max, f, sx_cache);
+    // (Cov) for a safety context, under TCTL_AG_CONTEXT.
+    //
+    // A universal release whose left argument is bot and whose window is the
+    // whole timeline is AG psi, and nothing about it is ever decided: bot never
+    // releases the obligation, the window never closes, and (R-unf) takes the
+    // same branch at every step for ever.  It is a pursuit only because release
+    // is uniformly handled as one, and it costs a live pursuit per nesting
+    // level -- on a tower of AG(EF ...) the pursuit vector then ranges over the
+    // product of a per-level state that has one reachable value.
+    //
+    // Its fixpoint law is AG psi = psi & AX AG psi, and the calculus already
+    // carries "holds at every successor" in the context X.  So the launch adds
+    // psi to the goals and mu to X, and no pursuit is created: the successor
+    // rule re-imposes mu at each successor, which is the same obligation with
+    // none of the state.
+    if (ag_context_ && !is_until_modality(f.node(mu).kind) &&
+        is_universal(f.node(mu).kind)) {
+        const Window w = window_of(mu, f);
+        const FormulaNode& mn = f.node(mu);
+        const bool whole_line = w.lo == 0 && !w.lo_strict && w.hi_inf;
+        const bool never_released =
+            mn.children[0] != kInvalidId &&
+            f.node(mn.children[0]).kind == NodeKind::False;
+        if (whole_line && never_released) {
+            CoverResult only;
+            only.kind = CoverResult::Kind::Cover;
+            Node ctxc;
+            ctxc.Gamma = gamma_without(n.Gamma, mu);
+            ctxc.Gamma.insert(mn.children[1]);          // psi holds here
+            ctxc.X = n.X; ctxc.X.insert(mu);            // and at every successor
+            ctxc.Z = n.Z; ctxc.O = n.O; ctxc.D = n.D;
+            ctxc.pursuits = n.pursuits; ctxc.phase = n.phase;
+            only.children.push_back(std::move(ctxc));
+            return only;
+        }
+    }
+
     const ClockId x_mu = clock_of(cmap, mu);    // kNoClock if mu is untimed
 
     // Onset: the launch resets x_mu, so start measuring the window now by
@@ -164,21 +228,37 @@ CoverResult apply_cover(const Node& n, FormulaId mu,
     base.X = n.X; base.Z = n.Z; base.O = n.O; base.D = n.D;
     base.pursuits = n.pursuits; base.phase = n.phase;
 
-    if (SX.contains(Zc)) {
+    // (Cov) is unconditional (paper §4.2): a demanded mu forks into a discharge
+    // and a launch, full stop.  There is no satisfaction-set side condition --
+    // the `S_X(mu) contains Z' gate, and the PartialCover narrowing it fell back
+    // on, are left over from the pre-cover-rule construction.  Node::X is never
+    // populated, so S_X was computed against an empty context, the gate always
+    // held and the narrowing never fired.  Removing both is behaviour-preserving.
+    {
         res.kind = CoverResult::Kind::Cover;
         Node discharge = base;
         Node launch = base;
         if (x_mu != kNoClock) {
             launch.Z.reset(x_mu);
             launch.just_reset.push_back(x_mu);
-            // keep O sorted; it is written once per launch and never searched
-            launch.O.emplace_back(mu, x_mu);
-            std::sort(launch.O.begin(), launch.O.end());
+            bool haveO = false;
+            for (const auto& e : launch.O)
+                if (e.first == mu) { haveO = true; break; }
+            if (!haveO) {
+                // keep O sorted; it is written once per launch and never searched
+                launch.O.emplace_back(mu, x_mu);
+                std::sort(launch.O.begin(), launch.O.end());
+            }
         }
         Pursuit p; p.mu = mu; p.x_mu = x_mu;
         p.stage = Pursuit::Stage::Here; p.part = Pursuit::Part::Whole;
         p.is_until = until_kind;
-        launch.pursuits.push_back(p);
+        // A relaunch (E re-demand) replaces the live pursuit rather than
+        // appending a second one: one clock, one pursuit per modality.
+        bool replaced = false;
+        for (Pursuit& q : launch.pursuits)
+            if (q.mu == mu) { q = p; replaced = true; break; }
+        if (!replaced) launch.pursuits.push_back(p);
         // A deadline only for a *timed* universal until (real clock + finite
         // window).  Untimed A-until has no clock and window [0,∞) → no deadline.
         // (Guard on x_mu: an untimed AU node's time_upper.is_infinity is a
@@ -194,18 +274,6 @@ CoverResult apply_cover(const Node& n, FormulaId mu,
         return res;
     }
 
-    ZoneSet inter = ZoneSet::of(Zc);
-    inter.intersect(SX);
-    if (inter.is_empty()) { res.kind = CoverResult::Kind::Close; return res; }
-
-    res.kind = CoverResult::Kind::PartialCover;
-    for (const Zone& comp : inter.components()) {
-        Node child = base;
-        child.Gamma = n.Gamma;   // keep mu, re-demand on narrowed zone
-        child.Z = comp;
-        res.children.push_back(std::move(child));
-    }
-    return res;
 }
 
 // ── Engine ───────────────────────────────────────────────────────────────────
@@ -230,6 +298,7 @@ public:
                             std::chrono::duration<double>(timeout_s));
             has_deadline_ = true;
         }
+        root_formula_ = root;
         cmap_ = assign_clocks(root, f);
         nc_ = 1 + cmap_.size();
         std::int32_t M = max_constant(root, f);
@@ -241,11 +310,72 @@ public:
         // window, so extrapolating every clock at the global maximum constant M
         // preserves distinctions no guard can observe.  Per-clock maxima are
         // sound because every guard is single-clock (§3), and they attack the
-        // M^O(K^2) zone count of Lemma 1 directly.
+        // M^O(K^2) zone count of Lemma 1 directly.  The maximum is read off the
+        // clock's *own* constants, before the shifts added below, which only
+        // refine where time is split and never widen what a guard can see.
         for (ClockId c = 1; c < nc_; ++c)
             max_[c] = clock_bounds_[c].empty() ? 0 : clock_bounds_[c].back();
+        add_onset_shifts(root, f);
+        collect_top_ags(root, f);
+        number_atoms(root, f);
         debug_ = std::getenv("TCTL_DEBUG") != nullptr;
         words_ = (nc_ + 63) / 64;
+    }
+
+    /// Split points a clock needs so that *onsets* stay distinguishable.
+    ///
+    /// A clock's own constants are where its guards flip, but not where the
+    /// demands it carries flip.  Under a context banning p over [c,d], an onset
+    /// at time t demands p somewhere in [t+a, t+b], and that demand is
+    /// unsatisfiable exactly for t in [c-a, d-b].  Splitting the context clock
+    /// only at c and d leaves that interval inside a cell that also holds
+    /// satisfiable onsets, and the cell's launch succeeds on one of those: on
+    /// AG(EF[3,4] p) & AG[4,5] !p the bad onset is the single point t=1, no cell
+    /// isolates it, and the search reports SAT for an unsatisfiable formula.
+    ///
+    /// So an enclosing modality's clock is split, in addition, at its own
+    /// endpoints shifted by those of each modality nested inside it.  The shifts
+    /// are read off nesting pairs rather than off all pairs of constants: a
+    /// clock gains at most two split points per modality below it, and none of
+    /// them depends on the magnitude of a constant, which is what keeps the
+    /// search flat in M.
+    void add_onset_shifts(FormulaId root, FormulaFactory& f) {
+        // Every timed modality of the formula, with its window.
+        struct Mod { FormulaId id; std::int32_t a, b; bool binf; };
+        std::vector<Mod> mods;
+        std::function<void(FormulaId)> walk = [&](FormulaId x) {
+            if (x == kInvalidId) return;
+            const FormulaNode& n = f.node(x);
+            if (is_timed(n.kind))
+                mods.push_back({x, static_cast<std::int32_t>(n.time_lower.value),
+                                n.time_upper.is_infinity ? 0
+                                    : static_cast<std::int32_t>(n.time_upper.value),
+                                n.time_upper.is_infinity});
+            walk(n.children[0]); walk(n.children[1]);
+        };
+        walk(root);
+
+        // The two are related by being live together, not by nesting: in
+        // AG[c,d] !p & AG(EF[a,b] p) the ban and the demand are conjuncts.  So
+        // every modality's clock takes the shifts of every other's window.
+        for (const Mod& rho : mods) {
+            const ClockId ec = clock_of(cmap_, rho.id);
+            if (ec == kNoClock || ec >= nc_ || clock_bounds_[ec].empty()) continue;
+            std::vector<std::int32_t>& bs = clock_bounds_[ec];
+            for (const Mod& mu : mods) {
+                if (mu.id == rho.id) continue;
+                const std::int32_t lo = rho.a - mu.a;
+                if (lo > 0 && lo < max_[ec]) bs.push_back(lo);
+                if (!rho.binf && !mu.binf) {
+                    const std::int32_t hi = rho.b - mu.b;
+                    if (hi > 0 && hi < max_[ec]) bs.push_back(hi);
+                }
+            }
+        }
+        for (std::vector<std::int32_t>& bs : clock_bounds_) {
+            std::sort(bs.begin(), bs.end());
+            bs.erase(std::unique(bs.begin(), bs.end()), bs.end());
+        }
     }
 
     // The only clock values where a formula's truth can flip are the integer
@@ -307,6 +437,7 @@ public:
     // see CMakeLists.txt) so deep-but-finite runs do not overflow — no per-check
     // thread and no artificial depth limit.
     bool decide(FormulaId root) {
+
         Node n;
         n.Gamma.insert(root);
         n.Z = Zone::zero(nc_);
@@ -314,12 +445,20 @@ public:
         return decide_scc(n);
     }
 
-    std::uint64_t nodes() const { return expansions_; }
+    std::uint64_t nodes() const { return expansions_ + sub_nodes_; }
     bool budget_hit() const { return budget_hit_; }
 
     /// Witness automaton for the marking of the last successful decide().
     /// Only meaningful when SCC acceptance ran and the verdict was SAT.
     TimedAutomaton witness() { return extract_witness(root_id_); }
+
+    /// Turn the optional optimisations on or off as a set.  Environment
+    /// variables still act as per-feature overrides, so a single optimisation
+    /// can be isolated for a measurement without rebuilding.
+    void apply_version(bool v2) {
+        if (std::getenv("TCTL_COMPONENTS") == nullptr)    decomp_ = v2;
+        if (std::getenv("TCTL_SUBSUME_GOALS") == nullptr) subsume_goals_ = v2;
+    }
     bool can_extract() const { return root_id_ != kNoRegion; }
 
 private:
@@ -402,22 +541,97 @@ private:
     // separate exactly the zones the matrix did -- the key stays faithful.
     // The engine still *operates* on dense zones; only the stored key is
     // minimal.
-    void append_zone(const Zone& ez, Key& k) const {
-        if (ez.is_empty()) { put(k, 0); return; }
-        put(k, 1);
+    // ── Interned zones ──────────────────────────────────────────────────
+    //
+    // A node's key used to carry the packed zone itself, so the same zone was
+    // minimal-graph reduced and copied once per node that reached it.  It is
+    // reached many times: on a 16-window instance 787453 packs produced 131427
+    // distinct zones, a factor of six, and on a nested tower the factor is
+    // eleven.  Zones are therefore interned, and the key carries a four-byte id.
+    // Two things follow.  Reduction runs once per distinct zone rather than once
+    // per node, and the keys shrink from a few hundred words to one, which is
+    // what the node table hashes and stores on every lookup.
+    //
+    // In front of the pool sits a direct-mapped cache on the *raw* matrix, since
+    // the pool can only be consulted with a packed zone and packing is the cost
+    // being avoided.  A hit is verified by comparing the raw entries, so the
+    // cache never decides an identity it has not checked; it is bounded, so a
+    // long run cannot spend the memory that holding every raw matrix would.
+    std::uint32_t zone_id(const Zone& ez) const {
         const int dim = static_cast<int>(ez.num_clocks());
+        const raw_t* raw = ez.raw_data();
+        const std::size_t n = static_cast<std::size_t>(dim) * dim;
+
+        // Two entries per round.  The hash only buckets the cache; a collision
+        // costs a miss, never a wrong answer, because the line is confirmed by
+        // comparing the raw entries below.  Exactness lives in the pool, which
+        // is keyed on the packed bytes.
+        std::uint64_t h = 1469598103934665603ull;
+        {
+            const auto* w = reinterpret_cast<const std::uint64_t*>(raw);
+            const std::size_t nw = n / 2;
+            for (std::size_t i = 0; i < nw; ++i) {
+                h = (h ^ w[i]) * 1099511628211ull;
+            }
+            if (n & 1) h = (h ^ static_cast<std::uint64_t>(
+                                static_cast<std::uint32_t>(raw[n - 1]))) *
+                           1099511628211ull;
+        }
+        const std::size_t slot = h & (kZoneCacheSlots - 1);
+        ZoneCacheLine& line = zcache_[slot];
+        if (line.id != kNoRegion && line.raw.size() == n &&
+            std::equal(line.raw.begin(), line.raw.end(), raw))
+            return line.id;
+
         pack_buf_.resize((ptctlmc::mindbm_bound(dim) + 3) / 4);
         pack_bits_.resize(ptctlmc::mindbm_bits2words(
             static_cast<std::uint32_t>(dim) * static_cast<std::uint32_t>(dim)));
         pack_first_.resize(static_cast<std::size_t>(dim));
         pack_next_.resize(static_cast<std::size_t>(dim));
+        // The packer writes whole records but not whole words: with 16-bit
+        // bounds and an odd constraint count the last half-word is never
+        // written, and it sits *inside* the length the packer reports.  The
+        // buffer is reused, so that half-word carries whatever the previous zone
+        // left there, and the same zone then encodes differently depending on
+        // what was packed before it -- which showed up as the node count moving
+        // when an unrelated cache changed how often the packer ran.  Clearing
+        // the whole buffer makes the encoding a function of the zone alone.
+        std::memset(pack_buf_.data(), 0, pack_buf_.size() * sizeof(std::uint32_t));
         const std::size_t bytes =
-            ptctlmc::mindbm_pack(ez.raw_data(), dim, pack_buf_.data(),
-                                 pack_bits_.data(), pack_first_.data(),
-                                 pack_next_.data());
+            ptctlmc::mindbm_pack(raw, dim, pack_buf_.data(), pack_bits_.data(),
+                                 pack_first_.data(), pack_next_.data());
         const std::size_t words = (bytes + 3) / 4;
-        k.insert(k.end(), pack_buf_.begin(),
-                 pack_buf_.begin() + static_cast<std::ptrdiff_t>(words));
+        // mindbm_pack writes `bytes`, not whole words, and the buffer is reused
+        // across calls, so the tail of the last word still holds whatever a
+        // previous, larger zone left there.  That tail used to travel into the
+        // node key, where it split one zone into several keys depending on what
+        // had been packed before it, and the search then rebuilt the same node
+        // more than once.  Zeroing it makes the encoding a function of the zone
+        // alone.
+        std::memset(reinterpret_cast<char*>(pack_buf_.data()) + bytes, 0,
+                    words * sizeof(std::uint32_t) - bytes);
+
+        std::string packed(reinterpret_cast<const char*>(pack_buf_.data()),
+                           words * sizeof(std::uint32_t));
+        auto it = zids_.find(packed);
+        std::uint32_t id;
+        if (it != zids_.end()) {
+            id = it->second;
+        } else {
+            id = static_cast<std::uint32_t>(zpool_.size());
+            zpool_.emplace_back(pack_buf_.begin(),
+                                pack_buf_.begin() + static_cast<std::ptrdiff_t>(words));
+            zids_.emplace(std::move(packed), id);
+        }
+        line.id = id;
+        line.raw.assign(raw, raw + n);
+        return id;
+    }
+
+    void append_zone(const Zone& ez, Key& k) const {
+        if (ez.is_empty()) { put(k, 0); return; }
+        put(k, 1);
+        put(k, zone_id(ez));
     }
 
 
@@ -461,6 +675,157 @@ private:
         return out;
     }
 
+    // ── Scheduling the marking (§5, "from a marking to an automaton") ────────
+    //
+    // (M2) promises, for each until pursuit active at a node, *some* path of the
+    // marking that stops it.  Different pursuits want different paths, and a run
+    // of the extracted automaton commits to one branch per (OR) node, so a fixed
+    // choice per node serves one pursuit and starves the rest: on AG(EF p & EF q)
+    // taking the first accepted child everywhere defers both eventualities for
+    // ever, and the automaton labels no location with p or q at all.
+    //
+    // So the automaton is built over pairs (node, pursuit currently served).  At
+    // an (OR) node the child taken is the one that moves closest to a stop for
+    // that pursuit, and once the stop is taken the schedule turns round-robin to
+    // the next pursuit pending there.  The memory is one FormulaId, so the
+    // locations stay finite: at most one per node per active pursuit.
+
+    static constexpr std::uint32_t kFar = 0xFFFFFFFFu;   ///< no stop reachable
+
+    /// Distance, over accepted edges, from each node to a stop for @p mu.
+    ///
+    /// An (OR) node needs one child that reaches the stop, since the run picks
+    /// the child; an (AND) node needs every child that still carries the pursuit
+    /// to reach it, since the run may take any of them.  Children that do not
+    /// carry @p mu impose nothing: under E the residual travels to a single
+    /// successor, and the siblings are free of it.
+    std::vector<std::uint32_t> stop_distance(FormulaId mu) const {
+        const std::size_t m = g_.size();
+        std::vector<std::uint32_t> d(m, kFar);
+        auto carries = [&](std::uint32_t v) {
+            const std::vector<FormulaId>& u = g_[v].untils;
+            return std::find(u.begin(), u.end(), mu) != u.end();
+        };
+        // Relaxation rather than a plain BFS: the max at (AND) nodes is not a
+        // shortest-path step, but both operators are monotone and the values
+        // only fall, so iterating to a fixpoint terminates.
+        for (bool changed = true; changed;) {
+            changed = false;
+            for (std::uint32_t v = 0; v < m; ++v) {
+                if (!g_[v].done || !g_[v].val || !carries(v)) continue;
+                std::uint32_t nd = kFar;
+                for (std::uint32_t c : g_[v].ch)
+                    if (c != v && g_[c].val && g_[c].discharges == mu) { nd = 0; break; }
+                if (nd != 0) {
+                    const bool orn = g_[v].kind == Expansion::Kind::Or;
+                    bool any = false;
+                    std::uint32_t acc = orn ? kFar : 0;
+                    for (std::uint32_t c : g_[v].ch) {
+                        if (c == v || !g_[c].val || !carries(c)) continue;
+                        any = true;
+                        const std::uint32_t dc = d[c] == kFar ? kFar : d[c] + 1;
+                        acc = orn ? std::min(acc, dc) : std::max(acc, dc);
+                    }
+                    nd = any ? acc : kFar;
+                }
+                if (nd < d[v]) { d[v] = nd; changed = true; }
+            }
+        }
+        return d;
+    }
+
+    /// The pursuit the schedule serves at @p v, given the one it served before.
+    ///
+    /// Keeps @p cur while it is still pending, and otherwise takes the next
+    /// pending pursuit cyclically after it, so no pursuit is passed over twice.
+    /// kInvalidId means nothing is pending and any accepted child will do.
+    FormulaId next_obligation(std::uint32_t v, FormulaId cur) const {
+        std::vector<FormulaId> u = g_[v].untils;
+        std::sort(u.begin(), u.end());
+        u.erase(std::unique(u.begin(), u.end()), u.end());
+        if (u.empty()) return kInvalidId;
+        if (std::find(u.begin(), u.end(), cur) != u.end()) return cur;
+        if (cur == kInvalidId) return u.front();
+        auto it = std::upper_bound(u.begin(), u.end(), cur);
+        return it == u.end() ? u.front() : *it;
+    }
+
+    /// The accepted children the schedule takes at @p v while serving @p mu,
+    /// each paired with the pursuit to serve after the step.
+    ///
+    /// With no until pending (@p mu == kInvalidId) the obligation served is
+    /// \ref{M1}'s divergence: head for a saturated node, whose (Delay)/(EX)
+    /// step becomes an edge of the automaton.  Leaving this case to "any
+    /// accepted child" lets the pick loop through expansion-only nodes for
+    /// ever, a region with no successor step, i.e. a location whose invariant
+    /// blocks time with no edge out — a timelock.
+    std::vector<std::pair<std::uint32_t, FormulaId>>
+    scheduled_children(std::uint32_t v, FormulaId mu) const {
+        std::vector<std::pair<std::uint32_t, FormulaId>> out;
+        auto after = [&](std::uint32_t c) {
+            // The stop discharges the pursuit, so the next node serves another.
+            return g_[c].discharges == mu ? kInvalidId : mu;
+        };
+        if (g_[v].kind == Expansion::Kind::Or) {
+            // A node that is its own child -- (U*-stop) re-applied where its
+            // goal, reset and deadline are all already in force -- offers a
+            // self-loop that elapses no time and discharges nothing new.  Its
+            // own discharge marker describes the edge that *entered* it, so
+            // without this the loop below reads it as a free stop and takes the
+            // loop for ever, leaving a location with no successor step at all.
+            bool other = false;
+            for (std::uint32_t c : g_[v].ch) if (c != v && g_[c].val) other = true;
+            std::uint32_t best = kNoRegion, bestd = kFar;
+            for (std::uint32_t c : g_[v].ch) {
+                if (!g_[c].val || (other && c == v)) continue;
+                std::uint32_t dc = 0;
+                if (mu != kInvalidId && g_[c].discharges != mu) {
+                    auto it = wdist_.find(mu);
+                    const std::uint32_t dd = it == wdist_.end() ? kFar : it->second[c];
+                    dc = dd == kFar ? kFar : dd + 1;
+                } else if (mu == kInvalidId) {
+                    dc = c < sdist_.size() ? sdist_[c] : kFar;
+                }
+                if (best == kNoRegion || dc < bestd) { best = c; bestd = dc; }
+                if (bestd == 0) break;
+            }
+            if (best != kNoRegion) out.push_back({best, after(best)});
+        } else {
+            for (std::uint32_t c : g_[v].ch)
+                if (g_[c].val) out.push_back({c, after(c)});
+        }
+        return out;
+    }
+
+    /// Distance, over accepted edges, from each accepted node to a saturated
+    /// one — the divergence metric of the schedule.  OR takes the best child,
+    /// AND the worst, since a run may be sent down any retained branch.
+    std::vector<std::uint32_t> saturated_distance() {
+        const std::size_t m = g_.size();
+        std::vector<std::uint32_t> d(m, kFar);
+        for (std::uint32_t v = 0; v < m; ++v)
+            if (g_[v].done && g_[v].val &&
+                is_saturated(decode_key(*key_of_[v]))) d[v] = 0;
+        for (bool changed = true; changed;) {
+            changed = false;
+            for (std::uint32_t v = 0; v < m; ++v) {
+                if (!g_[v].done || !g_[v].val || d[v] == 0) continue;
+                const bool orn = g_[v].kind == Expansion::Kind::Or;
+                bool any = false;
+                std::uint32_t acc = orn ? kFar : 0;
+                for (std::uint32_t c : g_[v].ch) {
+                    if (c == v || !g_[c].val) continue;
+                    any = true;
+                    const std::uint32_t dc = d[c] == kFar ? kFar : d[c] + 1;
+                    acc = orn ? std::min(acc, dc) : std::max(acc, dc);
+                }
+                const std::uint32_t nd = any ? acc : kFar;
+                if (nd < d[v]) { d[v] = nd; changed = true; }
+            }
+        }
+        return d;
+    }
+
     TimedAutomaton extract_witness(std::uint32_t root) {
         TimedAutomaton ta;
         ta.num_clocks = nc_;
@@ -468,47 +833,84 @@ private:
             if (clk != kNoClock && clk < nc_)
                 ta.clock_names[clk] = "x_" + std::to_string(clk);
 
+        // The schedule needs, per pursuit, how far each node is from stopping it.
+        wdist_.clear();
+        for (std::uint32_t v = 0; v < g_.size(); ++v)
+            if (g_[v].done && g_[v].val)
+                for (FormulaId mu : g_[v].untils)
+                    if (!wdist_.count(mu)) wdist_.emplace(mu, stop_distance(mu));
+        sdist_ = saturated_distance();
+
         // A location is the marked region opened by a head: the marked nodes
-        // reachable from it without crossing an (EX) step.  Regions may
-        // overlap, since memoisation lets one proof node serve several
-        // contexts, and that is harmless -- a location is identified by its
-        // head, not by the nodes it happens to share.
-        std::map<std::uint32_t, std::uint32_t> region_of;      // head node -> location
-        std::vector<std::uint32_t> heads;
+        // reachable from it without crossing an (EX) step.  A head is a node
+        // paired with the pursuit the schedule is serving on arrival, so one
+        // proof node reached while serving two different pursuits opens two
+        // locations, which is what keeps each of them from starving.
+        using Head = std::pair<std::uint32_t, FormulaId>;
+        std::map<Head, std::uint32_t> region_of;                // head -> location
+        std::vector<Head> heads;
         std::vector<std::vector<std::uint32_t>> members;
         std::vector<std::uint32_t> witness_node;   // the node a location is read off
-        std::vector<std::pair<std::uint32_t, std::uint32_t>> edges;  // (loc, head)
+        std::vector<std::pair<std::uint32_t, std::uint32_t>> edges;  // (loc, loc)
 
-        auto head_of = [&](std::uint32_t v) {
-            auto it = region_of.find(v);
+        auto head_of = [&](std::uint32_t v, FormulaId mu) {
+            const Head h{v, next_obligation(v, mu)};
+            auto it = region_of.find(h);
             if (it != region_of.end()) return it->second;
             const std::uint32_t r = static_cast<std::uint32_t>(heads.size());
-            region_of.emplace(v, r);
-            heads.push_back(v);
+            region_of.emplace(h, r);
+            heads.push_back(h);
             members.emplace_back();
             witness_node.push_back(v);       // the head, until an exit is found
             return r;
         };
 
-        const std::uint32_t r0 = head_of(root);
+        const std::uint32_t r0 = head_of(root, kInvalidId);
         for (std::uint32_t r = 0; r < heads.size(); ++r) {   // heads grows as we go
-            std::vector<std::uint32_t> stack{heads[r]};
-            std::set<std::uint32_t> seen;
+            std::vector<Head> stack{heads[r]};
+            std::set<Head> seen;
             while (!stack.empty()) {
-                const std::uint32_t v = stack.back();
+                const auto [v, mu0] = stack.back();
                 stack.pop_back();
-                if (!seen.insert(v).second) continue;
+                if (!seen.insert({v, mu0}).second) continue;
                 members[r].push_back(v);
+                // The pursuit served here, which the arriving one settles unless
+                // it has since been discharged.
+                const FormulaId mu = next_obligation(v, mu0);
 
                 const Node n = decode_key(*key_of_[v]);
-                if (is_saturated(n) && n.phase == Phase::Discrete) {
-                    // (EX) fires here: every marked child opens a location.
-                    if (witness_node[r] == heads[r]) witness_node[r] = v;
-                    for (std::uint32_t c : marked_children(v))
-                        edges.push_back({r, head_of(c)});
+                // (R^split) is conjunctive but partitions the *zone*, so its
+                // children describe disjoint sets of valuations rather than one
+                // configuration.  Folding them into a single region would union
+                // labels that never hold together (measured: one instance in
+                // 4166 asserted r and !r at the same location).  Any expansion
+                // step that hands its children different zones is therefore a
+                // cut, exactly as a successor step is.
+                bool partitions = false;
+                if (!is_saturated(n) && g_[v].kind == Expansion::Kind::And) {
+                    const Zone* first = nullptr;
+                    Node prev;
+                    for (std::uint32_t c : g_[v].ch) {
+                        if (!g_[c].val) continue;
+                        Node cn = decode_key(*key_of_[c]);
+                        if (!first) { prev = std::move(cn); first = &prev.Z; }
+                        else if (!(cn.Z == *first)) { partitions = true; break; }
+                    }
+                }
+                if (is_saturated(n) || partitions) {
+                    // A successor rule fires here, \ruleref{Delay} in the elapse
+                    // phase and (EX) in the discrete one, and both leave the
+                    // configuration this location stands for.  Cutting at (EX)
+                    // alone would let a region span a delay and so merge two
+                    // configurations whose labels disagree: on AG EF p the
+                    // region would hold a node with p and a node without.
+                    if (witness_node[r] == heads[r].first) witness_node[r] = v;
+                    for (const auto& [c, nmu] : scheduled_children(v, mu))
+                        edges.push_back({r, head_of(c, nmu)});
                     continue;                                // do not cross it
                 }
-                for (std::uint32_t c : marked_children(v)) stack.push_back(c);
+                for (const auto& [c, nmu] : scheduled_children(v, mu))
+                    stack.push_back({c, nmu});
             }
         }
 
@@ -517,14 +919,13 @@ private:
             TALocation loc;
             loc.id = r;
             loc.is_initial = (r == r0);
-            // A TA location carries one labelling, so it is read off a single
-            // node -- the configuration at which the region takes its discrete
-            // step.  The union over the region would merge the branches of a
-            // (Cov) fork, each individually consistent but jointly not: one
-            // branch may discharge a modality while the other pursues it into a
-            // literal the first denies.
-            {
-                const std::uint32_t v = witness_node[r];
+            // The region is now one configuration: no rule inside it elapses
+            // time or takes an edge, the (Cov) fork and the saturation rules are
+            // conjunctive, and the schedule has already resolved the (OR) nodes.
+            // So every member asserts what holds here, and the location carries
+            // the union of their literals rather than one member's.
+            std::map<ClockId, Deadline> inv;
+            for (std::uint32_t v : members[r]) {
                 const Node n = decode_key(*key_of_[v]);
                 for (FormulaId id : n.Gamma.elements()) {
                     const FormulaNode& fn = f_.node(id);
@@ -534,15 +935,22 @@ private:
                         loc.atoms.insert("!" + f_.node(fn.children[0]).atom_name);
                 }
                 // Inv(N): the deadline a universal until registered here bounds
-                // how long the location may let time pass.
+                // how long the location may let time pass.  A launch inside the
+                // region installs its own, so the tightest per clock is kept.
                 for (const Deadline& d : n.D) {
                     if (d.x_mu == kNoClock || d.x_mu >= nc_) continue;
-                    TAConstraint c;
-                    c.clock_x = d.x_mu; c.clock_y = kReferenceClock;
-                    c.bound = static_cast<std::int32_t>(d.bound);
-                    c.is_strict = d.strict; c.is_upper = true;
-                    loc.invariants.push_back(c);
+                    auto it = inv.find(d.x_mu);
+                    if (it == inv.end() || d.bound < it->second.bound ||
+                        (d.bound == it->second.bound && d.strict && !it->second.strict))
+                        inv[d.x_mu] = d;
                 }
+            }
+            for (const auto& [x, d] : inv) {
+                TAConstraint c;
+                c.clock_x = x; c.clock_y = kReferenceClock;
+                c.bound = static_cast<std::int32_t>(d.bound);
+                c.is_strict = d.strict; c.is_upper = true;
+                loc.invariants.push_back(c);
             }
             ta.locations[r] = std::move(loc);
         }
@@ -557,7 +965,7 @@ private:
             e.target = to;
             // (EX) does not advance time, so the step's zone is the target's;
             // the guard is that zone, read off as single-clock bounds.
-            const Node tgt = decode_key(*key_of_[heads[to]]);
+            const Node tgt = decode_key(*key_of_[heads[to].first]);
             for (ClockId c = 1; c < nc_; ++c) {
                 const Bound ub = tgt.Z.get_bound(c, kReferenceClock);
                 if (!ub.is_infinity()) {
@@ -603,9 +1011,11 @@ private:
             Pursuit p;
             p.mu       = static_cast<FormulaId>(k[i++]);
             p.x_mu     = static_cast<ClockId>(k[i++]);
-            p.stage    = static_cast<Pursuit::Stage>(k[i++]);
-            p.part     = static_cast<Pursuit::Part>(k[i++]);
-            p.is_until = k[i++] != 0;
+            p.stage      = static_cast<Pursuit::Stage>(k[i++]);
+            p.part       = static_cast<Pursuit::Part>(k[i++]);
+            p.is_until   = k[i++] != 0;
+            p.persistent = k[i++] != 0;
+            p.rolled     = k[i++] != 0;
             n.pursuits.push_back(p);
         }
 
@@ -624,11 +1034,10 @@ private:
         if (k[i++] == 0) {                       // the zone was empty
             n.Z = Zone::empty(nc_);
         } else {
-            const void* packed = static_cast<const void*>(k.data() + i);
+            const void* packed = static_cast<const void*>(zpool_[k[i++]].data());
             std::vector<raw_t> dense(nc_ * nc_);
             ptctlmc::mindbm_unpack(packed, dense.data());
             n.Z = Zone::from_raw(nc_, dense.data());
-            i += (ptctlmc::mindbm_size(packed) + 3) / 4;
         }
 
         // acc_key's tail: the clocks reset on the edge into this node, then the
@@ -695,6 +1104,71 @@ private:
     // stops the settled pursuit's leftover clock value from splitting nodes
     // that are otherwise identical — which is where the cost of relaunching
     // actually goes.
+    // ── Goal subsumption ────────────────────────────────────────────────
+    //
+    // Two goals of Gamma can imply a third, and carrying the consequence as
+    // well as its cause splits nodes that stand for the same demand.
+    //
+    // A release asserts its right argument here.  For Q(phi R_I psi) with
+    // 0 in I, the semantics quantifies over the positions whose time lies in I,
+    // and psi may only be excused at a position by a phi strictly before it;
+    // position 0 has none before it, so psi holds at this configuration
+    // outright.  Both quantifiers give it: under A every run has psi here, and
+    // under E the witnessing run has psi here, which is this configuration
+    // either way.  So psi in Gamma beside such a release is redundant, and the
+    // release's own unfolding puts it back before any time elapses.
+    //
+    // A disjunction is implied by any of its disjuncts.  Where one is already a
+    // goal, the disjunction says nothing further, and dropping it spares the
+    // search the (Disj) branch it would otherwise take.
+    //
+    // Neither rule discards an obligation, so neither can turn an unsatisfiable
+    // node satisfiable; both merge nodes that differ only in how much of what
+    // they demand is spelled out.
+    void subsume_goals(Node& n) const {
+        if (!subsume_goals_) return;
+        const FormulaIdVec& g = n.Gamma.elements();
+        if (g.size() < 2) return;
+        // One pass collects what the goals imply, a second drops it.  The
+        // quadratic version of this scan cost about what it saved on formulas
+        // that carry no redundancy at all, which is most of them.
+        implied_.clear();
+        for (FormulaId id : g) {
+            const FormulaNode& o = f_.node(id);
+            if (o.kind == NodeKind::Or) {
+                if (n.Gamma.contains(o.children[0]) ||
+                    n.Gamma.contains(o.children[1]))
+                    implied_.push_back(id);              // a disjunct holds
+            } else if (is_modality(o.kind) && !is_until_modality(o.kind)) {
+                const Window w = window_of(id, f_);
+                if (w.lo == 0 && !w.lo_strict && o.children[1] != kInvalidId)
+                    implied_.push_back(o.children[1]);   // the release asserts it
+            }
+        }
+        if (implied_.empty()) return;
+        std::sort(implied_.begin(), implied_.end());
+        implied_.erase(std::unique(implied_.begin(), implied_.end()),
+                       implied_.end());
+
+        FormulaIdVec keep;
+        keep.reserve(g.size());
+        for (FormulaId id : g) {
+            // Never drop a literal.  Closure is decided on Gamma_prop, so a
+            // literal removed here is a literal the contradiction test cannot
+            // see, and the release that implies it only puts it back at the
+            // next expansion -- by which time the complementary literal may
+            // have been consumed.  Measured: without this guard
+            // EG(AF p & AG !p) is reported SAT.
+            const FormulaNode& idn = f_.node(id);
+            const bool lit = idn.kind == NodeKind::Atom ||
+                             (idn.kind == NodeKind::Not &&
+                              f_.node(idn.children[0]).kind == NodeKind::Atom);
+            if (lit || !std::binary_search(implied_.begin(), implied_.end(), id))
+                keep.push_back(id);
+        }
+        if (keep.size() != g.size()) n.Gamma = FormulaSet::from_sorted(keep);
+    }
+
     void collapse_dead_clocks(Node& n) const {
         if (n.Z.is_empty()) return;
         live_scratch_.assign(nc_, 0);
@@ -702,8 +1176,11 @@ private:
             if (p.x_mu != kNoClock && p.x_mu < nc_) live_scratch_[p.x_mu] = 1;
         for (const Deadline& d : n.D)
             if (d.x_mu < nc_) live_scratch_[d.x_mu] = 1;
+        dead_scratch_.assign(nc_, 0);
+        bool any = false;
         for (ClockId c = 1; c < nc_; ++c)
-            if (!live_scratch_[c]) n.Z.free(c);
+            if (!live_scratch_[c]) { dead_scratch_[c] = 1; any = true; }
+        if (any) n.Z.free_many(dead_scratch_);
     }
 
     // Full key, together with the canonical zone it was built over, so the
@@ -732,8 +1209,7 @@ private:
     void dtrace(std::size_t depth, const char* tag, const Node& n, int res) const {
         if (!debug_) return;
         std::ostringstream os;
-        for (std::size_t i = 0; i < depth; ++i) os << ' ';
-        os << tag;
+        os << '#' << depth << ' ' << tag;
         if (res >= 0) os << (res ? "+" : "-");
         os << " G{";
         for (FormulaId id : n.Gamma.elements()) os << f_.to_string(id) << ',';
@@ -782,15 +1258,13 @@ private:
         // Demanded modality in Gamma → cover.
         for (FormulaId id : n.Gamma.elements()) {
             if (is_modality(f_.node(id).kind)) {
-                CoverResult cr = apply_cover(n, id, cmap_, nc_, max_, f_,
-                                             sx_cache_);
+                CoverResult cr = apply_cover(n, id, ag_context_for(id), cmap_,
+                                             nc_, max_, f_, sx_cache_);
                 switch (cr.kind) {
                     case CoverResult::Kind::Close:
                         return {Expansion::Kind::Closed, {}};
                     case CoverResult::Kind::Cover:
                         return {Expansion::Kind::And, std::move(cr.children)};
-                    case CoverResult::Kind::PartialCover:
-                        return {Expansion::Kind::Or, std::move(cr.children)};
                 }
             }
         }
@@ -809,6 +1283,19 @@ private:
                                        : Pursuit::Stage::DeferAX;
 
         if (p.is_until) {
+            // A bounded window the whole zone has already passed refutes the
+            // branch: no run from this pursuit's onset can witness psi any
+            // more, so the node closes rather than defers.  (An A-until never
+            // gets here -- its deadline emptied the zone first.)  Without this
+            // the pursuit rides above M, where extrapolation erases its onset
+            // diagonals and merges it with an accepted twin from a branch
+            // whose onsets were all witnessable; query_until then counts that
+            // twin as the exit that "discharges it in turn".
+            if (!w.hi_inf && p.x_mu != kNoClock) {
+                Zone can = n.Z;
+                can.add_upper_bound(p.x_mu, w.hi, w.hi_strict);
+                if (can.is_empty()) return {Expansion::Kind::Closed, {}};
+            }
             // (U•): stop ⊕ go.  The stop zone Z ∩ (x_mu ∈ I) is split into
             // integer regions so the eventuality can be discharged in a
             // boundary-free cell (e.g. (1,2)) rather than a zone straddling a
@@ -1096,9 +1583,40 @@ private:
         // release must re-partition its window against the new zone — reset its
         // part to Whole so (R^split) re-runs (else it stays "in-window" and keeps
         // imposing ψ after x_mu has lapsed past I).
-        auto revive = [](Pursuit q) {
+            // An untimed release has no clock, so (R^split)'s before- and
+        // after-window parts are empty and the whole-zone stage exists only to
+        // be rewritten into the in-window one on the very next step.  Reviving
+        // straight into that stage costs nothing and removes a state per live
+        // release: on a tower of AG(EF ...) every level carries one, so the
+        // node's pursuit vector was ranging over 2^depth combinations that
+        // differ in a field with one reachable value.
+        // Whole is the pre-split state of a release pursuit, and (R^split)
+        // partitions the zone into the parts before, inside and after the
+        // window.  When the zone already lies wholly in one of them the split
+        // has exactly one non-empty child, carrying the same zone and differing
+        // only in this field -- so the Whole node and its single child are two
+        // nodes for one configuration.  Reviving straight into the part the
+        // zone determines removes the first of them.  The clockless case is
+        // where the window is the whole timeline and the answer is always InI.
+        auto revive = [&](Pursuit q) {
             q.stage = Pursuit::Stage::Here;
             q.part = Pursuit::Part::Whole;
+            if (q.is_until) return q;
+            if (q.x_mu == kNoClock) { q.part = Pursuit::Part::InI; return q; }
+            const Window w = window_of(q.mu, f_);
+            Zone before = n.Z; before.add_upper_bound(q.x_mu, w.lo, !w.lo_strict);
+            Zone in = n.Z; constrain_in_window(in, q.x_mu, w);
+            Zone after = n.Z;
+            if (!w.hi_inf) after.add_lower_bound(q.x_mu, w.hi, !w.hi_strict);
+            else after = Zone::empty(nc_);
+            const int parts = (!before.is_empty()) + (!in.is_empty()) +
+                              (!after.is_empty());
+            if (parts == 1) {
+                if (!before.is_empty())  q.part = Pursuit::Part::BeforeI;
+                else if (!in.is_empty()) q.part = Pursuit::Part::InI;
+                // wholly after the window: the obligation has lapsed, and
+                // (R^split) would drop the pursuit -- leave Whole so it does.
+            }
             return q;
         };
         auto make_child = [&](const Pursuit* ex_one) {
@@ -1148,7 +1666,16 @@ private:
     // were, so the split closes again one step down.
     void acc_key(const Node& n, Key& k, Zone& ez) const {
         build_key(n, k, ez);
-        scratch32_.assign(n.just_reset.begin(), n.just_reset.end());
+        // Only a *live* clock's reset is worth recording.  \ref M1 asks that
+        // every clock on a cycle be reset on it or extrapolated above M, and a
+        // clock no pursuit and no deadline reads has just been freed out of the
+        // zone by collapse_dead_clocks, so it is unbounded and meets the second
+        // disjunct whatever the cycle does.  Recording its reset therefore
+        // splits nodes that no acceptance test can tell apart.
+        scratch32_.clear();
+        for (ClockId c : n.just_reset)
+            if (c < nc_ && (c >= live_scratch_.size() || live_scratch_[c]))
+                scratch32_.push_back(c);
         std::sort(scratch32_.begin(), scratch32_.end());
         scratch32_.erase(std::unique(scratch32_.begin(), scratch32_.end()),
                          scratch32_.end());
@@ -1205,9 +1732,307 @@ private:
     }
 
     // Intern a node: return its id, creating it (and its metadata) on first sight.
+
+    // ── Dynamic component decomposition ─────────────────────────────────
+    //
+    // A node's goals, context and pursuits often fall into groups that mention
+    // disjoint atoms.  Two such groups have disjoint formula-clocks as well,
+    // since a clock belongs to the modality that owns it, and a node over their
+    // union is realisable exactly when each group is (see doc_2, Theorem 1):
+    // one direction projects the model onto a group's atoms, which the other
+    // group's formulas never mention, and the other takes the product of the
+    // two models, where delays synchronise, discrete edges interleave, and the
+    // labellings union without conflict.
+    //
+    // Deciding the groups separately replaces a product of state spaces by
+    // their sum.  A conjunction of k independent bounded eventualities has 2^k
+    // combinations of which are still outstanding, and the undecomposed search
+    // visits all of them.
+    //
+    // Two conditions have to hold, and the second is the one that is easy to
+    // miss.  The atoms must be disjoint, and the *zone* must be a product of
+    // its projections: a reset can leave a finite difference constraint
+    // x - y < c between clocks of different groups, and then the groups are
+    // coupled through time and may not be split.
+
+    /// The atoms a formula mentions, as a bitmask over the input's atoms.
+    ///
+    /// The partition test compares every pair of a node's items, so the atom
+    /// sets are compared once per pair per node.  As sets of strings that is
+    /// three nested loops with a string compare at the bottom, and it cost
+    /// about a third of the run on formulas that never split at all.  One bit
+    /// per atom turns the whole test into a bitwise and.  Inputs with more
+    /// atoms than a word simply do not decompose.
+    std::uint64_t atoms_of(FormulaId id) const {
+        auto it = atom_memo_.find(id);
+        if (it != atom_memo_.end()) return it->second;
+        std::uint64_t out = 0;
+        if (id != kInvalidId) {
+            const FormulaNode& n = f_.node(id);
+            if (n.kind == NodeKind::Atom || n.kind == NodeKind::IntVar) {
+                auto ai = atom_bit_.find(n.atom_name);
+                if (ai != atom_bit_.end()) out |= 1ull << ai->second;
+            }
+            for (int c = 0; c < 2; ++c)
+                if (n.children[c] != kInvalidId) out |= atoms_of(n.children[c]);
+        }
+        atom_memo_.emplace(id, out);
+        return out;
+    }
+
+    /// Number the input's atoms, up to one word of them.
+    void number_atoms(FormulaId root, FormulaFactory& f) {
+        std::set<std::string> names;
+        std::function<void(FormulaId)> walk = [&](FormulaId x) {
+            if (x == kInvalidId) return;
+            const FormulaNode& n = f.node(x);
+            if (n.kind == NodeKind::Atom || n.kind == NodeKind::IntVar)
+                names.insert(n.atom_name);
+            walk(n.children[0]); walk(n.children[1]);
+        };
+        walk(root);
+        if (names.size() > 64) { decomp_ = false; return; }
+        std::size_t i = 0;
+        for (const std::string& a : names) atom_bit_[a] = i++;
+    }
+
+    /// The formula-clocks of every timed modality inside a formula.
+    const std::vector<ClockId>& clocks_of(FormulaId id) const {
+        auto it = clock_memo_.find(id);
+        if (it != clock_memo_.end()) return it->second;
+        std::vector<ClockId> out;
+        if (id != kInvalidId) {
+            const FormulaNode& n = f_.node(id);
+            const ClockId c = clock_of(cmap_, id);
+            if (c != kNoClock) out.push_back(c);
+            for (int k = 0; k < 2; ++k)
+                if (n.children[k] != kInvalidId)
+                    for (ClockId d : clocks_of(n.children[k])) out.push_back(d);
+            std::sort(out.begin(), out.end());
+            out.erase(std::unique(out.begin(), out.end()), out.end());
+        }
+        return clock_memo_.emplace(id, std::move(out)).first->second;
+    }
+
+    /// Split @p n into atom-disjoint components; empty if it does not split.
+    std::vector<Node> components(const Node& n) const {
+        // Items: the goals, the context entries, and the pursuits.  A pursuit
+        // travels with the item that owns its modality.
+        struct Item { FormulaId id; bool in_ctx; };
+        std::vector<Item> items;
+        for (FormulaId id : n.Gamma.elements()) items.push_back({id, false});
+        for (FormulaId id : n.X.elements())     items.push_back({id, true});
+        std::vector<FormulaId> pmu;
+        for (const Pursuit& p : n.pursuits) pmu.push_back(p.mu);
+        if (items.size() + pmu.size() < 2) return {};
+
+        // Whether a node splits depends only on which formulas it carries, not
+        // on its zone, so a shape that did not split never will.  Shapes repeat
+        // heavily -- a nested tower has roughly half as many shapes as nodes --
+        // and without this the union-find below runs again at each of them,
+        // which is pure loss on any formula that never decomposes.
+        std::uint64_t sig = 1469598103934665603ull;
+        {
+            sigbuf_.clear();
+            for (const Item& it : items) sigbuf_.push_back(it.id);
+            for (FormulaId mu : pmu) sigbuf_.push_back(mu);
+            std::sort(sigbuf_.begin(), sigbuf_.end());
+            for (FormulaId id : sigbuf_) {
+                sig ^= static_cast<std::uint64_t>(id);
+                sig *= 1099511628211ull;
+            }
+            if (nosplit_.count(sig)) return {};
+        }
+        auto remember_nosplit = [&] { nosplit_.insert(sig); };
+
+        std::vector<std::uint64_t> at;
+        at.reserve(items.size() + pmu.size());
+        for (const Item& it : items) at.push_back(atoms_of(it.id));
+        for (FormulaId mu : pmu)     at.push_back(atoms_of(mu));
+        const std::size_t m = at.size();
+
+        std::vector<std::size_t> up(m);
+        for (std::size_t i = 0; i < m; ++i) up[i] = i;
+        std::function<std::size_t(std::size_t)> find = [&](std::size_t x) {
+            while (up[x] != x) { up[x] = up[up[x]]; x = up[x]; }
+            return x;
+        };
+        for (std::size_t i = 0; i < m; ++i)
+            for (std::size_t j = i + 1; j < m; ++j) {
+                const bool share = (at[i] & at[j]) != 0 || (at[i] == 0 && at[j] == 0);
+                if (share) up[find(i)] = find(j);
+            }
+        std::map<std::size_t, std::vector<std::size_t>> grp;
+        for (std::size_t i = 0; i < m; ++i) grp[find(i)].push_back(i);
+        if (grp.size() < 2) { remember_nosplit(); return {}; }
+        // A component that mentions no atom at all (a bare true or false) is not
+        // worth splitting off: it decides nothing the enclosing node did not
+        // already decide, and it is the degenerate case in which the split is
+        // all cost.  Fold every such item into the first real component.
+        {
+            std::size_t host = grp.size();
+            for (auto& kv : grp) {
+                bool has_atom = false;
+                for (std::size_t i : kv.second) if (at[i] != 0) has_atom = true;
+                if (has_atom) { host = kv.first; break; }
+            }
+            if (host == grp.size()) { remember_nosplit(); return {}; }
+            std::vector<std::size_t> orphans;
+            for (auto it = grp.begin(); it != grp.end(); ) {
+                bool has_atom = false;
+                for (std::size_t i : it->second) if (at[i] != 0) has_atom = true;
+                if (!has_atom) {
+                    orphans.insert(orphans.end(), it->second.begin(), it->second.end());
+                    it = grp.erase(it);
+                } else ++it;
+            }
+            grp[host].insert(grp[host].end(), orphans.begin(), orphans.end());
+            if (grp.size() < 2) { remember_nosplit(); return {}; }
+        }
+
+        // Clocks per group.  Ownership is read off the *formulas*, not only off
+        // the live pursuits: a modality that is still a goal already owns its
+        // formula-clock, and that clock may already carry a value from an
+        // earlier launch.  Attributing it to no group at all would free it from
+        // every component's zone, which loses the very constraint that
+        // distinguishes one onset from another and reports SAT for a formula
+        // that has none.
+        std::vector<std::vector<unsigned char>> owns;
+        for (auto& kv : grp) {
+            std::vector<unsigned char> o(nc_, 0);
+            for (std::size_t i : kv.second) {
+                if (i >= items.size()) {
+                    const ClockId c = n.pursuits[i - items.size()].x_mu;
+                    if (c != kNoClock && c < nc_) o[c] = 1;
+                } else {
+                    for (ClockId c : clocks_of(items[i].id))
+                        if (c < nc_) o[c] = 1;
+                }
+            }
+            owns.push_back(std::move(o));
+        }
+        // Every clock must belong to exactly one group, or the split would
+        // silently drop one.
+        for (ClockId c = 1; c < nc_; ++c) {
+            int cnt = 0;
+            for (const auto& o : owns) cnt += o[c] ? 1 : 0;
+            if (cnt > 1) return {};
+            if (cnt == 0 && !n.Z.get_bound(c, kReferenceClock).is_infinity())
+                return {};        // constrained but unowned: do not split
+        }
+        // No zone-product condition.  A cross-group difference constraint does
+        // not have to be refused: component i is asked to be realisable over
+        // the *projection* of Z onto its own clocks, and the two directions of
+        // the theorem both survive.  Forwards, a valuation of the projection
+        // extends to one of Z, and component i's formulas read only its own
+        // clocks, so they hold of the restriction.  Backwards, Z is contained
+        // in the intersection of the projections, so a product model realising
+        // each component over its projection realises the node over Z a
+        // fortiori.  The condition was sufficient, not necessary, and dropping
+        // it is what lets a node split after a reset has related two groups'
+        // clocks.  (Guarded, so it can be put back for an A/B run.)
+        if (std::getenv("TCTL_ZONE_PRODUCT"))
+            for (ClockId a = 1; a < nc_; ++a)
+                for (ClockId b = 1; b < nc_; ++b) {
+                    if (a == b) continue;
+                    std::size_t ga = owns.size(), gb = owns.size();
+                    for (std::size_t g = 0; g < owns.size(); ++g) {
+                        if (owns[g][a]) ga = g;
+                        if (owns[g][b]) gb = g;
+                    }
+                    if (ga == owns.size() || gb == owns.size() || ga == gb) continue;
+                    if (!n.Z.get_bound(a, b).is_infinity()) return {};
+                }
+
+        std::vector<Node> out;
+        std::size_t gi = 0;
+        for (auto& kv : grp) {
+            Node c;
+            c.Z = n.Z; c.O = n.O; c.D = n.D; c.phase = n.phase;
+            FormulaIdVec gam, ctx;
+            for (std::size_t i : kv.second) {
+                if (i < items.size()) {
+                    (items[i].in_ctx ? ctx : gam).push_back(items[i].id);
+                } else {
+                    c.pursuits.push_back(n.pursuits[i - items.size()]);
+                }
+            }
+            std::sort(gam.begin(), gam.end()); std::sort(ctx.begin(), ctx.end());
+            c.Gamma = FormulaSet::from_sorted(gam);
+            c.X     = FormulaSet::from_sorted(ctx);
+            // Free the clocks this group does not own, and drop their deadlines:
+            // they belong to the other groups and constrain nothing here.
+            std::vector<unsigned char> dead(nc_, 0);
+            bool any = false;
+            for (ClockId cl = 1; cl < nc_; ++cl)
+                if (!owns[gi][cl]) { dead[cl] = 1; any = true; }
+            if (any && !c.Z.is_empty()) c.Z.free_many(dead);
+            PooledVec<Deadline> keepD;
+            for (const Deadline& d : c.D)
+                if (d.x_mu < nc_ && owns[gi][d.x_mu]) keepD.push_back(d);
+            c.D = keepD;
+            out.push_back(std::move(c));
+            ++gi;
+        }
+        return out;
+    }
+
+    /// Decide @p n by components, caching each.  Returns -1 if it does not split.
+    int decide_by_components(const Node& n) {
+        if (!decomp_ || decomp_depth_ > kMaxDecompDepth) return -1;
+        std::vector<Node> cs = components(n);
+        if (cs.empty()) return -1;
+        if (debug_) {
+            std::ostringstream os;
+            os << "SPLIT " << cs.size() << " comps from G{";
+            for (FormulaId id : n.Gamma.elements()) os << f_.to_string(id) << ',';
+            os << "} X{";
+            for (FormulaId id : n.X.elements()) os << f_.to_string(id) << ',';
+            os << "} P{";
+            for (const Pursuit& q : n.pursuits) os << f_.to_string(q.mu) << ',';
+            os << "}\n";
+            for (const Node& c : cs) {
+                os << "   comp G{";
+                for (FormulaId id : c.Gamma.elements()) os << f_.to_string(id) << ',';
+                os << "} X{";
+                for (FormulaId id : c.X.elements()) os << f_.to_string(id) << ',';
+                os << "} P{";
+                for (const Pursuit& q : c.pursuits) os << f_.to_string(q.mu) << ',';
+                os << "}\n";
+            }
+            std::fputs(os.str().c_str(), stderr);
+        }
+        for (Node& c : cs) {
+            Key k; Zone ez;
+            acc_key(c, k, ez);
+            auto it = decomp_cache_->find(k);
+            bool ok;
+            if (it != decomp_cache_->end()) {
+                ok = it->second;
+            } else {
+                Engine sub(f_, root_formula_, 0.0, false);
+                sub.decomp_depth_ = decomp_depth_ + 1;
+                sub.decomp_cache_ = decomp_cache_;
+                sub.decomp_ = decomp_;
+                ok = sub.decide_scc(c);
+                sub_nodes_ += sub.nodes();
+                decomp_cache_->emplace(std::move(k), ok);
+            }
+            if (!ok) return 0;
+        }
+        return 1;
+    }
+
     std::uint32_t intern(Node&& n) {
-        Key k;
+        // The key is built into a member buffer, not a fresh vector: intern runs
+        // once per child of every expansion and the key is a few hundred words,
+        // so a local would be a malloc/free pair per call on the hottest path.
+        // Only a miss moves it into the table, and the buffer is then re-grown
+        // on the next call rather than reused.
+        Key& k = intern_key_;
+        k.clear();
         Zone ez;
+        subsume_goals(n);
         collapse_dead_clocks(n);
         acc_key(n, k, ez);
         if (auto it = gid_.find(k); it != gid_.end()) return it->second;
@@ -1261,16 +2086,24 @@ private:
         Node n = std::move(*g_[v].n);
         g_[v].n.reset();                        // release: only metadata is kept
         if (node_closed(n.Gamma, f_) || n.Z.is_empty()) {
-            dtrace(0, "CLOSED", n, -1);
+            dtrace(v, "CLOSED", n, -1);
             g_[v].kind = Expansion::Kind::Closed;
             return true;
         }
         Expansion e = expand(n);
-        dtrace(0, e.kind == Expansion::Kind::And ? "AND" : "OR", n, -1);
+        dtrace(v, e.kind == Expansion::Kind::And ? "AND" : "OR", n, -1);
         // intern() may reallocate g_, so collect the ids before touching g_[v].
         std::vector<std::uint32_t> kids;
         kids.reserve(e.children.size());
         for (Node& c : e.children) kids.push_back(intern(std::move(c)));
+        if (debug_) {                       // temporary: edge dump for figures
+            std::ostringstream os;
+            os << "EDGE " << v << " ["
+               << (e.kind == Expansion::Kind::And ? "AND" : "OR") << "]";
+            for (std::uint32_t k : kids) os << ' ' << k;
+            os << '\n';
+            std::fputs(os.str().c_str(), stderr);
+        }
         g_[v].kind = e.kind;
         g_[v].ch   = std::move(kids);
         return true;
@@ -1339,6 +2172,11 @@ private:
         for (std::size_t i = 0; i < m; ++i) {
             g_[S[i]].done = true;
             g_[S[i]].val  = alive[i] != 0;
+            if (debug_) {
+                std::ostringstream os;
+                os << "VAL " << S[i] << '=' << (alive[i] ? 1 : 0) << '\n';
+                std::fputs(os.str().c_str(), stderr);
+            }
         }
     }
 
@@ -1548,6 +2386,22 @@ private:
         std::vector<std::uint32_t> tstack;
         std::uint32_t counter = 0;
 
+        // A node whose residual splits into atom-disjoint components is decided
+        // by deciding them, and never expanded: its verdict is the conjunction
+        // of theirs.  It becomes a settled leaf of this search, exactly like a
+        // node whose SCC has already closed.
+        auto try_split = [&](std::uint32_t v) {
+            if (!decomp_ || !g_[v].n) return false;
+            const int r = decide_by_components(*g_[v].n);
+            if (r < 0) return false;
+            g_[v].visited = true;
+            g_[v].done = true;
+            g_[v].val = r != 0;
+            g_[v].kind = Expansion::Kind::Closed;
+            g_[v].n.reset();
+            return true;
+        };
+
         auto visit = [&](std::uint32_t v) {
             g_[v].visited = true;
             g_[v].onstack = true;
@@ -1556,8 +2410,12 @@ private:
             return expand_node(v);
         };
 
-        if (!visit(r)) return false;
-        st.push_back({r, 0});
+        if (!try_split(r)) {
+            if (!visit(r)) return false;
+            st.push_back({r, 0});
+        } else {
+            return g_[r].val;
+        }
 
         // A child's value settles its parent when the parent is an OR and the
         // child holds, or an AND and it fails.  Acting on that is sound only
@@ -1569,6 +2427,13 @@ private:
         // anyway.  This is what keeps the search demand-driven: the remaining
         // children are never expanded.
         auto settles = [&](std::uint32_t parent, std::uint32_t child) {
+            // A witness needs the alternatives.  The schedule picks, at an (OR)
+            // node, the child that moves towards stopping the pursuit it is
+            // serving, and it can only pick among children the search evaluated;
+            // short-circuiting leaves the stop branch unvisited and hence
+            // unmarked, so the schedule would have nothing to choose but the
+            // deferral.  The verdict is unaffected either way.
+            if (keep_graph_) return false;
             if (!g_[child].done) return false;
             return (g_[parent].kind == Expansion::Kind::And) ? !g_[child].val
                                                              : g_[child].val;
@@ -1579,8 +2444,10 @@ private:
             if (st.back().ci < g_[v].ch.size()) {
                 const std::uint32_t w = g_[v].ch[st.back().ci++];
                 if (!g_[w].visited) {
-                    if (!visit(w)) return false;
-                    st.push_back({w, 0});
+                    if (!try_split(w)) {
+                        if (!visit(w)) return false;
+                        st.push_back({w, 0});
+                    }
                 } else if (g_[w].onstack) {
                     g_[v].low = std::min(g_[v].low, g_[w].index);
                 } else if (settles(v, w) && !tstack.empty() && tstack.back() == v) {
@@ -1634,6 +2501,87 @@ private:
 
     FormulaFactory& f_;
     bool keep_graph_ = false;    ///< retain children/untils for witness extraction
+    /// Per-pursuit distance to a stop, built by the witness extractor.
+    std::unordered_map<FormulaId, std::vector<std::uint32_t>> wdist_;
+    /// Distance to the next saturated node, the schedule's divergence metric.
+    std::vector<std::uint32_t> sdist_;
+    /// The interned zone pool and the raw-matrix cache in front of it.
+    static constexpr std::size_t kZoneCacheSlots = 1u << 12;   // 4k lines, ~5 MB
+    struct ZoneCacheLine { std::uint32_t id = kNoRegion; std::vector<raw_t> raw; };
+    mutable std::vector<std::vector<std::uint32_t>> zpool_;
+    mutable std::unordered_map<std::string, std::uint32_t> zids_;
+    mutable std::vector<ZoneCacheLine> zcache_{kZoneCacheSlots};
+    /// Drop goals implied by other goals (releases' psi, implied disjunctions).
+    bool subsume_goals_ = std::getenv("TCTL_SUBSUME_GOALS") != nullptr;
+    mutable FormulaIdVec implied_;
+    // Component decomposition.
+    static constexpr int kMaxDecompDepth = 12;
+    bool decomp_ = std::getenv("TCTL_COMPONENTS") != nullptr;
+    int decomp_depth_ = 0;
+    std::uint64_t sub_nodes_ = 0;
+    FormulaId root_formula_ = kInvalidId;
+    std::shared_ptr<std::unordered_map<Key, bool, KeyHash>> decomp_cache_ =
+        std::make_shared<std::unordered_map<Key, bool, KeyHash>>();
+    mutable std::map<FormulaId, std::uint64_t> atom_memo_;
+    std::map<std::string, std::size_t> atom_bit_;
+    mutable std::map<FormulaId, std::vector<ClockId>> clock_memo_;
+    mutable std::vector<FormulaId> sigbuf_;
+    mutable std::unordered_set<std::uint64_t> nosplit_;
+    /// Treat AG psi as a context formula rather than a release pursuit.
+    /// TCTL_AG_CONTEXT=all   every AG;
+    ///                =top   only AGs not nested under another modality.
+    /// The two differ because the encoding trades a live pursuit for context
+    /// churn: side-by-side AGs each shed a pursuit and win, while an AG nested
+    /// inside another modality is re-demanded through the context at every
+    /// successor and loses.  Which effect dominates is a property of where the
+    /// AG sits, so it is decided per modality, statically.
+    int ag_mode_ = ag_mode_from_env();
+    static int ag_mode_from_env() {
+        const char* v = std::getenv("TCTL_AG_CONTEXT");
+        if (!v) return 0;
+        if (std::strcmp(v, "top") == 0) return 2;
+        if (std::strcmp(v, "smart") == 0) return 3;
+        return 1;
+    }
+    std::set<FormulaId> ag_top_;      ///< AGs under no other modality
+    std::set<FormulaId> ag_free_;     ///< AGs under no *until* modality
+    bool ag_context_for(FormulaId mu) const {
+        if (ag_mode_ == 0) return false;
+        if (ag_mode_ == 1) return true;
+        if (ag_mode_ == 2) return ag_top_.count(mu) != 0;
+        return ag_free_.count(mu) != 0;
+    }
+    void collect_top_ags(FormulaId root, FormulaFactory& f) {
+        std::function<void(FormulaId, bool)> walk = [&](FormulaId x, bool under) {
+            if (x == kInvalidId) return;
+            const FormulaNode& n = f.node(x);
+            const bool modal = is_modality(n.kind);
+            if (modal && !under) ag_top_.insert(x);
+            walk(n.children[0], under || modal);
+            walk(n.children[1], under || modal);
+        };
+        walk(root, false);
+        // The regression the "all" mode shows on towers comes from an AG that
+        // sits inside an *until*: that until is re-launched at every onset, and
+        // re-demanding the AG through the context at each one churns more than
+        // the single pursuit record it replaced.  An AG under other AGs has no
+        // such onsets above it and keeps the win, so the test is on enclosing
+        // untils rather than on enclosing modalities.
+        std::function<void(FormulaId, bool)> walk2 = [&](FormulaId x, bool underU) {
+            if (x == kInvalidId) return;
+            const FormulaNode& n = f.node(x);
+            const bool modal = is_modality(n.kind);
+            if (modal && !underU) ag_free_.insert(x);
+            const bool u = underU || (modal && is_until_modality(n.kind));
+            walk2(n.children[0], u);
+            walk2(n.children[1], u);
+        };
+        walk2(root, false);
+    }
+    mutable std::vector<unsigned char> dead_scratch_;
+    /// Scratch for intern()'s key, to keep the hot path allocation-free.
+    Key intern_key_;
+
     ClockMap cmap_;
     std::size_t nc_ = 1;
     std::vector<std::int32_t> max_;
@@ -1694,12 +2642,134 @@ std::string SearchStats::to_string() const {
 
 Tableau::Tableau(FormulaFactory& factory) : factory_(factory) {}
 
+// ── Conjunctive decomposition ───────────────────────────────────────────────
+//
+// Split a top-level conjunction into groups of conjuncts that share atoms.  Two
+// groups mention disjoint atoms, hence disjoint formula-clocks, and a node over
+// their union is realisable exactly when each group is.
+//
+// One direction projects a model onto a group's atoms, which the other group's
+// formulas do not mention.  The other takes the product of the two models:
+// delays synchronise, discrete edges interleave, and the labellings union
+// without conflict because the atoms are disjoint.  An E-goal of one group is
+// witnessed by lifting its own run against any run of the other, and an A-goal
+// holds because every run of the product projects to a run of the group's own
+// model.  Both models being non-blocking, so is the product.
+//
+// Without this the search enumerates the product of the groups' states: a
+// conjunction of k independent bounded eventualities has 2^k combinations of
+// which are still outstanding, and the tableau visits all of them.
+static void split_conjuncts(FormulaId f, const FormulaFactory& fac,
+                            std::vector<FormulaId>& out) {
+    const FormulaNode& n = fac.node(f);
+    if (n.kind == NodeKind::And) {
+        split_conjuncts(n.children[0], fac, out);
+        split_conjuncts(n.children[1], fac, out);
+    } else {
+        out.push_back(f);
+    }
+}
+
+// The symbols two conjuncts can share.  Atomic propositions are the obvious
+// ones, but a data variable couples its constraints just as tightly: {x > 3}
+// and {x < 2} mention no proposition at all, and treating them as independent
+// makes an unsatisfiable conjunction satisfiable, one group at a time.
+static void atoms_of(FormulaId f, const FormulaFactory& fac,
+                     std::set<std::string>& out) {
+    if (f == kInvalidId) return;
+    const FormulaNode& n = fac.node(f);
+    if (n.kind == NodeKind::Atom || n.kind == NodeKind::IntVar)
+        out.insert(n.atom_name);
+    atoms_of(n.children[0], fac, out);
+    atoms_of(n.children[1], fac, out);
+}
+
+/// Groups of conjuncts closed under sharing an atom; empty if there is only one.
+static std::vector<std::vector<FormulaId>>
+decompose(FormulaId f, const FormulaFactory& fac) {
+    std::vector<FormulaId> parts;
+    split_conjuncts(f, fac, parts);
+    if (parts.size() < 2) return {};
+
+    std::vector<std::set<std::string>> at(parts.size());
+    for (std::size_t i = 0; i < parts.size(); ++i) atoms_of(parts[i], fac, at[i]);
+
+    std::vector<std::size_t> up(parts.size());
+    for (std::size_t i = 0; i < up.size(); ++i) up[i] = i;
+    std::function<std::size_t(std::size_t)> find = [&](std::size_t x) {
+        while (up[x] != x) { up[x] = up[up[x]]; x = up[x]; }
+        return x;
+    };
+    for (std::size_t i = 0; i < parts.size(); ++i)
+        for (std::size_t j = i + 1; j < parts.size(); ++j) {
+            bool share = false;
+            for (const std::string& a : at[i])
+                if (at[j].count(a)) { share = true; break; }
+            if (share) up[find(i)] = find(j);
+        }
+
+    // A conjunct mentioning no symbol at all (a bare constant, or a constraint
+    // over nothing) is folded into the first real group rather than split off.
+    std::size_t host = parts.size();
+    for (std::size_t i = 0; i < parts.size(); ++i)
+        if (!at[i].empty()) { host = find(i); break; }
+    if (host == parts.size()) return {};
+    for (std::size_t i = 0; i < parts.size(); ++i)
+        if (at[i].empty()) up[find(i)] = host;
+
+    std::map<std::size_t, std::vector<FormulaId>> groups;
+    for (std::size_t i = 0; i < parts.size(); ++i) groups[find(i)].push_back(parts[i]);
+    if (groups.size() < 2) return {};
+    std::vector<std::vector<FormulaId>> out;
+    for (auto& kv : groups) out.push_back(std::move(kv.second));
+    return out;
+}
+
 Result Tableau::check(FormulaId normalized_formula) {
     stats_.reset();
     const auto t0 = std::chrono::steady_clock::now();
 
+    // Decomposition changes what a witness would be (the product of the groups'
+    // automata), so it is skipped when one is wanted.
+    // Decomposition changes what a witness is (the product of the components'
+    // automata) and the extractor does not build products, so both forms stand
+    // down when one is asked for.
+    const bool v2 = version_ == Version::V2 && !extract_witness_;
+    const bool split_root = (decompose_ || v2) && !extract_witness_;
+    if (split_root) {
+        const auto groups = decompose(normalized_formula, factory_);
+        if (!groups.empty()) {
+            std::uint64_t total = 0;
+            bool timeout = false;
+            for (const auto& g : groups) {
+                FormulaId conj = g[0];
+                for (std::size_t i = 1; i < g.size(); ++i)
+                    conj = factory_.make_and(conj, g[i]);
+                Engine sub(factory_, conj,
+                           static_cast<double>(timeout_.count()), false);
+                sub.apply_version(v2);
+                const bool ok = sub.decide(conj);
+                total += sub.nodes();
+                if (sub.budget_hit()) { timeout = true; break; }
+                if (!ok) {                       // one group fails, all fails
+                    stats_.nodes_created = total;
+                    const auto te = std::chrono::steady_clock::now();
+                    return Result(Result::Value::Unsatisfiable,
+                                  std::chrono::duration<double>(te - t0).count());
+                }
+            }
+            stats_.nodes_created = total;
+            has_witness_ = false;
+            const auto te = std::chrono::steady_clock::now();
+            return Result(timeout ? Result::Value::Timeout
+                                  : Result::Value::Satisfiable,
+                          std::chrono::duration<double>(te - t0).count());
+        }
+    }
+
     Engine engine(factory_, normalized_formula,
                   static_cast<double>(timeout_.count()), extract_witness_);
+    engine.apply_version(v2);
     bool sat = engine.decide(normalized_formula);
 
     has_witness_ = false;

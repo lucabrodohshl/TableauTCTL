@@ -1,0 +1,70 @@
+\begin{tikzpicture}[
+  level 1/.style={sibling distance=6cm, level distance=2.2cm},
+  level 2/.style={sibling distance=4.5cm, level distance=2.5cm},
+  level 3/.style={sibling distance=5cm, level distance=2.5cm},
+  level 4/.style={sibling distance=4cm, level distance=2.8cm},
+  level 5/.style={sibling distance=5.5cm, level distance=2.5cm},
+  level 6/.style={sibling distance=5cm, level distance=2.5cm},
+  every node/.style={align=center, font=\normalsize},
+  edge from parent/.style={draw, -}
+]
+
+\node {$\Gam = \{\, \tEU{p}{q}{[1,3]},\, \AR{\bot}{\neg q} \,\}$ \\[-1pt] $\Zone:\ \Zreset$}
+  child {
+    node {$\Gam = \{\, q,\, \AR{\bot}{\neg q} \,\}$ \\[-1pt] $\Zone:\ \Zin$}
+    %child {
+    %  node {$\Gam = \{\, q,\, \bot,\, \neg q \,\}$ \\[-1pt] $\Zone:\ \Zin$ \\ $\otimes$}
+    %  edge from parent node[left=0.2cm] {\footnotesize $(AR)$}
+    %}
+    %child {
+    %  node {$\Gam = \{\, q,\, \neg q,\, \AX{\AR{\bot}{\neg q}} \,\}$ \\[-1pt] $\Zone:\ \Zin$ \\ $\otimes$}
+    %  edge from parent node[right=0.2cm] {}
+    %}
+    %edge from parent node[left=0.2cm] {\footnotesize $(T\text{-}EU)$}
+  }
+  child {
+    node {$\Gam = \{\, p,\, \EX{\tEU{p}{q}{[1,3]}},$\\$\AR{\bot}{\neg q} \,\}$ \\[-1pt] $\Zone:\ \Zpre$}
+    child {
+      node {$\{\, p,\, \EX{\tEU{p}{q}{[1,3]}},$\\$ \bot, \neg q \,\}$ \\[-1pt] $\Zone:\ (x_G<1)\land$\\$(x_F=x_G)\land(x_F\ge 0)$ \\ $\otimes$}
+      edge from parent node[left=0.2cm] {\footnotesize $(AR)$}
+    }
+    child {
+      node {$\Gam = \{\, p,\, \EX{\tEU{p}{q}{[1,3]}},$\\ $\neg q,\, \AX{\AR{\bot}{\neg q}} \,\}$ \\[-1pt] $\Zone:\ \Zpre$}
+      child {
+        node (LoopTarget) {$\Gam = \{\, \tEU{p}{q}{[1,3]},\, \AR{\bot}{\neg q} \,\}$ \\[-1pt] $\Zone:\ \UP\Zpre$}
+        child {
+          node {$\Gam = \{\, q,\, \AR{\bot}{\neg q} \,\}$ \\[-1pt] $\Zone:\ \Zin$}
+          child {
+            node {$\Gam = \{\, q,\, \bot,\, \neg q \,\}$ \\[-1pt] $\Zone:\ \Zin$ \\ $\otimes$}
+            edge from parent node[left=0.2cm] {\footnotesize $(AR)$}
+          }
+          child {
+            node {$\Gam = \{\, q,\, \neg q,\, \AX{\AR{\bot}{\neg q}} \,\}$ \\[-1pt] $\Zone:\ \Zin$ \\ $\otimes$}
+          }
+          edge from parent node[left=0.2cm] {\footnotesize $(T\text{-}EU)$}
+        }
+        child {
+          node {$\Gam = \{\, p,\, \EX{\tEU{p}{q}{[1,3]}},\, \AR{\bot}{\neg q} \,\}$ \\[-1pt] $\Zone:\ \UP\Zpre$}
+          child {
+            node {$\Gam = \{\, p,\, \EX{\tEU{p}{q}{[1,3]}},\, \bot,\, \neg q \,\}$ \\[-1pt] $\Zone:\ \UP\Zpre$ \\ $\otimes$}
+            edge from parent node[left=0.2cm] {\footnotesize $(AR)$}
+          }
+          child {
+            node {$\Gam = \{\, p,\, \EX{\tEU{p}{q}{[1,3]}},\, \neg q,\, \AX{\AR{\bot}{\neg q}} \,\}$ \\[-1pt] $\Zone:\ \UP\Zpre$}
+            child {
+              node (LoopSource) {$\Gam = \{\, \tEU{p}{q}{[1,3]},\, \AR{\bot}{\neg q} \,\}$ \\[-1pt] $\Zone:\ \UP\Zpre$ \\ $\leftarrow$ \textbf{Loop Detected}}
+              edge from parent node[right=0.2cm] {\footnotesize $(EX, AX)$}
+            }
+          }
+        }
+        edge from parent node[right=0.2cm] {\footnotesize $(EX, AX)$}
+      }
+    }
+  }
+  ;
+
+\draw[->, dashed, thick, rounded corners=8pt] 
+  (LoopSource.south) -- ++(0,-0.8) -| ++(6,0) |- (LoopTarget.east) 
+  node[pos=0.25, right] {\footnotesize $N_i \equiv N_j$ [cite: 177, 261]};
+
+\end{tikzpicture}

@@ -1,0 +1,110 @@
+\subsection{Examples}\label{ss:ex}
+
+We run the tableau on two formulas (Figure~\ref{fig:ex}) that exercise the {double check}: an outer $\mathrm{AG}$ (a
+release) re-demands an inner timed until, so the check fires twice. 
+
+%Throughout write $\mathrm{AG}_{[0,4]}\tEU{p}{q}{[1,2]}\equiv\tEU{p}{q}{[1,2]}$, $\mathrm{AG}_{[0,4]}\tEU{p}{q}{[1,2]}\equiv\mathrm{AG}_{[0,4]}\mathrm{AG}_{[0,4]}\tEU{p}{q}{[1,2]}$, and$\mathrm{AG}_{[0,3]}\neg q\equiv\mathrm{AG}_{[0,3]}\neg q$. 
+
+
+%We show the run from the initial onset, where the formula-clock $x$ agrees with absolute time; the universality test then ranges over the whole onset zone (Fig.~\ref{fig:ex}).
+
+In Figure~\ref{fig:ex}, each node shows its goals $\Gamma$ (with carried $\AX$-context markers where space permits) and its zone, while edge labels name the rule applied.
+
+\begin{figure}[t]
+\centering
+\begin{subfigure}[b]{0.49\textwidth}\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  level 1/.style={level distance=13mm},
+  level 2/.style={sibling distance=33mm, level distance=16mm},
+  level 3/.style={level distance=16mm},
+  every node/.style={align=center, font=\small},
+  edge from parent/.style={draw, -}
+]
+\node {$N_0\!:\{\mathrm{AG}_{[0,4]}\tEU{p}{q}{[1,2]},\mathrm{AG}_{[0,3]}\neg q\}$\\ $x{=}0$}
+  child {
+    node {$N_1\!:\{\tEU{p}{q}{[1,2]},\neg q\}$\\ $x\in[0,3]$}
+    child {
+      node {$\{q,\neg q\}$\\ $x\in[1,2]$\\ $\CLOSED$}
+      edge from parent node[left,font=\scriptsize,pos=.55]{$(\mathbf{U}^\bullet,\text{stop})$}
+    }
+    child {
+      node {$\{p,\EX(\tEU{p}{q}{[1,2]})^\bullet,\neg q\}$\\ $x\in[0,1]$}
+      child {
+        node {$\{\EX(\tEU{p}{q}{[1,2]})^\bullet,\neg q\}$\\ $x\in(2,3]$\\ $\CLOSED$}
+        edge from parent node[right,font=\scriptsize]{$(\mathrm{Delay},x{>}2)$}
+      }
+      edge from parent node[right,font=\scriptsize,pos=.55]{$(\mathbf{U}^\bullet,\text{go})$}
+    }
+    edge from parent node[right,font=\scriptsize]{$(\mathbf{R}^\bullet,\in\kI)$}
+  };
+\end{tikzpicture}}
+\subcaption{%$\mathrm{AG}_{[0,4]}\tEU{p}{q}{[1,2]}\land\mathrm{AG}_{[0,3]}\neg q$: the inner check closes on both branches, so $\Sat(\mathrm{AG}_{[0,4]}\tEU{p}{q}{[1,2]})=\emptyset$ and thenode closes -- \textbf{UNSAT}.
+}\label{fig:ex-unsat}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.49\textwidth}\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  level 1/.style={level distance=13mm},
+  level 2/.style={sibling distance=33mm, level distance=16mm},
+  level 3/.style={level distance=16mm},
+  every node/.style={align=center, font=\small},
+  edge from parent/.style={draw, -}
+]
+\node {$N_0\!:\{\mathrm{AG}_{[0,4]}\tEU{p}{q}{[1,2]}\}$\\ $x{=}0$}
+  child {
+    node {$N_1\!:\{\tEU{p}{q}{[1,2]},\AX\mathrm{AG}_{[0,4]}\tEU{p}{q}{[1,2]}^\bullet\}$\\ $x\in[0,4]$}
+    child {
+      node {$\{q\}$\\ $x\in[1,2]$\\ $\OPEN$}
+      edge from parent node[left,font=\scriptsize,pos=.55]{$(\mathbf{U}^\bullet,\text{stop})$}
+    }
+    child {
+      node {$\{\AX\mathrm{AG}_{[0,4]}\tEU{p}{q}{[1,2]}^\bullet\}$\\ $x\in[0,4]$}
+      child {
+        node (lapse) {$\{\,\}$,\ $x{>}4$\\ ($\mathrm{AG}_{[0,4]}\tEU{p}{q}{[1,2]}$ lapsed)\\ $\OPEN$}
+        edge from parent node[right,font=\scriptsize]{$(\mathbf{R}^\bullet,{>}\kI)$}
+      }
+      edge from parent node[right,font=\scriptsize,pos=.5]{$(\mathrm{Chk}\,\tEU{p}{q}{[1,2]})$}
+    }
+    edge from parent node[right,font=\scriptsize]{$(\mathbf{R}^\bullet,\in\kI)$}
+  };
+  \draw[->,dashed] (lapse.west) to[out=200,in=155,looseness=3]
+    node[left=6pt,font=\scriptsize]{stutter} ([yshift=-4pt]lapse.north west);
+\end{tikzpicture}}
+\subcaption{%$\mathrm{AG}_{[0,4]}\tEU{p}{q}{[1,2]}$: the inner check succeeds and $\mathrm{AG}_{[0,4]}\tEU{p}{q}{[1,2]}$ is discharged across $[0,4]$; the outer releasethen lapses past the window, and the free tail stutters (time-progressing) -- \textbf{SAT}.
+}\label{fig:ex-sat}
+\end{subfigure}
+\caption{The double check. The outer $\mathrm{AG}$ unfolds in-window (\ref{tag:Runf}) to re-impose
+$\mathrm{AG}_{[0,4]}\tEU{p}{q}{[1,2]}$ under the carried context; the inner until is then checked (\ref{tag:Uunf}). The single
+proposition $\mathrm{AG}_{[0,3]}\neg q$ turns satisfiability into unsatisfiability.}\label{fig:ex}
+\end{figure}
+
+\begin{example}%[Unsatisfiable, Fig.~\ref{fig:ex-unsat}]
+Consider the formula $\mathrm{AG}_{[0,4]}\tEU{p}{q}{[1,2]} \land \mathrm{AG}_{[0,3]}\neg q$.
+
+At $N_0$ both outer modalities are releases; their in-window unfolding asserts the released formulas
+$\tEU{p}{q}{[1,2]}$ and $\neg q$ and carries $\AX\mathrm{AG}_{[0,4]}\tEU{p}{q}{[1,2]}^\bullet$ as well as $\AX\mathrm{AG}_{[0,3]}\neg q^\bullet$ in the context, giving $N_1$ on the
+window $x\in[0,3]$ (the tighter, from $\mathrm{AG}_{[0,3]}\neg q$). The inner check on $\tEU{p}{q}{[1,2]}$ now computes $\Sat(\tEU{p}{q}{[1,2]})$ by
+the unfolding \eqref{tag:Uunf}. Its {stop} branch demands $q$ at $x\in[1,2]$, but the context keeps
+$\neg q$ throughout $[0,3]\supseteq[1,2]$, so $\{q,\neg q\}$ closes; its {go} branch defers the
+eventuality and elapses time, and once $x>2$ the window has passed with $q$ never permitted, so the
+eventuality is permanently pending and closes. Both branches close, so $\Sat(\tEU{p}{q}{[1,2]})=\emptyset$ at this
+onset and the universality test $Z\subseteq\Sat(\tEU{p}{q}{[1,2]})$ fails: $N_0$ is closed and the formula \UNSAT. 
+
+%The onset shown is $0$; the same closure holds for every onset $s\in[0,1]$, where the
+%window $[s{+}1,s{+}2]\subseteq[0,3]$ is wholly forbidden -- exactly the sub-zone the universality test
+%rejects, and exactly what a single probe at, say, $s{=}4$ (window $[5,6]$, free) would miss.
+\end{example}
+
+\begin{example}%[Satisfiable, Fig.~\ref{fig:ex-sat}]
+Dropping $\mathrm{AG}_{[0,3]}\neg q$ frees the window. The inner unfolding's {stop} branch $\{q\}$ at $x\in[1,2]$ is now
+consistent, so $q$ is witnessed and $\Sat(\tEU{p}{q}{[1,2]})$ covers the onset zone; the check \eqref{tag:chk} succeeds
+and discharges $\tEU{p}{q}{[1,2]}$ (the stop branch is the retained witness). The outer release re-imposes $\mathrm{AG}_{[0,4]}\tEU{p}{q}{[1,2]}$
+across its window $[0,4]$ and then \emph{lapses} through the after-case: past $x=4$ the obligation is gone and
+the node is free, where a stutter loop is time-progressing -- $x$ is extrapolated above $M=4$ -- hence
+accepting. A bounded $\mathrm{AG}$ does not loop \emph{inside} its window, where the clock is capped at the
+bound; its accepting cycle lives in the lapsed tail. The marking is successful and $\mathrm{AG}_{[0,4]}\tEU{p}{q}{[1,2]}$ is
+\textbf{satisfiable}; a one-location witness with $p$ everywhere and $q$ reachable within $[1,2]$ of each
+onset realises it.
+\end{example}

@@ -1,0 +1,36 @@
+% ===========================================================================
+%  doc_2/main.tex
+%
+%  "Why the TCTL tableau blows up, which half of it is avoidable, and how."
+%
+%  This is NOT a paper.  It is the internal explanation a paper is written
+%  FROM: every claim is traced to the source that implements it or to the
+%  measurement that produced it, the one theorem that is ours is stated and
+%  proved, and every idea that was tried and failed is recorded with its
+%  reason.
+%
+%  Build:  make            (latexmk -pdf main.tex)
+%  Layout: one file per section.
+% ===========================================================================
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=27mm]{geometry}
+\input{preamble}
+
+\title{\Large Component Decomposition for the TCTL Tableau\\[2pt]
+       \large Which Half of the Blow-Up Is Avoidable, and How}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+\vspace{-10mm}
+
+\input{sections/00-how-to-read}
+\input{sections/01-problem}
+\input{sections/02-theory}
+\input{sections/03-algorithm}
+\input{sections/04-evaluation}
+\input{sections/05-negative}
+\input{sections/06-limits}
+
+\end{document}

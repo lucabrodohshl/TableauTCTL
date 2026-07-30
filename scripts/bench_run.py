@@ -47,6 +47,7 @@
 from __future__ import annotations
 
 import argparse
+import sys as _sys
 import csv
 import os
 import re
@@ -85,6 +86,8 @@ _STAT_COLS = {
     "avg_mem_per_node": "avg_mem_per_node",
 }
 
+csv.field_size_limit(_sys.maxsize)  # some payload formulas exceed 128 KB
+
 RESULT_COLS = [
     "instance_id", "family", "family_label", "variant", "variant_label",
     "param_name", "param", "log_x", "x_label", "mechanism",
@@ -99,8 +102,10 @@ RESULT_COLS = [
 # Search-space metrics that MUST be identical across repetitions (the tableau is
 # a deterministic single-threaded DFS over a memoised graph -> these are exact
 # functions of the formula).  We assert equality as a sanity check.
+# peak_mem_kb is measured by the external RSS watchdog, not computed by the
+# solver, so it legitimately varies between repetitions; it is excluded here.
 _DET_KEYS = ("nodes", "nodes_open", "nodes_closed", "max_depth",
-             "memo_hits", "loop_checks", "distinct_zones", "peak_mem_kb")
+             "memo_hits", "loop_checks", "distinct_zones")
 
 
 def run_once(cmd, timeout, grace):
@@ -212,6 +217,12 @@ def main() -> int:
                     help="comma-separated family codes to run (e.g. DCN,ZEN)")
     ap.add_argument("--limit", type=int, default=0,
                     help="run at most N instances (0 = all; for smoke tests)")
+    ap.add_argument("--abandon-after", type=int, default=0,
+                    help="after N consecutive timeouts in one sweep, skip its "
+                         "remaining (monotonically harder) instances and record "
+                         "them as SKIPPED. 0 = never abandon.")
+    ap.add_argument("--resume", action="store_true",
+                    help="skip instances already present in the results CSV")
     ap.add_argument("--dry-run", action="store_true",
                     help="print the commands that would run, then exit")
     args = ap.parse_args()
@@ -233,6 +244,13 @@ def main() -> int:
     if args.limit > 0:
         rows = rows[: args.limit]
 
+    if args.resume and os.path.exists(results_path):
+        with open(results_path, newline="") as f:
+            done = {r["instance_id"] for r in csv.DictReader(f)}
+        before = len(rows)
+        rows = [r for r in rows if r["instance_id"] not in done]
+        print(f"[run] resume: {before - len(rows)} already done, {len(rows)} to go")
+
     solver_tokens = shlex.split(args.solver)
     inner_timeout_tokens = []
     if args.inner_timeout:
@@ -252,7 +270,39 @@ def main() -> int:
     results = []
     n_to = n_err = n_mismatch = n_det = 0
 
+    def _sweep_key(row):
+        """Instances whose cost is monotone in the parameter share a key."""
+        if row["variant"].startswith("MIX"):        # grid point 10*d+k
+            return (row["variant"], int(row["param"]) // 10)
+        return (row["variant"],)
+
+    consec_to = {}
+    abandoned = set()
+
     for i, r in enumerate(rows, 1):
+        key = _sweep_key(r)
+        if args.abandon_after and key in abandoned:
+            out = {c: "" for c in RESULT_COLS}
+            out.update({k: r.get(k, "") for k in
+                        ("instance_id", "family", "family_label", "variant",
+                         "variant_label", "param_name", "param", "log_x",
+                         "x_label", "mechanism", "max_constant", "formula_len",
+                         "formula")})
+            out.update({"expected_verdict": r["expected_verdict"],
+                        "verdict": "SKIPPED", "verdict_match": "skipped",
+                        "timeout_s": args.timeout,
+                        "solver_cmd": args.solver or "(local)"})
+            _new = not os.path.exists(results_path)
+            with open(results_path, "a", newline="") as _f:
+                _w = csv.DictWriter(_f, fieldnames=RESULT_COLS)
+                if _new:
+                    _w.writeheader()
+                _w.writerow(out)
+            results.append(out)
+            print(f"  [{i}/{len(rows)}] {r['variant']} {r['param_name']}={r['param']}: "
+                  f"SKIPPED (sweep abandoned)")
+            continue
+
         host_input = os.path.join(args.outdir, r["file"])
         solver_input = host_input if args.local else translate_path(
             host_input, args.path_from, args.path_to)
@@ -348,6 +398,23 @@ def main() -> int:
             if col in canon_stats:
                 out[col] = canon_stats[col]
         results.append(out)
+
+        # Append incrementally so an interrupted run keeps what it finished.
+        _new = not os.path.exists(results_path)
+        with open(results_path, "a", newline="") as _f:
+            _w = csv.DictWriter(_f, fieldnames=RESULT_COLS)
+            if _new:
+                _w.writeheader()
+            _w.writerow(out)
+            _f.flush()
+
+        if args.abandon_after:
+            if verdict == "TIMEOUT":
+                consec_to[key] = consec_to.get(key, 0) + 1
+                if consec_to[key] >= args.abandon_after:
+                    abandoned.add(key)
+            else:
+                consec_to[key] = 0
 
         flag = "" if match in ("yes",) else f"  <-- {match.upper()}"
         print(f"  [{i}/{len(rows)}] {r['variant']} {r['param_name']}={r['param']}: "

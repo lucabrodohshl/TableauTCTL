@@ -2599,7 +2599,94 @@ static CoverResult cover_of(const Node& n, FormulaId mu, FormulaFactory& f) {
     std::vector<std::int32_t> max(nc, max_constant(mu, f));
     max[0] = 0;
     SatCache sx;
-    return apply_cover(n, mu, cm, nc, max, f, sx);
+    return apply_cover(n, mu, false, cm, nc, max, f, sx);
+}
+
+// ── Onsets under a persistent context ───────────────────────────────────────
+//
+// A persistent context (an enclosing AG, or any release inside its window)
+// re-demands its body at a continuum of onsets, and one launch node carries a
+// whole range of them.  Every formula below turns on whether each onset is
+// answered separately.  They are the regression suite for the launch cells, the
+// re-demand law and (U-miss); before those, the first four answered SAT.
+//
+// Shape: AG(EF[a,b] p) & AG[c,d] !p is UNSAT exactly when some onset has its
+// whole window inside the ban, i.e. when [c-a, d-b] is non-empty.
+static void test_onsets_persistent_context(TestContext& ctx) {
+    struct Case { const char* phi; bool sat; const char* why; };
+    static const Case cases[] = {
+        // Doomed onsets exist: [c-a,d-b] non-empty.
+        {"AG (EF[2,4] p) & AG[4,7] !p", false, "onsets [2,3] have window in [4,7]"},
+        {"AG (EF[2,4] p) & AG[4,6] !p", false, "onset 2 has window [4,6] in the ban"},
+        {"AG (EF[1,3] p) & AG[3,5] !p", false, "onset 2 has window [3,5] in the ban"},
+        {"AG (EF[2,4] p) & AG(3,7) !p", false, "open ban, onsets (2,3) still doomed"},
+        // No doomed onset: every window escapes the ban.
+        {"AG (EF[2,4] p) & AG[4,5] !p", true,  "ban is narrower than the window"},
+        // Releases re-demand their body too, and were dropped the same way.
+        {"AG (EG[2,4] p) & AG[6,7] !p", false, "E-release re-demand"},
+        {"AG (AG[2,4] p) & AG[6,7] !p", false, "A-release re-demand"},
+        {"AG (EG[2,4] (p | q)) & AG[6,7] !p", true, "q can carry the release"},
+        // Unbounded windows nest, so the running pursuit does cover the onset.
+        {"AG (EF[2,inf) p) & AG[4,inf) !p", false, "no p ever, unbounded window"},
+        {"AG (EF[2,inf) p)", true,  "unbounded window, p recurs"},
+        {"AG (AF[2,inf) p) & AG[4,inf) !p", false, "universal, unbounded"},
+        // Nesting must not be over-constrained: rolling E here answers UNSAT.
+        {"AG(EF[4,6](AG(EF[7,9] p)))", true, "two nested persistent E-untils"},
+        {"AG(EF[1,3](AG(EF[4,6](AG(EF[7,9] p)))))", true, "three nested"},
+        // A deadline on an existential until would make these UNSAT.
+        {"E(true U[1,4] p) & E(true U[2,6] q)", true, "independent E-untils"},
+        {"EG[1,5] (EF[2,4] p)", true, "E-release over an E-until"},
+    };
+    for (const Case& c : cases) {
+        const Result r = check_sat(c.phi);
+        const bool got = (r == Result::Satisfiable);
+        std::ostringstream os;
+        os << c.phi << " should be " << (c.sat ? "SAT" : "UNSAT") << " (" << c.why << ')';
+        ctx.check(got == c.sat, os.str());
+    }
+}
+
+// ── Onset cells do not scale with the constants ─────────────────────────────
+//
+// The cells are cut where a guard on the clock can flip, not at every integer
+// below M, so the search must not grow with the magnitude of the constants.
+// AG[0,2M] E(p U[M,2M] q) & AG[0,2M+1] !q is UNSAT for every M: even the onset
+// at 0 needs a q in [M,2M], which the ban covers.  Cutting per integer made the
+// node count linear in M (514 at M=4 against 22690 at M=256).
+static void test_onset_cells_constant_free(TestContext& ctx) {
+    auto nodes_for = [](const std::string& s) {
+        FormulaFactory f;
+        Tableau engine(f);
+        engine.set_timeout(std::chrono::seconds(1200));
+        engine.check(normalize(parse_formula(s, f), f));
+        return engine.get_stats().nodes_created;
+    };
+    std::uint64_t base = 0;
+    for (const int M : {4, 64, 1024, 65536}) {
+        std::ostringstream phi;
+        phi << "AG[0," << 2 * M << "] (E(p U[" << M << ',' << 2 * M << "] q))"
+            << " & AG[0," << 2 * M + 1 << "] !q";
+        std::ostringstream why;
+        why << "M=" << M << ": window inside the ban at every onset";
+        ctx.check(check_sat(phi.str()) == Result::Unsatisfiable, why.str());
+
+        std::ostringstream psi;      // ban stops short of the window: SAT
+        psi << "AG[0," << 2 * M << "] (E(p U[" << M << ',' << 2 * M << "] q))"
+            << " & AG[0," << M - 1 << "] !q";
+        std::ostringstream why2;
+        why2 << "M=" << M << ": window reaches past the ban";
+        ctx.check(check_sat(psi.str()) == Result::Satisfiable, why2.str());
+
+        // The search must not grow with the magnitude of the constants.  M
+        // spans four orders of magnitude here, so a per-integer cut would blow
+        // this by orders, not by the slack allowed for extrapolation effects.
+        const std::uint64_t n = nodes_for(phi.str());
+        if (base == 0) base = n;
+        std::ostringstream why3;
+        why3 << "M=" << M << ": " << n << " nodes against " << base
+             << " at M=4, must not scale with M";
+        ctx.check(n <= 2 * base, why3.str());
+    }
 }
 
 static void test_cover_rule(TestContext& ctx) {
@@ -2616,13 +2703,9 @@ static void test_cover_rule(TestContext& ctx) {
                   n.pursuits.size(),
                   "cover: discharge child adds no pursuit");
     }
-    // Close: S_X empty (¬q context) ⇒ demand fails.
-    {   FormulaFactory f; FormulaSet X; X.insert(f.make_not(f.make_atom("q")));
-        FormulaId mu = normalize(parse_formula("E(true U[1,2] q)", f), f);
-        Node n = make_demand_node(mu, X, f);
-        CoverResult r = cover_of(n, mu, f);
-        ctx.check(r.kind == CoverResult::Kind::Close, "close: empty S_X ⇒ close");
-    }
+    // (Cov) has no satisfaction-set side condition, so there is nothing here to
+    // test: the old "empty S_X ⇒ close" case hand-populated Node::X, which the
+    // search never does, and it was the only caller keeping S_X alive.
     // A-until: launch child receives a deadline D_mu = {(x_mu, sup I)}.
     {   FormulaFactory f; FormulaSet X;
         FormulaId mu = normalize(parse_formula("AF[1,2] q", f), f);
@@ -2651,6 +2734,8 @@ int run_selftests() {
     // Engine core (paper construction) — satisfaction sets + cover rule.
     runner.run("satisfaction_set",           test_satisfaction_set);
     runner.run("cover_rule",                 test_cover_rule);
+    runner.run("onsets_persistent_context",  test_onsets_persistent_context);
+    runner.run("onset_cells_constant_free",  test_onset_cells_constant_free);
 
     // Lexer tests
     runner.run("lexer_brackets_braces",      test_lexer_brackets_braces);

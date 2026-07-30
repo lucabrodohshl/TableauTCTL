@@ -1,0 +1,108 @@
+\def\Gam{\ensuremath{\Gamma}\xspace}
+\def\clockSet{\ensuremath{\mathcal{C}}\xspace}
+\def\clockValuations#1{\ensuremath{\mathbb{R}_{\ge 0}^{#1}}\xspace}
+\def\Nat{\ensuremath{\mathbb{N}}\xspace}
+\def\Int{\ensuremath{\mathbb{Z}}\xspace}
+\def\Reals{\ensuremath{\mathbb{R}}\xspace}
+
+\def\eventualities{\ensuremath{\mathcal{E}}\xspace}
+\def\obligations{\ensuremath{\mathcal{O}}\xspace}
+\def\kI{\ensuremath{I}\xspace}
+\def\ck{\ensuremath{c}\xspace}
+\def\Zone{\ensuremath{\mathcal{Z}}\xspace}
+\def\DBM#1{\ensuremath{\mathbf{D}_{#1}}\xspace}
+\def\UP{\ensuremath{\uparrow}\xspace}
+\def\RESET#1{\ensuremath{[#1 \mathrel{:=} 0]}\xspace}
+\def\tEU#1#2#3{\ensuremath{\mathrm{E}(#1\mathbf{U}_{#3}#2)}\xspace}
+\def\tAU#1#2#3{\ensuremath{\mathrm{A}(#1\mathbf{U}_{#3}#2)}\xspace}
+\def\EU#1#2{\ensuremath{\mathrm{E}(#1\mathbf{U}#2)}\xspace}
+\def\AU#1#2{\ensuremath{\mathrm{A}(#1\mathbf{U}#2)}\xspace}
+\def\EX#1{\ensuremath{\mathit{EX}#1}\xspace}
+\def\AX#1{\ensuremath{\mathit{AX}#1}\xspace}
+\def\tAR#1#2#3{\ensuremath{\mathrm{A}(#1\mathbf{R}_{#3}#2)}\xspace}
+\def\tER#1#2#3{\ensuremath{\mathrm{E}(#1\mathbf{R}_{#3}#2)}\xspace}
+\def\ER#1#2{\ensuremath{\mathrm{E}(#1\mathbf{R}#2)}\xspace}
+\def\AR#1#2{\ensuremath{\mathrm{A}(#1\mathbf{R}#2)}\xspace}
+
+\def\key{\ensuremath{\mathit{key}}\xspace}
+\def\activetimed{\ensuremath{\mathit{active\_timed}}\xspace}
+\def\activeev{\ensuremath{\mathit{active\_ev}}\xspace}
+\def\ctx{\ensuremath{\mathit{ctx}}\xspace}
+\def\INF{\ensuremath{\infty}\xspace}
+\def\SAT{\ensuremath{\mathrm{SAT}}\xspace}
+\def\UNSAT{\ensuremath{\mathrm{UNSAT}}\xspace}
+\def\OPEN{\ensuremath{\checkmark}\xspace}%\mathsf{Open}
+\def\CLOSED{\ensuremath{\otimes}\xspace}
+\def\UNKNOWN{\ensuremath{\mathsf{Unknown}}\xspace}
+\def\file#1{\ensuremath{\texttt{#1}}\xspace}
+\def\func#1{\ensuremath{\texttt{#1()}}\xspace}
+\def\filter{\ensuremath{\mathit{filter}}\xspace}
+\def\Zuniv{\ensuremath{\top}\xspace}
+\def\Sub#1{\ensuremath{\mathit{Sub}(#1)}\xspace}
+
+
+\def\Ctx{\ensuremath{\mathcal{X}}\xspace}
+\def\Z{\ensuremath{Z}\xspace}
+\def\clks{\ensuremath{\{x_G,x_F\}}\xspace}
+
+% Optional: pretty zone shorthands (define as many as you like)
+\def\Zreset{\ensuremath{(x_G=0)\land(x_F=0)}\xspace}
+\def\Zpre{\ensuremath{(x_G<1)\land(x_F=x_G)\land(x_F\ge 0)}\xspace}
+\def\Zin{\ensuremath{(1\le x_G=x_F\le 4)}\xspace}
+\def\Zpost{\ensuremath{(x_G=x_F>4)}\xspace}
+
+\def\nxQ{\ensuremath{\mathsf{X}_{\mathrm{Q}}}\xspace}
+\def\Sat{\ensuremath{\mathcal{S}}\xspace}
+
+
+
+
+\def\tup#1#2#3#4#5{\ensuremath{\langle #1, #2, #3, #4, #5\rangle}\xspace}
+\def\psiU{\ensuremath{\tEU{p}{q}{[1,2]}}\xspace}
+\def\psiR{\ensuremath{\tAR{\bot}{p}{[0,1]}}\xspace}
+\def\psiG{\ensuremath{\AR{\bot}{p}}\xspace}
+
+% --- clickable rule names (hypertarget target = the rule name is the link text) ---
+\makeatletter
+\newcommand{\DeclareRule}[2]{\expandafter\def\csname rule@#1\endcsname{#2}}
+\newcommand{\rulename}[1]{\ensuremath{(\csname rule@#1\endcsname)}} 
+\newcommand{\ruleanchor}[1]{\hypertarget{rule:#1}{\rulename{#1}}}
+\newcommand{\ruleref}[1]{\ifcsname r@tag:#1\endcsname\hyperref[tag:#1]{\rulename{#1}}\else\hyperlink{rule:#1}{\rulename{#1}}\fi}
+\makeatother
+\DeclareRule{AND}{\land}
+\DeclareRule{OR}{\lor}
+\DeclareRule{AX}{\mathrm{AX}}
+\DeclareRule{EX}{\mathrm{EX}}
+\DeclareRule{Delay}{\mathrm{Delay}}
+\DeclareRule{Conj}{\land}
+\DeclareRule{Disj}{\lor}
+\DeclareRule{Cov}{\mathrm{Cov}}
+\DeclareRule{Covstar}{\mathrm{Cov}^{*}}
+\DeclareRule{Uunf}{\mathbf{U}^\bullet}
+\DeclareRule{Runf}{\mathbf{R}^\bullet}
+\DeclareRule{Rsplit}{\mathbf{R}^{\mathsf{split}}}
+\DeclareRule{Runf_before}{\mathbf{R}^\bullet_{\prec\kI}}
+\DeclareRule{Runf_in}{\mathbf{R}^\bullet_{\in\kI}}
+\DeclareRule{Runf_after}{\mathbf{R}^\bullet_{\succ\kI}}
+\DeclareRule{Runf_lapse}{\mathbf{R}^\bullet_{\succ\kI}^{\mathsf{lapse}}}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% NEW MACROS -- put these in the preamble, next to your existing ones.
+%% (\providecommand so nothing clashes if you already have some of them.)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\providecommand{\ANDn}{\ensuremath{\otimes}}          % AND-node marker
+\providecommand{\ORn}{\ensuremath{\oplus}}            % OR-node marker
+\providecommand{\DETn}{\ensuremath{\odot}}            % deterministic (single child)
+\providecommand{\rst}[2]{#1[#2\,{:=}\,0]}             % zone reset
+\providecommand{\Inv}{\mathsf{Inv}}                   % (derived) node invariant
+\providecommand{\cvx}{\mathsf{cvx}}                   % convex components of a zone union
+\providecommand{\clocks}{\mathsf{clk}}                % clocks allocated by O
+\providecommand{\ZltI}{Z^{\prec\kI}}                   % part of Z before the window
+\providecommand{\ZinI}{Z^{\in\kI}}                     % part of Z inside the window
+\providecommand{\ZgtI}{Z^{\succ\kI}}                   % part of Z after the window
+\providecommand{\Dopen}{\Delta^{\circ}}               % open time-successor segment
+\providecommand{\Dbd}{\Delta^{\partial}}              % boundary time-successor
+\providecommand{\FL}{\mathsf{FL}}                     % Fischer--Ladner closure
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

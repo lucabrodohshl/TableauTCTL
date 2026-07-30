@@ -26,6 +26,9 @@ struct Options {
     bool        show_stats = false;
     bool        help = false;
     bool        tot = false; // conjoin all formulas in the input with AND and check as one formula
+    /// Which optimisation set to run: 1 = the pre-decomposition baseline,
+    /// 2 = the current search.  Both decide the same language.
+    int         version = 2;
 
     // ── Benchmark mode ──────────────────────────────────────────────────
     bool              benchmark = false;

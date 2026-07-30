@@ -1,0 +1,57 @@
+
+\begin{theorem}[Completeness]\label{thm:completeness}
+If $\varphi$ is non-punctual and satisfiable then Algorithm~\ref{alg:otf} returns \SAT.
+\end{theorem}
+\begin{proof}
+Completeness goes the other way: the realisable nodes of \S\ref{ss:nodes} are themselves a successful
+marking. Writing $\mathcal R$ for them, we show $\mathcal R\subseteq F(\mathcal R)$; then $\mathcal R\subseteq\mathcal M^{*}$ by
+Proposition~\ref{prop:gfp}, and $N_0\in \mathcal R$ as $\varphi$ is satisfiable, so Theorem~\ref{thm:alg}
+returns \SAT.
+
+\ref{D1}: a realisable node has a non-empty zone and a consistent $\Gamma_{\mathsf{prop}}$, and
+\ruleref{Umiss} does not fire on it: a pending $\mu^\bullet$ is realisable at no valuation beyond
+its window, so its zone meets $x_\mu\le b$.
+\ref{D2}: let $N\in \mathcal R$ be realised by $\mathcal T$. All children of an \ANDn-rule are realised by the
+same $\mathcal T$: \ruleref{Cov} because $\mathcal T$ satisfies $\Gamma\setminus\{\mu\}$ and $\mu$
+alike, \ruleref{Rsplit} because its children partition $Z_N$ and realisability is monotone under
+narrowing, \ruleref{Delay} and \ruleref{EX} because $\mathcal T$ admits the passage of time and
+supplies a successor for every $\EX\psi$, each inheriting $\Ctx$. At an \ORn-rule $\mathcal T$ selects
+a child: a disjunct it satisfies for \ruleref{Disj}; for \ruleref{Uunf} and \ruleref{Uunfcarry} the
+stop if $\psi$ holds now with $x_\mu\in\kI$ and \ruleref{Ugo} otherwise, the witness being later and
+$\varphi$ holding now; for \ruleref{Runf} the stop if $\varphi$ has
+released the obligation and the recursive child otherwise. The zone operations being exact, no chosen
+zone is empty. A demand re-imposed at a continuum of onsets is answered onset by onset, every re-demand being
+covered anew, carried or absorbed according to whether the running pursuit reaches the new onset,
+so the selections above serve each onset of each zone.
+\ref{D3}: fix $N\in \mathcal R$ and a run $\rho$ of $\mathcal T$ from a configuration for $N$. It
+is non-Zeno, so no clock stays both unreset and bounded along it, and following $\rho$ through the
+choices above gives a path of $\mathcal R$ from $N$ which by Lemma~\ref{lem:finiteness} repeats a node; that
+segment elapses positive time with every clock reset on it or extrapolated above $M$, hence is a
+time-progressing cycle of $\mathcal R$ reached from $N$. An until pursuit active at $N$ is one $\mathcal T$
+fulfils at a finite position of $\rho$, which the path following $\rho$ carries it to.
+
+Non-punctuality enters at the repetition step: a node summarises the pending obligations of a
+persistent universal until by $x_\mu$ alone, the time since the last witness capped at $b-a$, and by
+Lemma~\ref{lem:recurrence} that summary is faithful exactly when witnesses spaced at most $b-a$ apart
+answer every onset, which needs $b>a$.
+\end{proof}
+
+
+\begin{corollary}\label{cor:depthone}
+Satisfiability of non-punctual TCTL is \textsc{ExpTime}-complete, and the procedure is sound and
+complete for TCTL of temporal nesting depth at most one, punctual intervals included.
+\end{corollary}
+\begin{proof}
+Membership is Theorems~\ref{thm:alg}--\ref{thm:completeness}; hardness is inherited from CTL
+satisfiability~\cite{Clarke99} by fixing every interval to $[0,\infty)$. At depth one every argument
+is propositional, so no modality is demanded inside the pursuit of another and no fresh onset arises;
+the obligations live at a node are exactly the pursuits it carries, recorded in $\Gamma$, $\Ctx$ and
+$\Deadline$ with their elapsed time in $Z$, so a repeat agrees on the full obligation state and
+Theorem~\ref{thm:completeness} goes through for every \kI.
+\end{proof}
+
+\noindent
+Depth one covers reachability, safety and inevitability, the queries
+\textsc{Uppaal}~\cite{BehrmannLarsenYi2004Uppaal} and \textsc{Romeo}~\cite{lime-TACAS-09} are asked
+for; the one common query beyond it, leads-to $\mathrm{AG}(p\rightarrow\mathrm{AF}_\kI q)$, stays
+covered by Theorem~\ref{thm:completeness} whenever \kI is non-punctual.

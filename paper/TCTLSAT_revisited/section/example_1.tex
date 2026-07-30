@@ -1,0 +1,122 @@
+\paragraph{Example 1 (satisfiable).}
+We consider the formula $ \mathbf{E}(\bot \,\mathbf{R}_{[1,4]}\, p)
+  \;\land\;
+  \mathbf{E}(\top \,\mathbf{U}_{[36,\infty)}\, q).$, corresponding to $\mathrm{EG}_{[1,4]} p \;\land\; \mathrm{EF}_{[36,\infty)} q.$  
+We abbreviate
+\[
+  r_G := \mathbf{E}(\bot \,\mathbf{R}_{[1,4]}\, p),
+  \qquad
+  u_F := \mathbf{E}(\top \,\mathbf{U}_{[36,\infty)}\, q).
+\]
+
+The tableau construction for this formula is depicted in the figure below. 
+
+
+
+\begin{center}
+\begin{tikzpicture}[
+  node distance=7mm and 12mm,
+  >=stealth,
+  % CAV style: clean borders, sharp or slightly rounded corners, standard math font
+  cavnode/.style={
+    draw=black!80, 
+    rectangle, 
+    rounded corners=1pt,
+    inner sep=5pt,
+    align=left,
+    font=\small,
+    text width=36mm
+  },
+  % Edge labels: sans-serif, tiny, clean background
+  edge lbl/.style={
+    font=\scriptsize\sffamily,
+    fill=white, 
+    inner sep=2pt,
+    text=black!80
+  },
+  closemark/.style={
+    font=\normalsize\bfseries
+  }
+]
+
+% 1. Initial State
+\node[cavnode] (N0) {
+  $\Gamma = \{\,r_G,\, u_F\,\}$ \\[-1pt] 
+  $Z:\ x_G = 0 \land x_F = 0$
+};
+
+% 2. Pre-partition (postpone)
+\node[cavnode, below=of N0] (Npre) {
+  $\Gamma = \{\,\EX r_G,\, u_F\,\}$ \\[-1pt] 
+  $Z:\ x_G = 0$
+};
+\draw[->] (N0) -- node[edge lbl] {(ER$_{[1,4]}$ pre)} (Npre);
+
+% 3. Time step into the active interval
+\node[cavnode, below=of Npre] (Nin) {
+  $\Gamma = \{\,r_G,\, u_F\,\}$ \\[-1pt] 
+  $Z:\ x_G \in [1,4]$
+};
+\draw[->] (Npre) -- node[edge lbl] {(succ)} (Nin);
+
+% 4. In-partition (persist branch)
+\node[cavnode, below=of Nin] (Npersist) {
+  $\Gamma = \{\,p \land \EX r_G,\, u_F\,\}$ \\[-1pt] 
+  $Z:\ x_G \in [1,4]$
+};
+\draw[->] (Nin) -- node[edge lbl] {(ER$_{[1,4]}$ in/persist)} (Npersist);
+
+% 4b. In-partition (discharge branch - closes)
+\node[cavnode, left=of Npersist] (Ndisch) {
+  $\Gamma = \{\,\bot \land p,\, u_F\,\}$ \\[-1pt] 
+  $Z:\ x_G \in [1,4]$
+};
+\draw[->] (Nin) -| node[edge lbl, near start, above] {(ER$_{[1,4]}$ in/disch.)} (Ndisch);
+\node[below=3mm of Ndisch, closemark] (Close) {$\otimes$};
+\draw[->] (Ndisch) -- (Close);
+
+% 5. AND rule
+\node[cavnode, below=of Npersist] (Nand) {
+  $\Gamma = \{\,p,\, \EX r_G,\, u_F\,\}$ \\[-1pt] 
+  $Z:\ x_G \in [1,4]$
+};
+\draw[->] (Npersist) -- node[edge lbl] {($\land$)} (Nand);
+
+% 6. Loop back (Discrete steps while in interval)
+\draw[->, dashed, rounded corners=4mm] 
+  (Nand.east) -- ++(1.5,0) |- node[edge lbl, near start, right] {(succ / finite loop)} (Nin.east);
+
+% 7. Time step out of the interval (Post)
+\node[cavnode, below=of Nand] (Npost) {
+  $\Gamma = \{\,r_G,\, u_F\,\}$ \\[-1pt] 
+  $Z:\ x_G > 4$
+};
+\draw[->] (Nand) -- node[edge lbl] {(succ to post)} (Npost);
+
+% 8. ER Expired
+\node[cavnode, below=of Npost] (Nexpired) {
+  $\Gamma = \{\,u_F\,\}$ \\[-1pt] 
+  $Z:\ x_G > 4$
+};
+\draw[->] (Npost) -- node[edge lbl] {(ER$_{[1,4]}$ post)} (Nexpired);
+
+% 9. Delay for EU
+\node[cavnode, below=of Nexpired] (Ndelay) {
+  $\Gamma = \{\,u_F\,\}$ \\[-1pt] 
+  $Z:\ x_F \ge 36$
+};
+\draw[->] (Nexpired) -- node[edge lbl] {(delay)} (Ndelay);
+
+% 10. EU Stop
+\node[cavnode, below=of Ndelay] (Nstop) {
+  $\Gamma = \{\,q\,\}$ \\[-1pt] 
+  $Z:\ x_F \ge 36$
+};
+\draw[->] (Ndelay) -- node[edge lbl] {(EU$_{[36,\infty)}$ stop)} (Nstop);
+
+% 11. Success
+\node[below=4mm of Nstop, font=\large\bfseries] (Done) {$\checkmark$};
+\draw[->] (Nstop) -- (Done);
+
+\end{tikzpicture}
+\end{center}

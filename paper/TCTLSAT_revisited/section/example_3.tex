@@ -1,0 +1,66 @@
+\begin{figure}[th]
+    
+\centering
+
+\begin{tikzpicture}[
+  level 1/.style={sibling distance=8.5cm, level distance=2.2cm},
+  level 2/.style={sibling distance=2.8cm, level distance=2.5cm},
+  every node/.style={align=center, font=\normalsize},
+  edge from parent/.style={draw, -}
+]
+
+\node {$\Gam = \{\, \psiU,\, \psiR \,\}$ \\[-1pt] $\Zone:\ x=y \ge 0$}
+  child {
+    node [xshift=60pt]{$ \{\, q,\, \psiR \,\}$ \\[-1pt] $\ x=y \in [1,2]$}
+    child {
+      node[xshift=20pt]{$ \{\, q,\, p,$\\$ \AX{\psiR} \,\}$ \\[-1pt] $\ x=y=1$}
+      child{
+        node[yshift=20pt] {$ \{\, q,\, p,$\\$ \psiR \,\}$ \\[-1pt] $\ x=y=1$}
+        child{
+            node[yshift=20pt]  {$ \{\, q,p \,\}$ \\[-1pt] $x=y \in (1,2]$ \\ $\OPEN$}
+            edge from parent node[right=0.1cm] {\footnotesize $(\ref{tag:ter},>u)$}
+        }
+      }
+      edge from parent node[left=0.05cm] {\footnotesize $(\ref{tag:ter},$\\$\in I)$}
+    }
+    child {
+      node[yshift=-30pt]  {$ \{\, q,\, \bot,\, p \,\}$ \\[-1pt] $\ x=y=1$ \\ $\CLOSED$}
+      edge from parent node[right=0.05cm, yshift=-20pt] {\footnotesize $(\ref{tag:ter},$\\$\in I)$}
+    }
+    child {
+      node[yshift=20pt, xshift=-10pt]  {$ \{\, q \,\}$ \\[-1pt] $x=y \in (1,2]$ \\ $\OPEN$}
+      edge from parent node[right=0.1cm] {\footnotesize $(\ref{tag:ter},>u)$}
+    }
+    edge from parent node[left=0.2cm] {\footnotesize $(\ref{tag:teu}, \text{stop})$}
+  }
+  child {
+    node [xshift=-40pt, yshift = -20pt]{$ \{\, p,\, \EX{\psiU},$\\$ \psiR \,\}$ \\[-1pt] $\Zone:\ x=y \ge 0$}
+    child {
+        child{
+      node[yshift=20pt] {$ \{\, p,\, \EX{\psiU},$\\$ \bot,\, p \,\}$ \\[-1pt] $\Zone:\ x=y \in [0,1]$ \\ $\CLOSED$}
+      edge from parent node[left=0.1cm] {\footnotesize $(\ref{tag:ter},\in I)$}
+    }}
+    child{
+    child {
+      node [yshift=-20pt]{$ \{\, p,\, \EX{\psiU},$\\$ p,\, \AX{\psiR} \,\}$ \\[-1pt] $\Zone:\ x=y \in [0,1]$\\$\vdots$}
+      edge from parent node[right=0.05cm] {\footnotesize $(\ref{tag:ter},$\\$\in I)$}
+    }
+    }
+    %child {
+    %  node {$ \{\, p,$\\$ \EX{\psiU} \,\}$ \\[-1pt] $\Zone:\ x=y > 1$}
+    %  edge from parent node[right=0.1cm] {\footnotesize $(>u)$}
+    %}
+    edge from parent node[right=0.2cm] {\footnotesize $(\ref{tag:teu}, \text{go})$}
+  };
+
+\end{tikzpicture}
+\caption{ Application of rule \ref{tag:teu} and \ref{tag:ter}.}\label{fig:example3}
+\end{figure}
+
+
+
+\begin{example}
+Figure~\ref{fig:example3} reflects the application of the rule (\ref{tag:teu}) to the root node (labelled by $\{\tEU{p}{q}{[1,2]}, \tAR{\bot}{p}{[0,1]}\}$ with the initial zone $x=y \ge 0$). Here, the active eventuality is the timed until formula $\tEU{p}{q}{[1,2]}$. The rule \ref{tag:teu} splits the tableau into two branches. The left successor (the "stop" branch) is labelled by $q, \tAR{\bot}{p}{[0,1]}$ and its zone is intersected with the interval constraint $x \in [1,2]$, yielding $x=y \in [1,2]$. The right successor (the "go" branch) is labelled by $p, \EX{\tEU{p}{q}{[1,2]}}, \tAR{\bot}{p}{[0,1]}$, where the middle formula $\EX{\tEU{p}{q}{[1,2]}}$ is the next-step variant postponing the eventuality, and the zone is left unchanged as $x=y \ge 0$.
+
+Subsequently, the child nodes apply the semantic partition for the universal timed release $\tAR{\bot}{p}{[0,1]}$. On the left branch, the zone $x=y \in [1,2]$ is split into the active duration region ($\in I$, intersecting exactly at $x=y=1$) and the future region ($>u$, yielding $x=y \in (1,2]$). Because the elapsed time in the future region exceeds the upper bound of the interval, the release obligation trivially expires and is discarded, yielding an open leaf ($\OPEN$).
+\end{example}

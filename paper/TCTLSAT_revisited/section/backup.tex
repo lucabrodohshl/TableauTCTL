@@ -1,0 +1,322 @@
+\subsection{Rules}\label{ss:rules}
+
+A rule rewrites the demanded node into its children, displayed on the full tuple; a component reappears
+unchanged unless the rule modifies it. Conjunction is deterministic, disjunction branches (OR), and $\AX$
+moves its argument into the context:
+\[
+(\wedge)\ \ \frac{\tup{\Gamma\cup\{\varphi\land\psi\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\tup{\Gamma\cup\{\varphi,\psi\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+\qquad
+(\AX)\ \ \frac{\tup{\Gamma\cup\{\AX\varphi\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\tup{\Gamma}{\Ctx\cup\{\varphi\}}{Z}{\obligations}{\eventualities}}
+\]
+\[
+(\vee)\ \ \frac{\tup{\Gamma\cup\{\varphi\lor\psi\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\tup{\Gamma\cup\{\varphi\}}{\Ctx}{Z}{\obligations}{\eventualities}\quad\big|\quad
+\tup{\Gamma\cup\{\psi\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+\]
+Here $\EX\psi$ and $\AX\psi$ are not modalities of the logic but {markers} that schedule an obligation at
+the successors of a node. $\EX\psi$ asks that {one} successor satisfy $\psi$ and is discharged by
+successor generation, which creates it; $\AX\psi$ asks that {every} successor satisfy $\psi$ and is
+discharged by the context $\Ctx$, which rule $(\AX)$ fills and successor generation imposes on all children.
+A pursued existential modality is propagated by $\EX$ and a universal one by $\AX$; we write $\nxQ\mu^\bullet$
+for ``$\EX\mu^\bullet$ added to $\Gamma$ if $\mathrm{Q}=\mathrm{E}$, and $\AX\mu^\bullet$ added to $\Ctx$ if
+$\mathrm{Q}=\mathrm{A}$''. For a pursuit, ``successor'' covers time-successors as well as discrete ones, so
+the formula-clock advances by delay (made precise in successor generation below).
+
+The two timed operators are discharged by one mechanism. The difficulty it resolves is that the deadline of a
+modality $\mu=\mathrm{Q}(\varphi\,\odot_\kI\,\psi)$ ($\odot\in\{\mathbf{U},\mathbf{R}\}$) is measured {from
+the configuration that demands it}; under a persistent context such as $\mathrm{AG}(\mu)$ the modality is
+re-demanded at a {continuum} of configurations, each with its own absolute window. These demands cannot
+be merged onto one running clock, nor afforded one clock each; instead each is verified {independently}
+against a single formula-clock $x_\mu$, reset where the demand arises. The check does this in three movements:
+it {launches} a pursuit of $\mu$ that runs $x_\mu$, {unfolds} the pursuit into a satisfaction set
+$\Sat(\mu)$, and {decides} the demand against it. We describe the pursuit and its set, then the decision.
+
+Write $\mu^\bullet$ for $\mu$ {pursued}. One unfolding step rewrites $\mu^\bullet$ as $x_\mu$ advances.
+For until it either {stops} -- reaching $\psi$ inside the window, which fulfils the eventuality and so
+discharges $\mu$ from $\eventualities$ -- or {goes} -- asserting $\varphi$ now and deferring the pursuit
+to successors via $\nxQ\mu^\bullet$:
+\[
+\frac{\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\begin{array}{ll}
+\tup{\Gamma\cup\{\psi\}}{\Ctx}{Z\cap(x_\mu\!\in\!\kI)}{\obligations}{\eventualities\setminus\{\mu\}} & (\text{stop})\\[4pt]
+\tup{\Gamma\cup\{\varphi,\,\nxQ\mu^\bullet\}}{\Ctx}{Z}{\obligations}{\eventualities} & (\text{go})
+\end{array}}
+\qquad \mu=\mathrm{Q}(\varphi\,\mathbf{U}_\kI\,\psi)
+\tag{$\mathbf{U}^\bullet$}\label{tag:Uunf}
+\]
+For release the pursuit partitions the zone by where $x_\mu$ lies relative to the window into its
+before/in/after parts: $Z^{\in\kI}=Z\cap(x_\mu\in\kI)$, and $Z^{<\kI}$, $Z^{>\kI}$ the configurations below
+resp.\ above the window, with an open boundary hyperplane (where $\kI$ excludes an endpoint) falling to the
+adjacent part so the three genuinely partition $Z$ (the after-part is dropped when $\sup\kI=\infty$):
+\[
+\frac{\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\begin{array}{ll}
+\tup{\Gamma\cup\{\varphi\}}{\Ctx}{Z^{<\kI}}{\obligations}{\eventualities} & (\text{before: }\varphi\text{ releases})\\[2pt]
+\tup{\Gamma\cup\{\nxQ\mu^\bullet\}}{\Ctx}{Z^{<\kI}}{\obligations}{\eventualities} & (\text{before: continue})\\[2pt]
+\tup{\Gamma\cup\{\psi,\,\nxQ\mu^\bullet\}}{\Ctx}{Z^{\in\kI}}{\obligations}{\eventualities} & (\text{in: }\psi,\text{ continue})\\[2pt]
+\tup{\Gamma\cup\{\varphi,\psi\}}{\Ctx}{Z^{\in\kI}}{\obligations}{\eventualities} & (\text{in: }\psi,\ \varphi\text{ releases})\\[2pt]
+\tup{\Gamma}{\Ctx}{Z^{>\kI}}{\obligations}{\eventualities} & (\text{after: lapsed})
+\end{array}}
+\qquad \mu=\mathrm{Q}(\varphi\,\mathbf{R}_\kI\,\psi)
+\tag{$\mathbf{R}^\bullet$}\label{tag:Runf}
+\]
+Until needs only two cases -- a single in-window witness suffices -- whereas release, universal over the whole
+window, needs the full before/in/after partition; the cases carrying $\nxQ\mu^\bullet$ are the recursive ones,
+the rest base. An arbitrarily early $\varphi$ -- the before-window release case -- discharges the {entire}
+window obligation, since it precedes every window position; this case is what lets a release hold with $\psi$
+false throughout $\kI$, and it is necessary for completeness. A universal \emph{until} additionally caps its
+go child (for $\mathrm{Q}=\mathrm{A}$) with the deadline invariant $x_\mu\le\sup\kI$ -- strict
+($x_\mu<\sup\kI$) when $\kI$ excludes its supremum, so the cap matches the window and the stop edge stays
+enabled up to it -- forcing the eventuality to a witness inside the window; a release carries no deadline -- it
+must be free to lapse through the after-case -- and existential pursuits impose none. Repeated
+unfolding generates finitely many pursuit nodes modulo $\cong_M$; propagating the stop / in-window base zones
+backward along the go / continue edges -- to the least fixpoint for until, the greatest for release -- yields
+the {satisfaction set}
+\[
+\Sat(\mu)\;=\;\{\nu : \text{$\mu$ holds at $\nu$ under the ambient context}\},
+\qquad\text{a finite union of zones.}
+\]
+$\Sat(\mu)$ is an {operational} object: no model is presupposed, and its agreement with the semantics is
+Lemma~\ref{lem:sat}.
+
+A demanded $\mu$ on zone $Z$ is now discharged where $\Sat(\mu)$ covers it. The check {launches} the
+pursuit just described -- resetting $x_\mu$, recording its clock in $\obligations$, and (for an until)
+registering $\mu$ in $\eventualities$ -- and, when the cover is total, continues with $\mu$ met:
+\[
+\frac{\tup{\Gamma\cup\{\mu\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\begin{array}{ll}
+\tup{\Gamma}{\Ctx}{Z}{\obligations}{\eventualities} & (\text{discharge})\\[3pt]
+\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z\cap(x_\mu{=}0)}{\obligations\cup\{x_\mu\}}{\eventualities'} & (\text{launch})
+\end{array}}
+\qquad Z\subseteq\Sat(\mu)
+\tag{\textrm{Chk}}\label{tag:chk}
+\]
+with $\eventualities'=\eventualities\cup\{\mu\}$ for an until and $\eventualities$ for a release. The two
+children are conjunctive: the left continues the derivation with $\mu$ discharged, the right {is} the
+pursuit, whose branches the witness model later reads its runs from (\S\ref{sec:correct}). When the cover is
+only partial the demand is first refined to it, the rest closing,
+\[
+\frac{\tup{\Gamma\cup\{\mu\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\tup{\Gamma\cup\{\mu\}}{\Ctx}{Z_i}{\obligations}{\eventualities}}
+\qquad Z_i\in\mathsf{cc}\big(Z\cap\Sat(\mu)\big)
+\tag{\textrm{Chk}$^{*}$}\label{tag:chkstar}
+\]
+-- one disjunctive child per connected zone-component of $Z\cap\Sat(\mu)$ (each then dischargeable by
+$(\mathrm{Chk})$), while the residual $Z\setminus\Sat(\mu)$ has no covering child and closes. The eventuality
+of an until lives on the launch branch, where the loop condition of \S\ref{ss:loop} fulfils it; the discharged
+continuation never carries it, so a spine loop answers only to the greatest-fixpoint (release) obligations it
+retains -- a discharged until cannot stall a cycle. And because $(\mathrm{Chk}^{*})$ asserts $\mu$ only where
+$\Sat(\mu)$ covers it, a universal demand higher up -- an $\mathrm{AG}$ needing {every} onset -- itself
+closes when the cover is partial, so refinement is sound under any context.
+
+Two features make this sound and complete. The retained context constrains witnesses by ambient safety, so an
+$\mathrm{AG}_{\kI'}\neg q$ still forbids $q$ on them; and the universality $Z\subseteq\Sat(\mu)$ forces a
+witness from {all} onsets of a persistent demand, not merely one -- a single onset that succeeds while a
+neighbour fails would otherwise pass undetected. A single clock per modality therefore suffices, $K=O(n)$, the
+continuum of onsets being absorbed symbolically into the zone $\Sat(\mu)$: this is the region quotient behind
+the decidability of the fragment~\cite{fsttcs2000-LN,LaTorreNapoli2001TimedTreeAutomata}, internalised on the
+fly. Untimed modalities are the case $\kI=[0,\infty)$, where the window constraint is vacuous and the check
+reduces to ordinary reachability (until) or safety (release).
+
+Finally, a saturated node is expanded by time-elapse and discrete successors. Time elapse advances $Z$ towards
+$\uparrow Z$, {split at the integer hyperplanes} $x=b$ ($b\le M$) of active bounds: the procedure
+advances only to the next such hyperplane, emitting an intermediate {time-successor} that inherits the
+node's goals and context. Discrete successors realise the markers: for each $\EX\psi$ in $\Gamma$ one with
+goals $\{\psi\}\cup\Ctx$, or, when none is demanded, a stutter successor with goals $\Ctx$. A pursuit's
+residual $\nxQ\mu^\bullet$ is thus carried to {both} kinds of successor -- existentially to one
+(\,$\mathrm{Q}=\mathrm{E}$, the marking's choice), universally to all (\,$\mathrm{Q}=\mathrm{A}$, via the
+context) -- so $x_\mu$ advances by elapsing time as well as across edges. A timed window is therefore entered
+by delay, the in-window stop is taken at the first successor that satisfies it, and a pure-delay witness --
+waiting in one location until $x_\mu\in\kI$, then stopping -- is a chain of time-successors ending in a stop,
+the stutter step supplying a discrete anchor only when the location must be left. Region stability
+(\S\ref{sec:correct}) guarantees no in-window stop is skipped between two hyperplanes, and each piece being a
+zone keeps the construction finite.
+
+
+
+
+
+\paragraph{Timed Operators.}
+
+Both timed operators are treated uniformly, by one formula-clock per modality and a single unfolding relation. Fix a modality $\mu=\mathrm{Q}(\varphi\,\odot_\kI\,\psi)$ with $\mathrm{Q}\in\{\mathrm{E},\mathrm{A}\}$ and $\odot\in\{\mathbf{U},\mathbf{R}\}$. The bound $\kI$ constrains the time elapsed from the configuration at which $\mu$ is demanded. For example, in case of a persistent context such as $\mathrm{AG}_{\kI '}(\mu)$, the demand recurs at a continuum of configurations over the $\kI'$, each with its own window \kI. 
+
+To handle a demand $\mu$, we \emph{pursue} it. That is, we instantiate a formula-clock $x_\mu$ at the configuration that demands $\mu$, and use it to measure the elapsed time relevant to $\kI$. A single clock suffices for all onsets of a persistent demand, since these onsets are represented symbolically as a zone. We write $\mu^\bullet$ for the pursued modality, and $\nxQ\mu^\bullet$ for its propagation to successors: $\EX\mu^\bullet$ is added to $\Gamma$ when $\mathrm{Q}=\mathrm{E}$, and $\AX\mu^\bullet$ to the context $\Ctx$ when $\mathrm{Q}=\mathrm{A}$. An existential pursuit is thus carried as a goal and a universal pursuit through the context. In both cases $x_\mu$ advances at every successor, including time-successors.
+
+%a formula-clock $x_\mu$, reset at the demanding configuration, measures the elapsed time relevant to $\kI$. A single clock suffices for all onsets of a persistent demand, since these onsets are represented symbolically as a zone rather than by one clock each. We write $\mu^\bullet$ for the pursued modality and $\nxQ\mu^\bullet$ for its propagation to successors: $\EX\mu^\bullet$ is added to $\Gamma$ when $\mathrm{Q}=\mathrm{E}$, and $\AX\mu^\bullet$ to the context $\Ctx$ when $\mathrm{Q}=\mathrm{A}$. An existential pursuit is thus carried as a goal and a universal pursuit through the context. In both cases $x_\mu$ advances at every successor, including time-successors.
+
+
+
+For any until demand, i.e. of the form $\mu=\mathrm{Q}(\varphi\,\mathbf{U}_\kI\,\psi)$, the pursuit either {stops}, which happens when $\psi$ is satisfied inside the interval, or {goes}, which happens when $\varphi$ is satisfied and the pursuit continues, deferred via $\nxQ\mu^\bullet$.
+
+
+%One unfolding step rewrites $\mu^\bullet$ as $x_\mu$ advances. For until it either {stops} -- reaching $\psi$ inside the window, which fulfils the eventuality and removes $\mu$ from $\eventualities$ -- or {goes}, asserting $\varphi$ now and deferring via $\nxQ\mu^\bullet$:
+\[
+\frac{\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\begin{array}{ll}
+\tup{\Gamma\cup\{\psi\}}{\Ctx}{Z\cap(x_\mu\!\in\!\kI)}{\obligations}{\eventualities\setminus\{\mu\}} & (\text{stop})\\[4pt]
+\tup{\Gamma\cup\{\varphi,\,\EX\mu^\bullet\}}{\Ctx}{Z}{\obligations}{\eventualities} & (\text{go},\ \mathrm{Q}{=}\mathrm{E})\\[4pt]
+\tup{\Gamma\cup\{\varphi\}}{\Ctx\cup\{\AX\mu^\bullet\}}{Z\cap(x_\mu\le\sup\kI)}{\obligations}{\eventualities} & (\text{go-A},\ \mathrm{Q}{=}\mathrm{A})
+\end{array}}
+\qquad \mu=\mathrm{Q}(\varphi\,\mathbf{U}_\kI\,\psi)
+\tag{$\mathbf{U}^\bullet$}\label{tag:Uunf}
+\]
+
+For release demands, i.e. of the form $\mu=\mathrm{Q}(\varphi\,\mathbf{R}_\kI\,\psi)$, we partition the zone by where $x_\mu$ lies relative to \kI. This results in three cases, which we call the {before}, {in}, and {after} parts of the \kI. Write $Z^{\in\kI}=Z\cap(x_\mu\in\kI)$ for the configurations inside \kI, and $Z^{<\kI}$, $Z^{>\kI}$ for those below and above \kI, respectively. An open boundary hyperplane (where $\kI$ excludes an endpoint) falls to the adjacent part so that the three genuinely partition $Z$; the after-part is dropped when $\sup\kI=\infty$.
+
+
+%
+
+%into its before/in/after parts: $Z^{\in\kI}=Z\cap(x_\mu\in\kI)$, and $Z^{<\kI}$, $Z^{>\kI}$ the configurations below resp.\ above the window, with an open boundary hyperplane (where $\kI$ excludes an endpoint) falling to the adjacent part so the three genuinely partition $Z$ (the after-part is dropped when $\sup\kI=\infty$):
+
+
+\[
+\frac{\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\begin{array}{ll}
+\tup{\Gamma\cup\{\varphi\}}{\Ctx}{Z^{<\kI}}{\obligations}{\eventualities} & (\text{before: }\varphi\text{ releases})\\[2pt]
+\tup{\Gamma\cup\{\nxQ\mu^\bullet\}}{\Ctx}{Z^{<\kI}}{\obligations}{\eventualities} & (\text{before: continue})\\[2pt]
+\tup{\Gamma\cup\{\psi,\,\nxQ\mu^\bullet\}}{\Ctx}{Z^{\in\kI}}{\obligations}{\eventualities} & (\text{in: }\psi,\text{ continue})\\[2pt]
+\tup{\Gamma\cup\{\varphi,\psi\}}{\Ctx}{Z^{\in\kI}}{\obligations}{\eventualities} & (\text{in: }\psi,\ \varphi\text{ releases})\\[2pt]
+\tup{\Gamma}{\Ctx}{Z^{>\kI}}{\obligations}{\eventualities} & (\text{after: lapsed})
+\end{array}}
+\qquad \mu=\mathrm{Q}(\varphi\,\mathbf{R}_\kI\,\psi)
+\tag{$\mathbf{R}^\bullet$}\label{tag:Runf}
+\]
+
+
+
+The two rules differ in shape for a structural reason. An until asserts an eventuality, and a single position inside \kI witnesses it; the stop case records that witness, so three cases suffice. A release is universal over the \kI, and no single position discharges it, so the pursuit splits the \kI into its before, in, and after parts, giving five cases. 
+
+%In both rules the cases carrying $\nxQ\mu^\bullet$ are recursive, that is they defer the pursuit to a successor, and the remaining cases are base, that is they discharge, or settle the pursuit. 
+
+%Two properties of the base cases are worth stating. First, in a release an occurrence of $\varphi$ strictly before the window discharges the entire window obligation, because it precedes every position of $\kI$; this is why a release may hold with $\psi$ false throughout $\kI$. Second, a universal until ($\mathrm{Q}=\mathrm{A}$) defers through the go-A case, which adds the deadline invariant $x_\mu\le\sup\kI$ (strict when $\kI$ excludes its supremum) to the zone. Time then cannot elapse past the window while the eventuality is pending, forcing a witness inside $\kI$. An existential until defers through the go case, which imposes no bound; a release imposes none either, since it must remain free to reach its after-case and lapse.
+
+
+Unfolding $\mu^\bullet$ produces two kinds of child node: (i) \emph{base children}, which settle the demand at the current configuration and do not carry $\mu^\bullet$ onward (the stop case of an until, and the three discharging cases of a release); and (ii) \emph{recursive children}, which instead defer $\nxQ\mu^\bullet$ to their successors, where $\mu$ must be pursued again (the go and go-A cases of an until, and the two continue cases of a release). Repeated unfolding thus determines a set of clock valuations at which $\mu$ holds, which we call $\Sat(\mu)$. Let $B_\mu$ be the union of the base-case zones. A valuation $\nu$ lies in $\Sat(\mu)$ exactly when it lies in $B_\mu$, or it matches a recursive child whose deferred successors lie in $\Sat(\mu)$ (some successor when $\mathrm{Q}=\mathrm{E}$, all of them when $\mathrm{Q}=\mathrm{A}$). This is a recursive equation for $\Sat(\mu)$. Enumerating valuations directly would not terminate (as there are uncountably many), but because zones are compared up to $\cong_M$ the unfolding reaches only finitely many distinct nodes, so the equation is solved by iterating over a finite family of zones. It has a least and a greatest solution, and the two cases take opposite ones. For an until, $\Sat(\mu)$ is the least: a valuation qualifies only if it can \emph{reach} a base case in finitely many steps. For a release, it is the greatest: a valuation qualifies as long as it can continue without ever violating the release. In either case $\Sat(\mu)$ is a finite union of zones, assembled from the zones of the base and recursive children, and computed from the rules alone with no model assumed.
+
+%In either case $\Sat(\mu)$ is computed using union of finitely many zones, which terminates.  
+
+%In either case $\Sat(\mu)$ is a finite union of zones, computed from the rules alone with no model assumed.
+
+
+
+
+
+
+
+\paragraph{Deciding a demand: the cover rule.}
+A demanded $\mu$ on zone $Z$ holds exactly where $\Sat(\mu)$ covers it. Rule $(\mathrm{Cov})$ {launches} the pursuit above -- resetting $x_\mu$, recording its clock in $\obligations$, and (for an until) registering $\mu$ in $\eventualities$ -- and, when the cover is total, continues with $\mu$ met:
+\[
+\frac{\tup{\Gamma\cup\{\mu\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\begin{array}{ll}
+\tup{\Gamma}{\Ctx}{Z}{\obligations}{\eventualities} & (\text{discharge})\\[3pt]
+\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z\cap(x_\mu{=}0)}{\obligations\cup\{x_\mu\}}{\eventualities\cup\{\mu\}} & (\text{launch-U})\\[3pt]
+\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z\cap(x_\mu{=}0)}{\obligations\cup\{x_\mu\}}{\eventualities} & (\text{launch-R})
+\end{array}}
+\ Z\subseteq\Sat(\mu)
+\tag{\textrm{Cov}}\label{tag:chk}
+\]
+The two children are conjunctive: the left continues the derivation with $\mu$ discharged, the right {is} the pursuit, kept as the witness whose branches supply the model's runs. When the cover is only partial the demand is first refined to it, the rest closing:
+\[
+\frac{\tup{\Gamma\cup\{\mu\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\tup{\Gamma\cup\{\mu\}}{\Ctx}{Z_i}{\obligations}{\eventualities}}
+\qquad Z_i\in\mathsf{cc}\big(Z\cap\Sat(\mu)\big)
+\tag{\textrm{Cov}$^{*}$}\label{tag:chkstar}
+\]
+one disjunctive child per connected zone-component of $Z\cap\Sat(\mu)$ (each then dischargeable by $(\mathrm{Cov})$), while the residual $Z\setminus\Sat(\mu)$ has no covering child and closes. The eventuality of an until rides only the launch branch; the discharged continuation never carries it, so a discharged until cannot stall a cycle. Untimed modalities are the case $\kI=[0,\infty)$: the window constraint is vacuous and the rule reduces to plain reachability (until) or safety (release).
+
+
+
+
+
+
+Both timed operators are treated uniformly, by one formula-clock per modality and a single unfolding relation. Fix a modality $\mu=\mathrm{Q}(\varphi\,\odot_\kI\,\psi)$ with $\mathrm{Q}\in\{\mathrm{E},\mathrm{A}\}$ and $\odot\in\{\mathbf{U},\mathbf{R}\}$. The bound $\kI$ constrains the time elapsed from the configuration at which $\mu$ is demanded. For example, in case of a persistent context such as $\mathrm{AG}_{\kI '}(\mu)$, the demand recurs at a continuum of configurations over the $\kI'$, each with its own window \kI. 
+
+To handle a demand $\mu$, we \emph{pursue} it. That is, we instantiate a formula-clock $x_\mu$ at the configuration that demands $\mu$, and use it to measure the elapsed time relevant to $\kI$. A single clock suffices for all onsets of a persistent demand, since these onsets are represented symbolically as a zone. We write $\mu^\bullet$ for the pursued modality, and $\nxQ\mu^\bullet$ for its propagation to successors: $\EX\mu^\bullet$ is added to $\Gamma$ when $\mathrm{Q}=\mathrm{E}$, and $\AX\mu^\bullet$ to the context $\Ctx$ when $\mathrm{Q}=\mathrm{A}$. An existential pursuit is thus carried as a goal and a universal pursuit through the context. In both cases $x_\mu$ advances at every successor, including time-successors.
+
+%a formula-clock $x_\mu$, reset at the demanding configuration, measures the elapsed time relevant to $\kI$. A single clock suffices for all onsets of a persistent demand, since these onsets are represented symbolically as a zone rather than by one clock each. We write $\mu^\bullet$ for the pursued modality and $\nxQ\mu^\bullet$ for its propagation to successors: $\EX\mu^\bullet$ is added to $\Gamma$ when $\mathrm{Q}=\mathrm{E}$, and $\AX\mu^\bullet$ to the context $\Ctx$ when $\mathrm{Q}=\mathrm{A}$. An existential pursuit is thus carried as a goal and a universal pursuit through the context. In both cases $x_\mu$ advances at every successor, including time-successors.
+
+
+
+For any until demand, i.e. of the form $\mu=\mathrm{Q}(\varphi\,\mathbf{U}_\kI\,\psi)$, the pursuit either {stops}, which happens when $\psi$ is satisfied inside the interval, or {goes}, which happens when $\varphi$ is satisfied and the pursuit continues, deferred via $\nxQ\mu^\bullet$.
+
+
+%One unfolding step rewrites $\mu^\bullet$ as $x_\mu$ advances. For until it either {stops} -- reaching $\psi$ inside the window, which fulfils the eventuality and removes $\mu$ from $\eventualities$ -- or {goes}, asserting $\varphi$ now and deferring via $\nxQ\mu^\bullet$:
+\[
+\frac{\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\begin{array}{ll}
+\tup{\Gamma\cup\{\psi\}}{\Ctx}{Z\cap(x_\mu\!\in\!\kI)}{\obligations}{\eventualities\setminus\{\mu\}} & (\text{stop})\\[4pt]
+\tup{\Gamma\cup\{\varphi,\,\EX\mu^\bullet\}}{\Ctx}{Z}{\obligations}{\eventualities} & (\text{go},\ \mathrm{Q}{=}\mathrm{E})\\[4pt]
+\tup{\Gamma\cup\{\varphi\}}{\Ctx\cup\{\AX\mu^\bullet\}}{Z\cap(x_\mu\le\sup\kI)}{\obligations}{\eventualities} & (\text{go-A},\ \mathrm{Q}{=}\mathrm{A})
+\end{array}}
+\qquad \mu=\mathrm{Q}(\varphi\,\mathbf{U}_\kI\,\psi)
+\tag{$\mathbf{U}^\bullet$}\label{tag:Uunf}
+\]
+
+For release demands, i.e. of the form $\mu=\mathrm{Q}(\varphi\,\mathbf{R}_\kI\,\psi)$, we partition the zone by where $x_\mu$ lies relative to \kI. This results in three cases, which we call the {before}, {in}, and {after} parts of the \kI. Write $Z^{\in\kI}=Z\cap(x_\mu\in\kI)$ for the configurations inside \kI, and $Z^{<\kI}$, $Z^{>\kI}$ for those below and above \kI, respectively. An open boundary hyperplane (where $\kI$ excludes an endpoint) falls to the adjacent part so that the three genuinely partition $Z$; the after-part is dropped when $\sup\kI=\infty$.
+
+
+%
+
+%into its before/in/after parts: $Z^{\in\kI}=Z\cap(x_\mu\in\kI)$, and $Z^{<\kI}$, $Z^{>\kI}$ the configurations below resp.\ above the window, with an open boundary hyperplane (where $\kI$ excludes an endpoint) falling to the adjacent part so the three genuinely partition $Z$ (the after-part is dropped when $\sup\kI=\infty$):
+
+
+\[
+\frac{\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\begin{array}{ll}
+\tup{\Gamma\cup\{\varphi\}}{\Ctx}{Z^{<\kI}}{\obligations}{\eventualities} & (\text{before: }\varphi\text{ releases})\\[2pt]
+\tup{\Gamma\cup\{\nxQ\mu^\bullet\}}{\Ctx}{Z^{<\kI}}{\obligations}{\eventualities} & (\text{before: continue})\\[2pt]
+\tup{\Gamma\cup\{\psi,\,\nxQ\mu^\bullet\}}{\Ctx}{Z^{\in\kI}}{\obligations}{\eventualities} & (\text{in: }\psi,\text{ continue})\\[2pt]
+\tup{\Gamma\cup\{\varphi,\psi\}}{\Ctx}{Z^{\in\kI}}{\obligations}{\eventualities} & (\text{in: }\psi,\ \varphi\text{ releases})\\[2pt]
+\tup{\Gamma}{\Ctx}{Z^{>\kI}}{\obligations}{\eventualities} & (\text{after: lapsed})
+\end{array}}
+\qquad \mu=\mathrm{Q}(\varphi\,\mathbf{R}_\kI\,\psi)
+\tag{$\mathbf{R}^\bullet$}\label{tag:Runf}
+\]
+
+
+
+The two rules differ in shape for a structural reason. An until asserts an eventuality, and a single position inside \kI witnesses it; the stop case records that witness, so three cases suffice. A release is universal over the \kI, and no single position discharges it, so the pursuit splits the \kI into its before, in, and after parts, giving five cases. 
+
+%In both rules the cases carrying $\nxQ\mu^\bullet$ are recursive, that is they defer the pursuit to a successor, and the remaining cases are base, that is they discharge, or settle the pursuit. 
+
+%Two properties of the base cases are worth stating. First, in a release an occurrence of $\varphi$ strictly before the window discharges the entire window obligation, because it precedes every position of $\kI$; this is why a release may hold with $\psi$ false throughout $\kI$. Second, a universal until ($\mathrm{Q}=\mathrm{A}$) defers through the go-A case, which adds the deadline invariant $x_\mu\le\sup\kI$ (strict when $\kI$ excludes its supremum) to the zone. Time then cannot elapse past the window while the eventuality is pending, forcing a witness inside $\kI$. An existential until defers through the go case, which imposes no bound; a release imposes none either, since it must remain free to reach its after-case and lapse.
+
+
+Unfolding $\mu^\bullet$ produces two kinds of child node: (i) \emph{base children}, which settle the demand at the current configuration and do not carry $\mu^\bullet$ onward (the stop case of an until, and the three discharging cases of a release); and (ii) \emph{recursive children}, which instead defer $\nxQ\mu^\bullet$ to their successors, where $\mu$ must be pursued again (the go and go-A cases of an until, and the two continue cases of a release). 
+
+
+
+Repeated unfolding thus determines a set of clock valuations at which $\mu$ holds, which we call $\Sat(\mu)$. Let $B_\mu$ be the union of the base-case zones. A valuation $\nu$ lies in $\Sat(\mu)$ exactly when it lies in $B_\mu$, or it matches a recursive child whose deferred successors lie in $\Sat(\mu)$ (some successor when $\mathrm{Q}=\mathrm{E}$, all of them when $\mathrm{Q}=\mathrm{A}$). This is a recursive equation for $\Sat(\mu)$. Enumerating valuations directly would not terminate (as there are uncountably many), but because zones are compared up to $\cong_M$ the unfolding reaches only finitely many distinct nodes, so the equation is solved by iterating over a finite family of zones. It has a least and a greatest solution, and the two cases take opposite ones. For an until, $\Sat(\mu)$ is the least: a valuation qualifies only if it can \emph{reach} a base case in finitely many steps. For a release, it is the greatest: a valuation qualifies as long as it can continue without ever violating the release. In either case $\Sat(\mu)$ is a finite union of zones, assembled from the zones of the base and recursive children, and computed from the rules alone with no model assumed.
+
+%In either case $\Sat(\mu)$ is computed using union of finitely many zones, which terminates.  
+
+%In either case $\Sat(\mu)$ is a finite union of zones, computed from the rules alone with no model assumed.
+
+
+
+
+
+
+
+\paragraph{Deciding a demand: the cover rule.}
+A demanded $\mu$ on zone $Z$ holds exactly where $\Sat(\mu)$ covers it. Rule $(\mathrm{Cov})$ {launches} the pursuit above -- resetting $x_\mu$, recording its clock in $\obligations$, and (for an until) registering $\mu$ in $\eventualities$ -- and, when the cover is total, continues with $\mu$ met:
+\[
+\frac{\tup{\Gamma\cup\{\mu\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\begin{array}{ll}
+\tup{\Gamma}{\Ctx}{Z}{\obligations}{\eventualities} & (\text{discharge})\\[3pt]
+\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z\cap(x_\mu{=}0)}{\obligations\cup\{x_\mu\}}{\eventualities\cup\{\mu\}} & (\text{launch-U})\\[3pt]
+\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z\cap(x_\mu{=}0)}{\obligations\cup\{x_\mu\}}{\eventualities} & (\text{launch-R})
+\end{array}}
+\ Z\subseteq\Sat(\mu)
+\tag{\textrm{Cov}}\label{tag:chk}
+\]
+The two children are conjunctive: the left continues the derivation with $\mu$ discharged, the right {is} the pursuit, kept as the witness whose branches supply the model's runs. When the cover is only partial the demand is first refined to it, the rest closing:
+\[
+\frac{\tup{\Gamma\cup\{\mu\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\tup{\Gamma\cup\{\mu\}}{\Ctx}{Z_i}{\obligations}{\eventualities}}
+\qquad Z_i\in\mathsf{cc}\big(Z\cap\Sat(\mu)\big)
+\tag{\textrm{Cov}$^{*}$}\label{tag:chkstar}
+\]
+one disjunctive child per connected zone-component of $Z\cap\Sat(\mu)$ (each then dischargeable by $(\mathrm{Cov})$), while the residual $Z\setminus\Sat(\mu)$ has no covering child and closes. The eventuality of an until rides only the launch branch; the discharged continuation never carries it, so a discharged until cannot stall a cycle. Untimed modalities are the case $\kI=[0,\infty)$: the window constraint is vacuous and the rule reduces to plain reachability (until) or safety (release).

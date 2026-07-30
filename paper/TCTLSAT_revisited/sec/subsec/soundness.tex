@@ -1,0 +1,102 @@
+\subsection{Soundness}\label{subsec:soundness}
+
+
+In order to prove soundness, we proceed by constructing a witness automaton $\mathcal A_\varphi$ from a successful marking $\mathcal M^{*}$ of the tableau graph $\TabGraph$. We then show that this automaton satisfies the formula $\varphi$.
+
+The construction is straightforward. The saturated nodes of $\mathcal M^{*}$ supply the locations
+$S$ of $\mathcal A_\varphi$: a saturated $N$ carries $L(N)=\Gamma_{\mathsf{prop}}$ and
+$\mathsf{Inv}(N)$, and $N_0$ is the initial location. Every \ruleref{Delay}- or
+\ruleref{EX}-child of $N$ that $\mathcal M^{*}$ retains supplies an outgoing edge of $E$, leading
+to the next node and carrying the reset clocks, i.e., $x_\mu$ at a \ruleref{launch} and at a \ruleref{Ustopcarry}. Those rules
+elapse no time and leave $L$ and $\mathsf{Inv}$ untouched, so they contribute no edge of their own.
+
+Each location carries a schedule, which follows the finite path of $\mathcal M^{*}$ discharging one of the at most $n+1$ obligations pending there, resolving the \ORn-nodes along that path and turning round-robin to the next obligation once the current one is discharged. Its memory is the pair (obligation, position on that path), so $S$ stays finite.
+
+%
+%\ref{M1} and \ref{M2} hold of a path, however, and a
+%location must commit to one, so it carries in addition a \emph{schedule}. At most $n+1$
+%obligations are pending at $N$, the divergence of \ref{M1} and the until pursuits active there, and
+%each is discharged by a finite path of $\mathcal M^{*}$; the schedule follows one such path,
+%resolving the \ORn-nodes along it, and turns round-robin to the next obligation once the current one
+%is discharged. Its memory is the pair (obligation, position on that path), so the locations stay
+%finite.
+%
+%
+%\ref{M1} and \ref{M2} promise one path of $\mathcal M^{*}$ per obligation, though, while a run of
+%$\mathcal A_\varphi$ commits to one branch at every \ORn-node, and no single branch serves every
+%obligation: under $\mathrm{AG}(\mathrm{EF}\,p\wedge\mathrm{EF}\,q)$ a node must head for $p$ on some
+%visits and for $q$ on others. A location therefore pairs a saturated node with a \emph{schedule},
+%which follows the finite path discharging one of the at most $n+1$ obligations pending there, the
+%divergence of \ref{M1} and the until pursuits active at it, resolving the \ORn-nodes along that
+%path and turning round-robin to the next obligation once the current one is discharged. Its memory
+%is the pair (obligation, position on that path), so $S$ stays finite.
+%
+
+%
+%Call a node of $\mathcal M^{*}$ a \emph{state} if it is
+%saturated, so that its children are the successor steps; the remaining, \emph{expansion} edges
+%neither elapse time nor change location, and reset a clock only through a \ruleref{launch} or a
+%\ruleref{Ustopcarry}. At most $n+1$ obligations are pending at $N$, the divergence requirement of
+%\ref{M1} and the until pursuits active there, and \ref{M1}, \ref{M2} give a finite path $\pi_{N,o}$
+%of $\mathcal M^{*}$ discharging each. A \emph{schedule} selects at every \ORn-node the child
+%$\pi_{N,o}$ prescribes and moves round-robin to the next pending obligation once $o$ is discharged,
+%so its memory, the pair (obligation, position on $\pi_{N,o}$), is finite. The witness
+%$\mathcal A_\varphi$ has as locations the pairs (state, schedule memory), labelled by
+%$\Gamma_{\mathsf{prop}}$ and carrying $\Inv(N)$, and as edges the scheduled successor steps, guarded
+%by the zone of the next state reached through expansion edges and resetting the clocks that segment
+%resets.
+%
+\begin{lemma}[Recurrence]\label{lem:recurrence}
+Let $\mu=\mathrm{A}(\varphi\,\mathbf{U}_\kI\,\psi)$ with $a=\inf\kI$, $b=\sup\kI<\infty$, and let
+$\rho$ be a run of $\mathcal A_\varphi$ through a node carrying $\mu^{\ast}$, launched at $t_0$. Then
+\ruleref{Ustopcarry} fires on $\rho$ at times $t_0<w_1<w_2<\cdots$ with $w_1-t_0\in\kI$ and
+$w_{j+1}-w_j\le b-a$, and $\rho\models\varphi\,\mathbf{U}_\kI\,\psi$ from every position at or after
+$t_0$.
+\end{lemma}
+\begin{proof}
+No rule drops $\mu^{\ast}$: \ruleref{Ustopcarry} keeps it in $\Gamma$, \ruleref{Ugocarry} moves
+$\AX\mu^{\ast}$ to $\Ctx$, whence every successor carries it again, and \ruleref{Absorb} bars a fresh
+\ruleref{Cov} while the pursuit is live. So $\mu^{\ast}$ rides $\rho$ for ever, and with it the
+deadline on $x_\mu$, which is $b$ until the first witness and $b-a$ after. Both are at most $M$, so
+$x_\mu$ is bounded along $\rho$, and a cycle leaving a bounded clock unreset is not
+time-progressing. By \ref{M1} the schedule reaches such a cycle and traverses it without end, and
+while the pursuit is live only \ruleref{Ustopcarry} resets $x_\mu$, so the stop recurs: it fires at
+times $t_0<w_1<w_2<\cdots$. At the first firing $x_\mu$ measures from $t_0$ and the guard is \kI, so
+$w_1-t_0\in\kI$; at each later one it measures from the preceding witness and $\Deadline$ caps it at
+$b-a$, so $w_{j+1}-w_j\le b-a$.
+
+For the last claim let $t\ge t_0$ and let $w_j$ be the first witness at or after $t+a$. If $j=1$ then
+$w_1\le t_0+b\le t+b$; otherwise $w_{j-1}<t+a$, so $w_j\le w_{j-1}+(b-a)<t+b$. Either way
+$w_j-t\in\kI$, and $\psi$ holds at $w_j$ while \ruleref{Ugocarry} asserts $\varphi$ at every position
+before it, which is \eqref{eq:sat_u}.
+\end{proof}
+
+\begin{theorem}\label{thm:soundness}
+If Algorithm~\ref{alg:otf} returns \SAT{} then $\varphi$ is satisfiable.%, %and $\mathcal A_\varphi$ is a witness for it.
+\end{theorem}
+\begin{proof}
+By Theorem~\ref{thm:alg} the root lies in $\mathcal M^{*}$, so $\mathcal A_\varphi$ is defined, and
+Lemma~\ref{lem:zones}\ref{zoneitem:feasible} supplies valuations and delays along its paths. It is non-blocking: its only
+invariants are the deadlines in $\Deadline$, and cap and stop guard derive from the same interval with the
+same strictness, so the stop edge is enabled up to the cap and by \ref{M2} the schedule takes it. By
+\ref{M1} the schedule reaches a time-progressing cycle, which Lemma~\ref{lem:zones}\ref{zoneitem:nonzeno} unfolds into
+a run whose iterations each elapse a fixed $\delta>0$, so $\mathrm{Runs}^\infty$ is non-empty
+everywhere, which is all the semantics asks of it.
+
+We show $\mathcal T,(s_0,\mathbf 0)\models\varphi$ for the induced TTS by induction on $\varphi$
+along the marking. Propositional goals hold by saturation and closure of contradictory nodes;
+$\EX\psi$ obtains a successor satisfying $\psi$ from its \ruleref{EX} child, and $\AX\psi$ holds at
+all successors since each child inherits $\Ctx$. For a timed modality demanded at $N$,
+\ruleref{Cov} is conjunctive, so $\mathcal M^{*}$ retains both the discharge child, carrying the
+remaining goals, and the launch, which establishes $\mu$ with $x_\mu$ reset, so \kI is measured
+from this configuration and the pursuit rides every successor, as a goal under $\mathrm{E}$ and as
+context under $\mathrm{A}$. A re-demand is covered anew, carried or absorbed, so every onset is established: by a pursuit
+of its own, by the carried pursuit that answers all of them, or, when the window is unbounded, by
+the witnesses that later launches are forced to produce. An existential until is witnessed by the path \ref{M2} supplies, extended past
+its \ruleref{Ustop} by a divergent run; a universal one cannot be evaded, $\Inv(N)$ blocking time at
+the cap while the pursuit is imposed on all successors, and when the demand is persistent this is
+Lemma~\ref{lem:recurrence}. \ruleref{Rsplit} discharges a release by partitioning the zone
+conjunctively: \ruleref{Runf} asserts $\psi$ in the window until $\varphi$ releases it, carries the
+pursuit on before the window, and past it the obligation has lapsed.
+Lemma~\ref{lem:zones}\ref{zoneitem:stability} lifts each conclusion to the positions between nodes.
+\end{proof}

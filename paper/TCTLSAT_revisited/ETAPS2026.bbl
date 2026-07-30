@@ -1,0 +1,111 @@
+\begin{thebibliography}{10}
+\providecommand{\url}[1]{\texttt{#1}}
+\providecommand{\urlprefix}{URL }
+\providecommand{\doi}[1]{https://doi.org/#1}
+
+\bibitem{tableau_ctl}
+Abuin, A., Bolotov, A., Hermo, M., Lucio, P.: {One-Pass Context-Based Tableaux
+  Systems for CTL and ECTL}. In: Mu\~{n}oz Velasco, E., Ozaki, A., Theobald, M.
+  (eds.) 27th International Symposium on Temporal Representation and Reasoning
+  (TIME 2020). Leibniz International Proceedings in Informatics (LIPIcs),
+  vol.~178, pp. 14:1--14:20. Schloss Dagstuhl -- Leibniz-Zentrum f{\"u}r
+  Informatik, Dagstuhl, Germany (2020). \doi{10.4230/LIPIcs.TIME.2020.14}
+
+\bibitem{AlurCourcoubetisDill1990}
+Alur, R., Courcoubetis, C., Dill, D.: Model-checking for real-time systems. In:
+  Proceedings of the 5th Annual IEEE Symposium on Logic in Computer Science
+  (LICS). pp. 414--425 (1990)
+
+\bibitem{AlurDill1994}
+Alur, R., Dill, D.L.: A theory of timed automata. Theoretical computer science
+  \textbf{126}(2),  183--235 (1994)
+
+\bibitem{AlurHenzinger1994ReallyTemporal}
+Alur, R., Henzinger, T.A.: A really temporal logic. Journal of the {ACM}
+  \textbf{41}(1),  181--203 (1994)
+
+\bibitem{imitator3}
+Andr\'e, E.: {IMITATOR} 3: Synthesis of timing parameters beyond decidability.
+  In: Silva, A., Leino, K.R.M. (eds.) Computer Aided Verification -- 33rd
+  International Conference, {CAV} 2021, Virtual Event, July 20--23, 2021,
+  Proceedings, Part {I}. Lecture Notes in Computer Science, vol. 12759, pp.
+  552--565. Springer (2021). \doi{10.1007/978-3-030-81685-8\_26}
+
+\bibitem{Baier08}
+Baier, C., Katoen, J.P.: Principles of Model Checking. MIT Press (2008)
+
+\bibitem{BehrmannLarsenYi2004Uppaal}
+Behrmann, G., David, A., Larsen, K.G.: A tutorial on {Uppaal}. In: Formal
+  Methods for the Design of Real-Time Systems (SFM-RT 2004). Lecture Notes in
+  Computer Science, vol.~3185, pp. 200--236. Springer (2004)
+
+\bibitem{Bouyer05TimedAutomata}
+Bouyer, P.: An introduction to timed automata. In: Actes de l'École d'été
+  ETR'05 (École Temps-Réel 2005). pp. 79--94. Nancy, France (2005), tutorial
+
+\bibitem{10.1145/3808127}
+Brodo, L., Scalora, G., Henkler, S.: Property refinement in linear temporal
+  logic: Formal semantics and algorithms for software verification. Proc. ACM
+  Softw. Eng.  \textbf{3}(FSE) (Jun 2026). \doi{10.1145/3808127},
+  \url{https://doi.org/10.1145/3808127}
+
+\bibitem{BrodoScaloraHenkler2026MinimalTemporalProperties}
+Brodo, L., Scalora, G., Henkler, S.: What do we really need? identifying
+  minimal sufficient temporal properties via refinement. In: Proceedings of the
+  IEEE/ACM 48th International Conference on Software Engineering: Companion
+  Proceedings (ICSE-Companion '26). pp.~1--2. ACM, Rio de Janeiro, Brazil
+  (2026). \doi{10.1145/3774748.3795661}, to appear in 2026
+
+\bibitem{Clarke99}
+Clarke, E.M., Grumberg, O., Peled, D.A.: Model Checking. MIT Press (1999)
+
+\bibitem{EmersonEtAl1992QuantitativeTemporalReasoning}
+Emerson, E.A., Mok, A.K., Sistla, A.P., Srinivasan, J.: Quantitative temporal
+  reasoning. Real-Time Systems  \textbf{4},  331--352 (1992)
+
+\bibitem{Guo2014UPPAAL}
+Guo, X., Lin, H.H., Yatake, K., Aoki, T.: An {UPPAAL} framework for model
+  checking automotive systems with {FlexRay} protocol. In: Formal Techniques
+  for Safety-Critical Systems (FTSCS 2013). Communications in Computer and
+  Information Science, vol.~419, pp. 51--66. Springer (2014).
+  \doi{10.1007/978-3-319-05416-2_4}
+
+\bibitem{fsttcs2000-LN}
+La{~}Torre, S., Napoli, M.: A decidable dense branching-time temporal logic.
+  In: Kapoor, S., Prasad, S. (eds.) {P}roceedings of the 20th {C}onference on
+  {F}oundations of {S}oftware {T}echnology and {T}heoretical {C}omputer
+  {S}cience ({FSTTCS}'00). Lecture Notes in Computer Science, vol.~1974, pp.
+  139--150. Springer-Verlag (Dec 2000)
+
+\bibitem{LaTorreNapoli2001TimedTreeAutomata}
+La~Torre, S., Napoli, M.: Timed tree automata with an application to temporal
+  logic. Acta Informatica  \textbf{38},  89--116 (2001)
+
+\bibitem{Laursen2020Railway}
+Laursen, P.L., Trinh, V.A.T., Haxthausen, A.E.: Formal modelling and
+  verification of a distributed railway interlocking system using {UPPAAL}. In:
+  Leveraging Applications of Formal Methods, Verification and Validation:
+  Applications (ISoLA 2020). Lecture Notes in Computer Science, vol. 12478, pp.
+  415--433. Springer (2020). \doi{10.1007/978-3-030-61467-6_27}
+
+\bibitem{lime-TACAS-09}
+Lime, D., Roux, O.H., Seidner, C., Traonouez, L.M.: Romeo: A parametric
+  model-checker for {Petri} nets with stopwatches. In: Kowalewski, S.,
+  Philippou, A. (eds.) 15th International Conference on Tools and Algorithms
+  for the Construction and Analysis of Systems (TACAS 2009). Lecture Notes in
+  Computer Science, vol.~5505, pp. 54--57. Springer, York, United Kingdom (Mar
+  2009)
+
+\bibitem{Mikucionis2010Herschel}
+Miku\v{c}ionis, M., Larsen, K.G., Rasmussen, J.I., Nielsen, B., Skou, A., Palm,
+  S.U., Pedersen, J.S., Hougaard, P.: Schedulability analysis using {Uppaal}:
+  {Herschel-Planck} case study. In: Leveraging Applications of Formal Methods,
+  Verification, and Validation (ISoLA 2010). Lecture Notes in Computer Science,
+  vol.~6416, pp. 175--190. Springer (2010). \doi{10.1007/978-3-642-16561-0_21}
+
+\bibitem{boundedTCTL}
+Penczek, W., Petrucci, L., Sidoruk, T.: Satisfiability checking for (strategic)
+  timed ctl using imitator. pp. 144--155 (01 2025).
+  \doi{10.5220/0013257700003890}
+
+\end{thebibliography}

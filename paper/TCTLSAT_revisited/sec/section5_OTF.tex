@@ -1,0 +1,140 @@
+\section{The Decision Procedure}\label{sec:correct}
+
+Section~\ref{sec:tableau} reduces satisfiability of $\varphi$ to whether $N_0$ lies in a successful
+marking of $\TabGraph$. The procedure that decides this rests on reading the conditions of
+\S\ref{ss:loop} as a removal operator $F$ on subsets of $\TabNode$. 
+%itemjoin={{; }}, itemjoin*={{; and }}
+For $A\subseteq\TabNode$, a node
+$v\in A$ survives when
+\begin{enumerate}[label={\footnotesize\textbf{(D\arabic*)}}, ref={\footnotesize\textbf{(D\arabic*)}},itemindent=2em,
+                   ]
+\item\label{D1} $v$ is not closed
+\item\label{D2} $\ch(v)\cap A\neq\emptyset$ if $\kind(v)=\ORn$, and $\ch(v)\subseteq A$ if
+$\kind(v)=\ANDn$
+\item\label{D3} $v$ satisfies \ref{M1} and \ref{M2} with its paths taken inside $A$
+\end{enumerate}
+\noindent
+that is, $F(A)=\{v\in A \mid \text{$v$ satisfies \ref{D1}--\ref{D3} on $A$} \}.$ 
+
+$F$ is monotone by construction. Let $A\subseteq B\subseteq\TabNode$ and let $v\in F(A)$. Then
+$v\in B$, and each of \ref{D1}--\ref{D3} still holds of $v$ on $B$: \ref{D1} does not mention the
+set; a \ORn-node keeps in $B$ the child it had in $A$, and an \ANDn-node has all its children in
+$A\subseteq B$; and a path inside $A$ is a path inside $B$, which settles \ref{D3} and \ref{D3}.
+Hence $v\in F(B)$ and $F(A)\subseteq F(B)$.
+
+
+%%%%%%%%% DEAD TEXT %%%%%%%%
+% The same operator stated by what it deletes rather than what it keeps; kept in
+% case the removal phrasing reads better in the (D3)/(D4) clauses.
+%\S\ref{ss:loop} as an operator $F$ which removes from a set $A\subseteq\TabGraph$:
+%\begin{enumerate*}[label={\textbf{(D\arabic*)}}, ref={\textbf{(D\arabic*)}},
+%                   itemjoin={{; }}, itemjoin*={{; and }}]
+%\item the closed nodes
+%\item the \ORn-nodes with no child in $A$, and the \ANDn-nodes with a child outside $A$
+%\item the nodes at which \ref{M1} fails when its paths are taken inside $A$
+%\item the nodes at which \ref{M2} fails when its paths are taken inside $A$.
+%\end{enumerate*}
+%%%%%%%%% DEAD TEXT %%%%%%%%
+
+
+
+%
+%Let $A\subseteq B$ and $v\in F(A)$, so $v\in A$ and $v$ survives every clause on $A$. Then
+%$v\in B$, and it survives them on $B$ as well: \ref{D1} does not mention the set; a \ORn-node
+%keeps its child in $A\subseteq B$; an \ANDn-node has no child outside $A$, and a child outside
+%$B$ would be one; and a path inside $A$ is a path inside $B$, which settles \ref{D3} and
+%\ref{D4}. So $v\in F(B)$ and $F$ is monotone.
+
+\begin{lemma}\label{prop:gfp}
+\TabGraph has a greatest successful marking $\mathcal{M}^*$ and succeeds
+iff $N_0\in\mathcal{M}^*$.
+\end{lemma}
+\begin{proof}
+Since $F$ is monotone and $\TabGraph$ is finite by Lemma~\ref{lem:finiteness}, by Knaster--Tarski, $F$ has a greatest fixpoint $\nu F$. Every marking surviving \ref{D1}--\ref{D3} is successful by construction, hence $\nu F$ is the greatest successful marking. As a consequence, the tableau succeeds on $\varphi$ iff $N_0\in\nu F$.
+\end{proof}
+
+
+A procedure that naively iterates $F$ downwards from $\TabGraph$ reaches $\nu F$ in finitely many steps, but presupposes
+the full construction of $\TabGraph$. Instead, Algorithm~\ref{alg:otf} decides $N_0\in\nu F$ on-the-fly, building only the part of $\TabGraph$ required. It works by expanding each node of \TabGraph until its children (line~\ref{ln:expand}). Lines~\ref{ln:seed}--\ref{ln:decide} take a strongly
+connected component (SCC) $C$ of the expansion whose children outside $C$ are all either in $\Acc$
+or $\Rej$, apply $F$ inside $C$, accept what survives and reject the rest (Line~\ref{ln:decide}). $\Acc$ is
+passed to $F$ at line~\ref{ln:fix}, so a node of $C$ whose witness leaves $C$ through an accepted
+child finds it continued there.
+The loop exits once $N_0$ is decided, and $\varphi$ is
+satisfiable exactly when $N_0$ ends in $\Acc$. Lines~\ref{ln:acc} and~\ref{ln:rej} are optimizations which allow pruning: a \ORn-node with an accepted child, or an \ANDn-node with
+a rejected one, is decided on the spot, so only the components of $E\setminus (\Acc\cup\Rej)$ are ever computed.
+
+\input{algs/algo1.tex}
+
+Correctness of the procedure rests on three further facts: \ref{lemitem:pruning} pruning preserves $\nu F$; \ref{lemitem:de} a time-progressing cycle is found by inspecting resets and bounds, making \ref{D3} computable; and \ref{lemitem:fix} $F$ may be applied inside a single component, preserving the greatest fixpoint and allowing for an on-the-fly decision.
+
+\begin{lemma}\label{lem:search}
+$A\subseteq\mathcal M^{*}$ be a successful marking with $\mathcal M^{*}\cap(\ch(C)\setminus C)\subseteq A$.
+\begin{enumerate}[label=\emph{(\roman*)}, ref={(\roman*)}]
+\item\label{lemitem:pruning} If $v$ is a \ORn-node with a child $w\in\mathcal M^{*}$, or an
+\ANDn-node with a child $w\notin\mathcal M^{*}$, then $v\in\mathcal M^{*}$ iff
+$w\in\mathcal M^{*}$. Removing $v$'s other children leaves $\mathcal M^{*}$ unchanged.
+\item\label{lemitem:de} $T$ contains a time-progressing cycle iff some node of $T$ is a
+\ruleref{Delay}-successor and every clock is unbounded or reset in $T$.
+\item\label{lemitem:fix} $\mathcal M^{*}\cap C$ is the largest $X\subseteq C$ with
+$X\subseteq F(X\cup A)$.
+\end{enumerate}
+\end{lemma}
+\begin{proof}
+\ref{lemitem:pruning} For an \ANDn-node this is \ref{D2}. For a \ORn-node, $\mathcal M^{*}\cup\{v\}$
+is a post-fixpoint of $F$: $v$ is not closed and spared by \ref{D2} because of $w$; and \ref{D3} hold at $v$ by prefixing the edge
+$v\to w$ to the witnesses $w$ carries, a pursuit active at $v$ being either still active at $w$ or
+discharged by that edge. Hence $v\in\nu F=\mathcal M^{*}$. The same prefixing gives the second
+claim: a path using another child of $v$ arrives through $v$, so a node relying on it can take its
+own path to $v$ and then $v$'s witness. \ref{lemitem:de} ($\Leftarrow$) Strong connectivity gives a cycle through the
+\ruleref{Delay}-successor and a reset node of each clock $T$ resets, which is then
+time-progressing. ($\Rightarrow$) By definition a time-progressing cycle elapses positive time, so it crosses a \ruleref{Delay}, since it is the only rule that elapses time, and every clock is either reset on it or extrapolated above $M$, hence unbounded. 
+\ref{lemitem:fix} For $\subseteq$, $C$ being maximal a witness path of $\mathcal M^{*}$ from
+$N\in C$ either stays in $C$ or leaves once through some $c\in A$, where it continues since $A$ is a
+successful marking. For $\supseteq$, $X\cup A$ is then a successful marking too, its $A$-part by
+monotonicity and its $X$-part by hypothesis, so $X\subseteq\mathcal M^{*}$ by
+Proposition~\ref{prop:gfp}.
+\end{proof}
+
+\begin{theorem}\label{thm:alg}
+Algorithm~\ref{alg:otf} terminates in $2^{\mathrm{poly}(n)}$ and returns \SAT{} iff $N_0\in\nu F$.
+\end{theorem}
+
+
+
+\begin{proof}
+Let $D=\Acc\cup\Rej$ and $U=E\setminus D$. Each iteration enlarges $E$ or $D$, or the loop exits.
+Suppose one enlarges $D$ by nothing; then $E$, $D$ and $U$ still carry the values they had on
+entry when line~\ref{ln:expand} runs. If $U=\emptyset$ then $E=D$, so $N_0\in D$ and the loop
+exits. Otherwise suppose line~\ref{ln:expand} adds nothing either, that is $\ch(U)\subseteq E$.
+The condensation of the subgraph induced on $U$ is non-empty, finite and acyclic, so it has a sink
+$C$: a maximal SCC of $U$ with $\ch(C)\cap U\subseteq C$. Take any $w\in\ch(C)\setminus C$. It
+lies outside $U$ by sinkhood, and inside $E$ by that supposition, hence in $D$. So every exit of
+$C$ is decided, $C$ meets the guard of line~\ref{ln:comp}, and line~\ref{ln:decide} adds the
+non-empty $C$ to $D$, against the assumption that $D$ did not grow. Hence
+$\ch(U)\not\subseteq E$, and line~\ref{ln:expand} enlarges $E$. Both sets are bounded by $|\TabNode|$, finite by Lemma~\ref{lem:finiteness}, so at most
+$2|\TabNode|$ iterations enlarge either and the next one exits, necessarily with $N_0\in D$ as
+that is the guard of line~\ref{ln:until}.
+
+
+
+We show $\Acc\subseteq\mathcal M^{*}$ and $\Rej\cap\mathcal M^{*}=\emptyset$ by induction on the
+order in which nodes are accepted or rejected, each such step resting on those already taken.
+Lines~\ref{ln:acc} and~\ref{ln:rej} are Lemma~\ref{lem:search}\ref{lemitem:pruning}, which also
+justifies leaving the remaining children unbuilt. Line~\ref{ln:comp} fires only once every child
+of $C$ outside $C$ has been accepted or rejected, so by induction
+$\Acc\cap\ch(C)=\mathcal M^{*}\cap(\ch(C)\setminus C)$; line~\ref{ln:fix} then computes
+$\mathcal M^{*}\cap C$ by Lemma~\ref{lem:search}\ref{lemitem:fix}, and line~\ref{ln:decide}
+accepts it and rejects the rest of $C$. Clause~\ref{D3} of $F$ is evaluated through
+Lemma~\ref{lem:search}\ref{lemitem:de}.
+
+For the bound let $m$ be that of Lemma~\ref{lem:finiteness}; as $M$
+occupies at most $n$ input symbols, $\log m=O(n)+O(n^{2})\log M=\mathrm{poly}(n)$, and each of the at
+most $2m$ rounds costs one decomposition of a subgraph of $\TabGraph$ together with at most $m$
+applications of $F$, each a decomposition and $O(n)$ backward reachabilities linear in the subgraph,
+so the run costs $\mathrm{poly}(m)=2^{\mathrm{poly}(n)}$.
+\end{proof}
+
+
+
+

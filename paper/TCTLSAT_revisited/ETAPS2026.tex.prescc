@@ -1,0 +1,110 @@
+\documentclass[runningheads]{llncs}
+%
+\usepackage[T1]{fontenc}
+% T1 fonts will be used to generate the final print and online PDFs,
+% so please use T1 fonts in your manuscript whenever possible.
+% Other font encondings may result in incorrect characters.
+%
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{enumitem}
+\usepackage{pgf}
+\usepackage{pgfplots}
+\usepackage[hidelinks]{hyperref}
+\usepackage{tcolorbox}
+\usepackage{subcaption}
+\usepackage{multirow}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{xspace}
+
+\usepackage{booktabs}   % \toprule, \midrule, \bottomrule
+\usepackage{multirow}   % \multirow
+\usepackage{longtable}
+
+
+\usetikzlibrary{positioning}
+
+\usetikzlibrary{positioning}
+\usetikzlibrary{ arrows.meta}
+\usetikzlibrary{shapes.geometric}
+\usetikzlibrary{calc}
+\usetikzlibrary{arrows}
+\usetikzlibrary{shapes, arrows, positioning, fit, calc, backgrounds, chains,decorations.pathreplacing,hobby}
+\usetikzlibrary{mindmap,trees}
+\usetikzlibrary{automata,positioning}
+\usetikzlibrary{decorations.markings}
+
+
+\usepackage{color}
+\renewcommand\UrlFont{\color{blue}\rmfamily}
+
+
+\input{preamble.tex}
+
+\urlstyle{rm}
+%
+\begin{document}
+
+\title{A Tableau for TCTL}
+
+\titlerunning{A Tableau for TCTL}
+
+\author{Luca Brodo\orcidID{0009-0005-1437-9861} \and
+Giuseppe Scalora\orcidID{0009-0005-3163-82634} \and
+Stefan Henkler\orcidID{0009-0000-4979-9456}}
+%
+\authorrunning{L. Brodo et al.}
+% First names are abbreviated in the running head.
+% If there are more than two authors, 'et al.' is used.
+%
+\institute{Hochschule Hamm-Lippstadt, Germany \\
+\email{\{name.last\_name\}@hshl.de}\\
+}
+%
+\maketitle              % typeset the header of the contribution
+%
+\begin{abstract}
+
+We present the first tableau-based decision procedure for the satisfiability problem of Timed
+Computation Tree Logic (TCTL). Our approach is an on-the-fly, symbolic proof search that explores only the relevant part of the state space and excludes spurious Zeno witnesses, so that for every satisfiable formula it yields a realisable timed automaton as a certificate of satisfiability. Our procedure is sound and terminating for the general TCTL, and complete for its non-punctual fragment, where it matches the optimal \textsc{ExpTime} bound. Our evaluation shows that it remains feasible in practice, even for formulas with a large number of nested temporal operators, with a consistently low, almost-flat cost for the kind of TCTL properties engineers write in practice.
+
+
+%
+%Compared to the only other known decision procedure, which
+%reduces the problem to the emptiness of timed tree automata, our approach is an on-the-fly,
+%zone-based proof search that explores only the relevant part of the state space and excludes
+%spurious Zeno witnesses, so that for every satisfiable formula it yields a realisable timed
+%automaton as a certificate of satisfiability, directly reusable for synthesis.
+%
+%The calculus is defined for full TCTL and is sound and terminating there, so a reported witness
+%is always genuine; non-punctuality is needed only for completeness, where it enters at a single
+%step, and over that decidable fragment the procedure matches the optimal \textsc{ExpTime} bound.
+%Our evaluation shows that it remains feasible in practice, even for formulas with a large number
+%of nested temporal operators, with a consistently low, almost-flat cost for TCTL properties
+%corresponding to queries in \textsc{Uppaal}'s query syntax.
+%
+%
+%We present the first tableau-based decision procedure for the satisfiability problem of
+%Timed Computation Tree Logic (TCTL) over its decidable non-punctual fragment. Compared to the only other known decision procedure, which reduces the problem to the emptiness of timed tree automata, our approach is an on-the-fly, zone-based proof search that explores only the relevant part of the state space and excludes spurious Zeno witnesses, so that for every satisfiable formula it yields a realisable timed automaton as a certificate of satisfiability, directly reusable for synthesis.
+%
+%We prove the procedure sound, complete and that it matches the optimal \textsc{ExpTime} bound for the fragment. Our evaluation shows that the procedure remains feasible in practice, even for formulas with a large number of nested temporal operators, with a consistently low, almost-flat cost for TCTL properties corresponding to queries in Uppaal's query syntax.
+%
+\keywords{TCTL  \and Satisfiability \and Real-Time Software \and Timed Automata}
+\end{abstract}
+
+%Three ideas make it correct over dense, branching time: an AND--OR {marking} that respects universal path quantifiers; a {time-progress} loop condition that excludes spurious Zeno witnesses; and a single, region-faithful {check} that verifies each time-bounded until or release independently, its deadline measured from the configuration that raises it. 
+
+%
+\input{section/introduction.tex}
+\input{section/background.tex}
+\input{section/section4.tex}
+\input{section/correctness.tex}
+\input{section/evaluation.tex}
+
+
+
+\bibliographystyle{splncs04}
+\bibliography{ETAPS2026}
+
+\end{document}

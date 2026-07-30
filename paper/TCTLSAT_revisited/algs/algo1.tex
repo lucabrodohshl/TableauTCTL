@@ -1,0 +1,21 @@
+\begin{algorithm}[t]
+\footnotesize
+\DontPrintSemicolon
+\SetAlgoLined
+\SetAlgoNoEnd
+\KwIn{$\varphi$ in negation normal form}
+\KwOut{\SAT{} or \UNSAT}
+$E\gets\{N_0\}$; \quad $\Acc\gets\emptyset$; \quad $\Rej\gets\emptyset$\label{ln:init}\;
+\Repeat{$N_0\in \Acc \cup \Rej$\label{ln:until}}{
+  $\Acc\gets\Acc\cup\{v\in E\mid \kind(v)=\ORn,\ \ch(v)\cap\Acc\neq\emptyset\}$\label{ln:acc}\;
+  $\Rej\gets\Rej\cup\{v\in E\mid \kind(v)=\ANDn,\ \ch(v)\cap\Rej\neq\emptyset\}$\label{ln:rej}\;
+  \ForEach{component $C$ of $E\setminus (\Acc\cup\Rej)$ with $\ch(C)\setminus C\subseteq \Acc\cup\Rej$\label{ln:comp}}{
+    $X\gets C$\label{ln:seed}\;
+    \lRepeat{$X$ \textnormal{is unchanged}}{$X\gets F(X\cup\Acc)\cap C$\label{ln:fix}}
+    $\Acc\gets\Acc\cup X$; \quad $\Rej\gets\Rej\cup(C\setminus X)$\label{ln:decide}\;
+  }
+  $E\gets E\cup\ch(E\setminus (\Acc\cup\Rej))$\tcp*{apply the rules of \S\ref{ss:rules}}\label{ln:expand}
+}
+\Return{\SAT{} \textnormal{if} $N_0\in\Acc$, \textnormal{else} \UNSAT}\label{ln:return}
+\caption{Satisfiability check for TCTL formula $\varphi$}\label{alg:otf}
+\end{algorithm}

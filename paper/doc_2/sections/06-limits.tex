@@ -1,0 +1,38 @@
+% ---------------------------------------------------------------------------
+%  06-limits.tex
+% ---------------------------------------------------------------------------
+\section{Limits}
+\label{sec:limits}
+
+\paragraph{It removes one exponential, not the exponential.}
+\Cref{thm:decomp} attacks the product of \emph{independent} obligations. The
+nesting towers of \cref{sec:problem} are not independent --- each level's
+$\mathrm{AG}$ sits inside the previous level's $\mathrm{EF}$ and they share
+atoms --- and their growth is untouched. Six separate attempts on that growth
+are recorded in \cref{sec:negative}; none moved it. The remaining growth is
+believed to be the genuine $2^{O(n)}$ of the bound.
+
+\paragraph{The test can only see syntactic independence.}
+Two components sharing a symbol are never split even when the symbol is used in
+ways that do not interact. The symbols counted are atomic propositions and data
+variables (\cref{sec:algorithm}); a semantic independence test would catch more
+and cost more, and nothing here attempts one. Note which way the error runs: a
+missed split costs time, an unsound one costs correctness, and the twelve
+self-test failures on $\{x\le 5\}\wedge\{x\ge 10\}$ are what happens when the
+symbol set is too small.
+
+\paragraph{The suite is our own.}
+The family that decomposes is one we wrote. See the caveat in
+\cref{sec:eval}: the claim to make is about the mechanism, not about a speed-up
+on a workload.
+
+\paragraph{Witness extraction is disabled under decomposition.}
+A witness for a decomposed node is the product of the components' automata, and
+the extractor does not build it. With \code{--model} the static form declines to
+decompose; the per-node form has not been reconciled with witness extraction at
+all, which is the first thing to fix if either is turned on by default.
+
+\paragraph{The overhead is not zero.}
+$5$--$10\%$ on inputs that never decompose (\cref{sec:eval}). Turning either
+form on by default needs either a cheaper negative test or evidence that real
+inputs decompose often enough to pay for it.

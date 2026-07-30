@@ -1,0 +1,185 @@
+
+\subsection{Termination, Soundness and Completeness}\label{sec:proofs} 
+We now establish termination, soundness, and completeness of the tableau procedure.
+Termination follows from finiteness: the input formula is finite and zones are compared modulo max-constant abstraction, so only finitely many distinct nodes arise. Soundness is shown by turning a {successful marking} of the AND--OR graph into a witnessing TTS -- the branching structure of the marking supplies the discrete successors demanded by the existential markers, while the context $\mathcal{X}$ supplies the universal ones -- and then unfolding it into a non-Zeno run. Completeness follows by guiding the construction with a satisfying model so as to produce a successful marking. We present the results here, with detailed proofs in Appendix~\ref{sec:appendix}.
+
+The key to establish termination is the finiteness of distinct tableau nodes, which follows from the finiteness of the input formula and the use of abstraction to ensure a finite search space. We formalize this in the following lemma.
+
+\begin{lemma}[Finiteness of nodes]\label{lem:finiteness}
+%Fix an input formula $\varphi$ of length $n = |\varphi|$ and let $M$ be the maximal integer constant
+%occurring in any timing interval of $\varphi$.
+%Assume zones are maintained in canonical form modulo $\cong_M$. 
+%Then only finitely many distinct tableau nodes can arise during the
+%construction and the number of nodes is bounded by $2^{O(n \log n)} \cdot M^{O(n)}$
+
+Let $\varphi$ be an input formula of size $n=|\varphi|$ and $M$ the largest constant in its timing intervals. With zones normalised modulo $\cong_M$ and one formula-clock per timed-until subformula, the number of clocks is $K=O(n)$, and the number of distinct tableau nodes is finite, bounded by $2^{O(n\log n)}\cdot M^{O(n^2)}$. Measuring timing constants in unary (the standard convention for dense-time logics), this bound is singly exponential in $|\varphi|$.
+
+\end{lemma}
+
+\begin{proof}
+    In Appendix~\ref{sec:appendix}.
+\end{proof}
+
+From the finiteness of nodes, we can establish termination of the procedure.
+
+\begin{theorem}[Termination]\label{thm:termination}
+For every input formula $\varphi$, the depth-first tableau procedure terminates.
+Equivalently, every tableau branch is finite.
+\end{theorem}
+
+\begin{proof}[Sketch]
+By Lemma~\ref{lem:finiteness}, only finitely many distinct nodes can occur, so any infinite branch would contain a repeated node; upon such a repetition the loop rule either accepts (back-edge) or closes, so no branch is unfolded past a repeat and every branch is finite. Each node has finite out-degree (at most five children from an expansion rule, at most $|\Gamma|$ from successor generation), so by König's lemma the entire memoised construction is finite.
+\end{proof}
+\noindent
+Having established termination, we can now establish an upper bound on the complexity of the procedure.
+
+
+\begin{theorem}[EXPTIME-completeness]\label{thm:complexity}
+Satisfiability of the non-punctual fragment decided by the procedure is EXPTIME-complete; with timing constants in unary the procedure decides it in deterministic exponential time in $|\varphi|$.
+\end{theorem}
+\begin{proof}[Sketch]
+{Membership.} Lemma~\ref{lem:finiteness} bounds the number of {distinct} nodes. The bound is realised only by {memoising} visited nodes, so that each distinct node is expanded once and the construction materialises the finite AND--OR {graph} rather than its unfolding; the naive ancestor-only depth-first search may otherwise explore a tree that is doubly exponential. A successful marking must make {every} infinite path good (fulfilling and time-progressing); since markings retain {all} AND-children, this is a {universal} path condition over the AND-branching, not a per-SCC or per-cycle property -- an SCC that AND-forks into one good and one bad cycle must be rejected. Existence of a successful marking is therefore the winning condition of a two-player game on the finite AND--OR graph: the proponent resolves the OR-choices, the opponent resolves the AND-branches and the path, and the proponent wins a play iff it is an accepting lasso (every eventuality fulfilled, and time-progressing by Lemma~\ref{lem:nonzeno}). This is the standard branching-time acceptance -- a Streett condition with $k=O(n)$ pairs (the eventualities and the delay-bounding clocks) -- solved by the usual nested-fixpoint elimination over the AND--OR graph~\cite{Clarke99,tableau_ctl}. Solving a $k$-pair Streett game over $m$ nodes takes $m^{O(k)}$ time; here $m=2^{O(n\log n)}\cdot M^{O(n^2)}$ is already singly exponential in $|\varphi|$ (with constants in unary), so $\log m=\mathrm{poly}(|\varphi|)$ and $m^{O(k)}=2^{O(k\log m)}=2^{\mathrm{poly}(|\varphi|)}$ remains singly exponential. Hence membership is in deterministic exponential time.
+{Hardness.} Restricting all intervals to $[0,\infty)$ the procedure decides CTL satisfiability, which is EXPTIME-hard~\cite{Clarke99}; hence EXPTIME-completeness.
+\end{proof}
+
+\begin{lemma}[Non-Zeno characterisation]\label{lem:nonzeno}
+Let $N_i\equiv N_j$ be a candidate loop. Its $\omega$-unfolding admits a non-Zeno (time-divergent) run iff the loop is {time-progressing}: it admits positive total elapsed time {and} every clock not reset on the segment is extrapolated above $M$ on it. When it is, a non-Zeno run exists in which every iteration elapses the same positive amount.
+\end{lemma}
+\begin{proof}[Sketch]
+($\Rightarrow$) If some clock $x$ is not reset on the segment yet keeps a finite upper bound $c\le M$, then along the loop $x$ only increases while staying $\le c$, so the accumulated delay is at most $c-x_{\text{entry}}<\infty$ and every unfolding is Zeno; likewise if the loop can only elapse zero time. ($\Leftarrow$) If the loop is time-progressing, fix a realisable $\delta>0$ for one traversal. Since $N_i\equiv N_j$ the segment repeats structurally, and every delay-bounding clock is either reset within the loop (its budget replenished) or saturated above $M$ (no bound); hence $\delta$ is realisable every iteration and $\sum_i t_i=\infty$. Full proof in Appendix~\ref{sec:appendix}.
+\end{proof}
+
+
+
+\begin{remark}
+    A one-pass tableau for TCTL could be derived by extending the context-injection methodology of for e.g. \cite{tableau_ctl}. However, this approach incurs a double-exponential blowup in the size of the tableau due to the combinatorial explosion of contexts. Furthermore, accurately capturing non-Zeno requirements within a purely syntactic context is non-trivial. Cycle evaluation is an efficient way to enforce non-Zenoness; thus, by tracking eventualities semantically alongside time divergence, we bypass the combinatorial explosion of context-injection and maintain a tractable state space.
+
+\end{remark}
+
+
+\begin{remark} The worst-case $M^{O(n^2)}$ zone bound is triggered specifically by adversarial, multi-clock specifications—for instance, when a global eventuality tracks $M$ while a local invariant forces high-frequency resets of a secondary clock. In such cases, maintaining canonical zones forces the tableau to fragment the continuous timeline to track precise clock differences. However, for many standard time-bounded properties, such as $E(\top U_{[0, M]} p)$, the procedure allocates a single clock and evaluates the entire interval efficiently via a single symbolic zone intersection. Because zones serve as symbolic representations of infinite sets of clock valuations, the tableau naturally absorbs large values of $M$ in practice without explicit enumeration, making the algorithm highly efficient for typical verification workloads.
+
+\end{remark}
+
+
+
+
+To establish soundness we first analyse the shape of a successful marking. Following standard conventions in finite-state verification~\cite{Clarke99}, the infinite paths of the marking are lasso-shaped: a lasso is a finite prefix followed by an infinitely repeating finite cycle, $\pi=\pi_{\mathsf{pref}}\cdot \pi_{\mathsf{loop}}^\omega$. The following lemma guarantees that {every} infinite path of a successful marking is such a lasso whose loop segment satisfies the acceptance condition; this is what lets us realise the universal obligations along all branches, not just one.
+
+
+
+
+
+\begin{lemma}[Lasso extraction]\label{lem:lasso}
+Let $\mathcal{M}$ be a successful marking. Then $\mathcal{M}$ is finite, and every infinite path of $\mathcal{M}$ is a lasso $\pi=\pi_{\mathsf{pref}}\cdot \pi_{\mathsf{loop}}^\omega$ whose loop segment is accepting: every postponed eventuality is fulfilled on $\pi_{\mathsf{loop}}$ and $\pi_{\mathsf{loop}}$ is time-progressing.
+\end{lemma}
+
+\begin{proof}
+    In Appendix~\ref{sec:appendix}.
+\end{proof}
+
+A successful marking is thus a finite symbolic representation of a (branching) family of infinite timed executions, each satisfying all postponed eventualities. From the marking we extract a TTS that witnesses satisfiability, which we use to establish soundness.
+
+The truth induction in soundness proceeds over the {discrete} nodes, yet the semantics (Definition~\ref{def:sat}) quantifies over {all} positions, including those strictly inside a delay. The following lemma bridges the gap; it is where the integer-hyperplane split of successor generation earns its keep.
+
+\begin{lemma}[Region stability]\label{lem:stability}
+Along a delay step $(s,\nu)\xrightarrow{t}(s,\nu+t)$ that crosses no integer hyperplane $x=b$ ($b\le M$) of any clock, the truth of every formula in $Sub(\varphi)$ is constant over the {relatively-open} segment $(s,\nu+t')$, $t'\in(0,t)$; the segment endpoints, where a clock may sit on a hyperplane, are themselves nodes (materialised by the integer-split) and are handled by the strictness flags of the interval bounds.
+\end{lemma}
+\begin{proof}[Sketch]
+A delay segment that crosses no integer hyperplane $x=b$ ($b\le M$) lies entirely within a single clock {region}: no clock changes integer part below $M$ and no fractional part wraps, so all configurations $(s,\nu+t')$, $t'\in[0,t]$, are region-equivalent. TCTL truth is constant on a region (the standard region theorem~\cite{AlurCourcoubetisDill1990,Bouyer05TimedAutomata}); hence every formula in $Sub(\varphi)$ has constant truth across the segment. The boundary-split (Section~\ref{sec:tableau}) makes the segment endpoints nodes, so establishing truth there establishes it at every interior position. (Diagonal-freeness and integer endpoints suffice; non-punctuality is not needed for this lemma.)
+\end{proof}
+
+The soundness argument for the timed modalities rests on identifying the {computed} satisfaction set $\mathrm{Sat}(\cdot)$ with its {semantic} counterpart in the model that the marking builds. This is the load-bearing step, so we state it explicitly.
+
+\begin{lemma}[Correctness of $\mathrm{Sat}$]\label{lem:sat}
+Let $\mathcal{M}$ be a successful marking and $\mathcal{T}$ the model read off its pursuit branches (Section~\ref{sec:proofs}, soundness). For every timed modality $\xi$ demanded at a node $s$ and every $\nu\in Z_s$, $\;\nu\in\mathrm{Sat}(\xi)\iff \mathcal{T},(s,\nu)\models\xi$.
+\end{lemma}
+\begin{proof}[Sketch]
+The runs of $\mathcal{T}$ from $(s,\nu)$ are exactly the pursuit paths of $\mathcal{M}$ from the check rooted at $s$: the discrete edges of $\mathcal{T}$ are the pursuit's $\EX$-/$\AX$-successors, and the left-drop continuations contribute no run. The check computes $\mathrm{Sat}(\xi)$ as the least- (until) or greatest- (release) fixpoint of the one-step unfolding~\eqref{tag:teu}/\eqref{tag:ter}: the stop/in-region branch contributes valuations with an immediate $\psi$-witness at $x_\xi\in\kI$, the go/before branch the time-predecessors of the successors' set. This is precisely the fixpoint characterisation of the matching clause of Definition~\ref{def:sat} over those runs (region stability, Lemma~\ref{lem:stability}, covers the dense positions). For the universal variants the unfolding quantifies over {all} successors and the deadline/entry invariant -- placed on the pursuit edges, which are the {only} edges of $\mathcal{T}$ -- forces every run through the window, so the fixpoint is the genuinely universal set. Hence $\mathrm{Sat}(\xi)=\{\nu : \mathcal{T},(s,\nu)\models\xi\}$.
+\end{proof}
+
+\begin{theorem}[Soundness]\label{thm:soundness}
+If the tableau succeeds on $\varphi$, then $\varphi$ is satisfiable.
+\end{theorem}
+
+\begin{proof}[Sketch]
+From a successful marking $\mathcal{M}$ (Lemma~\ref{lem:lasso}) we build a finite TTS whose locations are the nodes of $\mathcal{M}$ and whose discrete edges are the AND-children retained by $\mathcal{M}$: every existential marker $\EX\psi$ thereby obtains a successor satisfying $\psi$, and every node's context $\mathcal{X}$ is imposed on {all} its successors, so the universal obligations ($\AX$, $\mathbf{A}$-until, $\mathbf{A}$-release) hold across the branching rather than vacuously along a single path. Zone non-emptiness along $\mathcal{M}$ yields, by a feasibility argument (Lemma~\ref{lem:feasible}, appendix), a coherent assignment of delays and valuations threading the time-elapse and reset steps; the time-progress condition on every loop (Lemma~\ref{lem:nonzeno}) lets us schedule strictly positive per-cycle delays, so all runs of the model are time-divergent. A structural induction on $\varphi$ -- the accepting-loop condition discharging the least-fixpoint (until) eventualities and co-induction discharging the greatest-fixpoint (release) obligations -- shows the model satisfies $\varphi$ at $(s_0,\nu_0)$.
+\end{proof}
+
+%We now prove completeness, showing that if $\varphi$ is satisfiable, then the tableau procedure successfully finds a proof. The key idea is to construct a branch guided by the satisfying model, ensuring that the tableau expansion and successor generation steps are consistent with the model's behavior. Because the model satisfies $\varphi$, it must eventually fulfill all eventualities, which guarantees that the constructed branch will be successful.
+
+It remains to show that the tableau procedure is complete. Intuitively, the tableau construction is expressive enough to reconstruct any satisfying execution. Thus, whenever a formula admits a model, the tableau should be able to realize a corresponding successful branch. We now state the completeness result formally.
+
+
+%Suppose $\varphi$ is satisfiable in some TTS, then we can construct a tableau branch guided by this model. At each expansion step, we choose the successor node that corresponds to the behavior of the model. 
+
+
+\begin{theorem}[Completeness]\label{thm:completeness}
+If $\varphi$ is satisfiable, then the tableau succeeds on $\varphi$.
+\end{theorem}
+
+
+\begin{proof}[Sketch]
+Let $\mathcal{T},(s_0,\nu_0)\models\varphi$ with $\mathcal{T}$ non-Zeno. We build a marking by following $\mathcal{T}$'s branching: at each OR-node we select the child consistent with $\mathcal{T}$; at each successor-generation (AND) node we realise {every} demanded existential successor by a corresponding successor of $\mathcal{T}$ and recurse on all of them, while the universal context $\mathcal{X}$ holds at each because $\mathcal{T}$ satisfies the $\AX$-obligations. Every chosen zone intersection is non-empty, witnessed by the model's valuations. A timed until demanded by a persistent context is verified from each state of $\mathcal{T}$ on its own dedicated-check branch (Section~\ref{sec:tableau}), with its formula-clock reset there, so staggered demands are witnessed {independently} -- following $\mathcal{T}$'s own (possibly branching) witnesses -- and the dense family collapses to finitely many region-classes. As only finitely many distinct nodes exist, every path of the marking eventually repeats; because $\mathcal{T}$ satisfies each until within finite time, every postponed eventuality is fulfilled on the cycle, and because $\mathcal{T}$ is non-Zeno every cycle is time-progressing (Lemma~\ref{lem:nonzeno}). Hence the marking is successful, and completeness holds for {all} non-punctual TCTL.
+\end{proof}
+
+
+
+\begin{remark}
+  We restrict the evaluation of temporal modalities exclusively to non-Zeno paths, which is a standard assumption in the literature on real-time logics and timed transition systems~\cite{AlurDill1994,BouyerHR2008}. This restriction is strictly motivated by the fact that Zeno behaviors are not physically realisable. Permitting such time-convergent executions can lead to spurious witnesses for satisfiability, as it allows a model to vacuously fulfill time-bounded safety or release obligations simply by stalling the progression of physical time. However, the framework supports {both} semantics with a single switch: dropping acceptance condition~(ii) (the time-progress test) while keeping~(i) yields a sound and complete procedure for the unrestricted semantics over all mathematically valid paths, including Zeno executions. Soundness and completeness for that variant follow from the same proofs with the non-Zeno scheduling step (Lemma~\ref{lem:nonzeno}) removed; the non-Zeno restriction is thus an optional, well-motivated refinement rather than a load-bearing assumption.
+\end{remark}
+
+
+
+
+
+
+
+%
+
+%
+%
+%During depth-first exploration, whenever a node matches an ancestor on the
+%active branch, a candidate loop is detected. Let $N_i$ and $N_j$ with $i<j$
+%such that $N_i \equiv N_j$. The loop from $N_i$ to $N_j$ is {accepting}
+%iff every eventuality $e \in \eventualities_i$ is fulfilled on the segment
+%$[i,j)$, that is, there exists $k$ with $i \le k < j$ such that the stop
+%decomposition of $e$ is applied and, in the timed case, the corresponding
+%interval constraint is enforced by a nonempty zone refinement.
+%
+%If the loop is accepting, the branch is declared successful.
+%Otherwise it is rejecting and closes at $N_j$.
+%
+%
+%The acceptance condition enforces precisely the fairness requirement for
+%least-fixpoint operators. If an eventuality postponed at the entry of the
+%cycle were never fulfilled along the cycle, its infinite repetition would
+%yield an infinite path violating the semantics of until. Conversely, if every
+%postponed eventuality is fulfilled within the cycle, then each iteration of
+%the cycle discharges all active obligations, and its infinite unfolding
+%satisfies the formula.
+%
+%Termination follows from finiteness of abstractions.
+%The sets $\Gamma$ and $\mathcal{X}$ range over the finite closure of the
+%input formula. The set of clocks is bounded by the number of timed
+%eventualities. Finally, zones are compared modulo semantic equality and are
+%restricted by the maximal constants occurring in the formula; hence only
+%finitely many canonical zone representatives exist. Therefore only finitely
+%many distinct abstractions $\mathsf{abs}(N)$ can arise along a branch,
+%and the loop rule guarantees termination.
+%
+%
+%A successful open branch induces a finite symbolic lasso, consisting of a
+%finite prefix followed by an accepting cycle. This lasso can be unfolded
+%into a witness timed transition system: tableau nodes correspond to abstract
+%states, discrete successor rules induce discrete transitions, and time-elapse
+%steps correspond to delay transitions justified by zone closure. By
+%construction of the expansion rules and the loop acceptance condition,
+%the extracted model satisfies the initial formula.
+%Soundness and completeness follow by induction on formula structure,
+%together with correctness of zone operations and the fairness argument for
+%ultimately periodic models.
+
+
+
+

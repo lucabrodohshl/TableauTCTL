@@ -1,0 +1,17 @@
+\begin{table}[t]\centering
+\caption{\textbf{\ref{rq:practicality}: the \textsc{Uppaal} query shapes.} Worst case over the full
+sweep of payload size $m\in[1,1024]$ and time bound $b$, per shape. All $217$ instances were solved;
+none timed out.}\label{tab:rq2}
+\small\setlength{\tabcolsep}{5pt}
+\begin{tabular}{llcrrrr}
+\toprule
+Shape & TCTL form & $b$ range & \# & max nodes & max $t$\,(s) & max mem\,(MB)\\
+\midrule
+Reachability & $\mathrm{EF}_{[0,b]}\,\Phi$ & 1--$2^{20}$ & 52 & 1{,}030 & 0.50 & 27 \\
+Safety & $\mathrm{AG}_{[0,b]}\,\Phi$ & 1--$2^{20}$ & 52 & 3{,}091 & 0.51 & 28 \\
+Bounded liveness & $\mathrm{AF}_{[1,b]}\,\Phi$ & 2--$2^{20}$ & 51 & 1{,}038 & 0.51 & 27 \\
+Leads-to & $\mathrm{AG}(p\!\rightarrow\!\mathrm{AF}_{[1,b]}q)$ & 2--$2^{20}$ & 51 & 15{,}489 & 1.14 & 39 \\
+Possibly-always & $\mathrm{EG}_{[0,\infty)}\,\Phi$ & --- & 11 & 2{,}059 & 0.82 & 33 \\
+\bottomrule
+\end{tabular}
+\end{table}

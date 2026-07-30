@@ -1,0 +1,161 @@
+\section{The Tableau}\label{sec:tableau}
+
+We decide satisfiability of an input formula $\varphi$ by a depth-first, on-the-fly construction that builds
+a graph of symbolic nodes and searches it for a {successful marking}. A node carries the
+formulas to be realised at a configuration; zones represent clock valuations symbolically; and a single
+{cover} rule discharges every time-bounded modality. We fix nodes and acceptance (\S\ref{ss:nodes}),
+give the rules (\S\ref{ss:rules}) and loop handling (\S\ref{ss:loop}), and close with two worked runs
+(\S\ref{ss:ex}).
+
+\subsection{Nodes, markings, and acceptance}\label{ss:nodes}
+
+A {node} is a tuple $N=\tup{\Gamma}{\Ctx}{Z}{\obligations}{\eventualities}$, where $\Gamma$ is the set of
+goal formulas (refer to as \emph{demands}) to realise at the current configuration; $\Ctx$ the {context} of universal formulas that must
+hold at every successor; $Z$ the set of clock valuations for this node, represented as a canonical zone; $\obligations$ the {clock map}, which allocates to every active timed modality $\mu$ a dedicated formula-clock $x_\mu$ so its window (i.e. its interval \kI) can be measured from the configuration that demanded it; and $\eventualities$ the postponed eventualities used for loop
+acceptance. 
+
+Write $\Gamma_{\mathsf{prop}}=\Gamma\cap\big(\mathcal P\cup\{\neg p\mid p\in\mathcal P\}\big)$ for the {propositional part} of $\Gamma$, the atomic literals it asserts. A node is {closed} if $\Gamma_{\mathsf{prop}}$ is propositionally inconsistent, i.e., it contains a complementary pair $p,\neg p$ (equivalently $\bot\in\Gamma$), or its zone is empty, $Z=\emptyset$; it is {saturated} when no expansion rule applies.
+%A node is {closed} if its propositional part $\Gamma_{\mathsf{prop}}$ is contradictory
+%($\UNSAT$) or $Z=\emptyset$, and {saturated} when no expansion rule applies.
+
+The construction branches two ways. An {OR} (disjunctive) node holds if {some} child does; such children come from the Boolean rule $(\vee)$, the pursuit unfoldings (the {stop}/{go} choice), and the cover refinement. An {AND} (conjunctive) node instead needs {all} its children; these are produced by successor generation -- one discrete child per demanded $\EX\psi$, each carrying the context $\Ctx$ -- and by the cover rule, which pairs the discharged continuation of a verified modality with the launched pursuit it keeps as a witness.
+
+
+A {marking} $\mathcal{M}$ selects one child at each OR-node and
+{all} children at each AND-node; it is {successful} if it contains no closed node and every
+postponed eventuality is fulfilled on every infinite path %(made effective by the loop condition of\S\ref{ss:loop})
+.
+
+
+The tableau {succeeds} on $\varphi$ if the root
+$\tup{\{\varphi\}}{\emptyset}{\Zuniv}{\emptyset}{\emptyset}$ admits a successful marking, where $\Zuniv$ is the
+universal zone.
+
+\subsection{Rules}\label{ss:rules}
+
+Each rule rewrites a node into its children, shown on the full tuple; a component reappears unchanged unless the rule modifies it. The rules come in three groups: {saturation} decomposes the goals in $\Gamma$, the {cover} rule discharges a timed modality, and {successor generation} expands a saturated node in time and across edges. A node is saturated and covered until no such rule applies, and only then generates successors.
+
+\paragraph{Saturation.}
+Conjunction is deterministic, disjunction branches \ruleref{OR}, and \ruleref{AX} handles a universal marker by moving its argument into the context.
+\[
+\ \frac{\tup{\Gamma\cup\{\varphi\land\psi\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\tup{\Gamma\cup\{\varphi,\psi\}}{\Ctx}{Z}{\obligations}{\eventualities}}\  \ruleanchor{AND}
+\qquad
+ \ \frac{\tup{\Gamma\cup\{\AX\varphi\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\tup{\Gamma}{\Ctx\cup\{\varphi\}}{Z}{\obligations}{\eventualities}}\  \ruleanchor{AX}
+\]
+\[
+ \ \frac{\tup{\Gamma\cup\{\varphi\lor\psi\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\tup{\Gamma\cup\{\varphi\}}{\Ctx}{Z}{\obligations}{\eventualities}\quad\big|\quad
+\tup{\Gamma\cup\{\psi\}}{\Ctx}{Z}{\obligations}{\eventualities}}\ \ruleanchor{OR}
+\]
+%The symbols $\EX\psi$ and $\AX\psi$ are not operators of the logic but {markers} scheduling an obligation at a node's successors: $\EX\psi$ asks that {one} successor satisfy $\psi$, and $\AX\psi$ that {every} one does. They are discharged oppositely, and this is the one asymmetry to keep in mind. 
+
+%A universal marker is handled here by $\AX$, which drops $\psi$ into the context $\Ctx$ that every successor inherits. An existential marker has no saturation rule -- ``some successor satisfies $\psi$'' cannot be settled before successors exist -- so $\EX\psi$ stays in $\Gamma$ and is discharged only later, by the successor rule \ruleref{EX}. Thus $\AX$ folds into the context now, while $\EX$ waits in the goals until \ruleref{EX} fires.
+
+
+%Both timed operators are handled by one mechanism consisting of a single formula-clock and one way of unfolding it. The deadline of a modality $\mu=\mathrm{Q}(\varphi\,\odot_\kI\,\psi)$ ($\mathrm{Q}\in\{\mathrm{E},\mathrm{A}\}$, $\odot\in\{\mathbf{U},\mathbf{R}\}$) is measured {from the configuration that demands it}; under a persistent context such as $\mathrm{AG}(\mu)$ that demand recurs at a continuum of configurations over the interval, each with its own window. We reason about one demand by {pursuing} it against a {single} formula-clock $x_\mu$, reset where the demand arises, which absorbs the continuum of onsets into a zone. Write $\mu^\bullet$ for $\mu$ {pursued}, and $\nxQ\mu^\bullet$ for propagating the pursuit to successors: $\EX\mu^\bullet$ into $\Gamma$ if $\mathrm{Q}=\mathrm{E}$, and $\AX\mu^\bullet$ into $\Ctx$ if $\mathrm{Q}=\mathrm{A}$ -- an existential pursuit travels as a goal, a universal one as context, and either way $x_\mu$ advances at every successor, time-successors included.
+
+\paragraph{The cover rule.}
+A node carries in its goal set $\Gamma$ the formulas that must hold at the current
+configuration. When $\Gamma$ contains a timed modality
+$\mu=\mathrm{Q}(\varphi\,\odot_\kI\,\psi)$, with $\mathrm{Q}\in\{\mathrm{E},\mathrm{A}\}$ and
+$\odot\in\{\mathbf{U},\mathbf{R}\}$, we say the node \emph{demands} $\mu$: it must be shown that
+$\mu$ holds at \emph{every} valuation of the node's zone $Z$. Considering a persistent context arising from universal formulas such as $\mathrm{AG}(\mu)$, since the bound $\kI$ must be measured from the demanding configuration, one would need to potentially issue a new demand at uncountably many configurations over the zone. We avoid this by treating the zone symbolically. 
+
+Suppose we knew the set $\Sat(\mu) \subseteq \mathbb{R}_{\ge0}^{\clockSet}$ of all clock valuations at which $\mu$ holds under the current context. The demand is then met exactly when the node's zone lies inside it, $Z\subseteq\Sat(\mu)$. The cover rule \ruleref{Cov} implements this test, discharging $\mu$ when the cover is total, and \ruleref{chkstar} refines it when the cover is only partial. 
+\[
+\frac{\tup{\Gamma\cup\{\mu\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\begin{array}{ll}
+\tup{\Gamma}{\Ctx}{Z}{\obligations}{\eventualities} & (\text{discharge})\\[2pt]
+\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z\cap(x_\mu{=}0)}{\obligations\cup\{x_\mu\}}{\eventualities\cup\{\mu\}} & (\text{launch-U})\\[2pt]
+\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z\cap(x_\mu{=}0)}{\obligations\cup\{x_\mu\}}{\eventualities} & (\text{launch-R})
+\end{array}}
+\quad Z\subseteq\Sat(\mu)
+\tag{\textrm{Cov}}\label{tag:chk}
+\]
+When the cover is only partial, the demand is refined to the covered part and the rest closes:
+\[
+\frac{\tup{\Gamma\cup\{\mu\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\tup{\Gamma\cup\{\mu\}}{\Ctx}{Z_i}{\obligations}{\eventualities}}
+\qquad Z_i\in\mathsf{cc}\big(Z\cap\Sat(\mu)\big)
+\tag{\textrm{Cov}$^{*}$}\label{tag:chkstar}
+\]
+
+In other words, the cover rule turns the membership test $Z\subseteq\Sat(\mu)$ into a proof step. 
+
+
+
+\paragraph{Timed Operators.}
+Our goal is to compute $\Sat(\mu)$ at the logical level, without assuming a model. To achieve such construction, we pursue the demand $\mu$: we introduce and reset a formula-clock $x_\mu$ as the demand occurs to measure elapsed time against $\kI$, and we unfold the pursued modality $\mu^\bullet$ one step at a time according to the rules \ruleref{Uunf} and \ruleref{Runf}. A step produces two kinds of child. A \emph{base} child settles the demand at once and drops $\mu^\bullet$. A \emph{recursive} child defers it, passing $\nxQ\mu^\bullet$ to a successor
+($\EX\mu^\bullet$ into $\Gamma$ if $\mathrm{Q}=\mathrm{E}$, $\AX\mu^\bullet$ into the context if
+$\mathrm{Q}=\mathrm{A}$), where the pursuit resumes; there $x_\mu$ keeps running, across delays as well
+as edges.
+
+
+An until stops when it reaches $\psi$ inside the window and otherwise goes, asserting $\varphi$ and
+deferring; a universal until additionally caps the deferral at the deadline $x_\mu\le\sup\kI$, so that no
+run may drift past the window with the eventuality unmet:
+\[
+\frac{\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\begin{array}{ll}
+\tup{\Gamma\cup\{\psi\}}{\Ctx}{Z\cap(x_\mu\!\in\!\kI)}{\obligations}{\eventualities\setminus\{\mu\}} & (\text{stop})\\[3pt]
+\tup{\Gamma\cup\{\varphi,\,\EX\mu^\bullet\}}{\Ctx}{Z}{\obligations}{\eventualities} & (\text{go},\ \mathrm{Q}{=}\mathrm{E})\\[3pt]
+\tup{\Gamma\cup\{\varphi\}}{\Ctx\cup\{\AX\mu^\bullet\}}{Z\cap(x_\mu\le\sup\kI)}{\obligations}{\eventualities} & (\text{go-A},\ \mathrm{Q}{=}\mathrm{A})
+\end{array}}
+\qquad \mu=\mathrm{Q}(\varphi\,\mathbf{U}_\kI\,\psi)
+\tag{$\mathbf{U}^\bullet$}\label{tag:Uunf}
+\]
+A release must hold across the whole window, so its pursuit splits $Z$ by the position of $x_\mu$ relative
+to $\kI$ into a before, in, and after part, and within the before and in parts either discharges through
+$\varphi$ or continues:
+\[
+\frac{\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\begin{array}{ll}
+\tup{\Gamma\cup\{\varphi\}}{\Ctx}{Z^{<\kI}}{\obligations}{\eventualities} & (\text{before: }\varphi\text{ releases})\\[2pt]
+\tup{\Gamma\cup\{\nxQ\mu^\bullet\}}{\Ctx}{Z^{<\kI}}{\obligations}{\eventualities} & (\text{before: continue})\\[2pt]
+\tup{\Gamma\cup\{\psi,\,\nxQ\mu^\bullet\}}{\Ctx}{Z^{\in\kI}}{\obligations}{\eventualities} & (\text{in: }\psi,\text{ continue})\\[2pt]
+\tup{\Gamma\cup\{\varphi,\psi\}}{\Ctx}{Z^{\in\kI}}{\obligations}{\eventualities} & (\text{in: }\psi,\ \varphi\text{ releases})\\[2pt]
+\tup{\Gamma}{\Ctx}{Z^{>\kI}}{\obligations}{\eventualities} & (\text{after: lapsed})
+\end{array}}
+\qquad \mu=\mathrm{Q}(\varphi\,\mathbf{R}_\kI\,\psi)
+\tag{$\mathbf{R}^\bullet$}\label{tag:Runf}
+\]
+
+Repeated unfolding thus allows us to compute $\Sat(\mu)$. Let $B_\mu$ be the union of the base-case zones. A valuation $\nu$ lies in $\Sat(\mu)$ exactly when it lies in $B_\mu$, or it matches a recursive child whose deferred successors lie in $\Sat(\mu)$ (some successor when $\mathrm{Q}=\mathrm{E}$, all of them when $\mathrm{Q}=\mathrm{A}$). This is a recursive equation for $\Sat(\mu)$, which can be solved symbolically. Zones are compared up to $\cong_M$, so the unfolding reaches only finitely many distinct nodes, so the iteration terminates.  An
+until takes the least solution, a valuation qualifying only if it can \emph{reach} a base child in finitely
+many steps; a release takes the greatest, a valuation qualifying as long as it can continue without ever
+violating the release. Either way $\Sat(\mu)$ is a finite union of zones, and a single $x_\mu$ serves all
+onsets of a persistent demand, since the dense family of onsets is absorbed into that union. With the
+oracle in hand, the cover rule above decides every demand.
+
+
+\paragraph{Successor generation.}
+A saturated node is expanded by two rules, one elapsing time and one taking discrete steps. \ruleref{Delay} advances the zone to the next integer hyperplane $x=b$ ($b\le M$) of an active bound, leaving the goals and context unchanged; write $\Delta Z$ for the resulting bounded time-successor of $Z$ (equal to $\uparrow Z$ when no hyperplane remains at or below $M$):
+\[
+ \ \frac{\tup{\Gamma}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\tup{\Gamma}{\Ctx}{\Delta Z}{\obligations}{\eventualities}}
+\qquad \Gamma\ \text{saturated} \ \ruleanchor{Delay}
+\]
+\ruleref{EX} takes the discrete steps and discharges the existential markers, one child per demanded $\EX\psi$, each carrying $\psi$ under the full context:
+\[
+ \ \frac{\tup{\Gamma}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\big(\ \tup{\{\psi\}\cup\Ctx}{\Ctx}{Z}{\obligations}{\eventualities}\ \big)_{\EX\psi\in\Gamma}}
+\qquad \Gamma\ \text{saturated} \ \ruleanchor{EX}
+\]
+When no $\EX\psi\in\Gamma$, a single {stutter} child $\tup{\Ctx}{\Ctx}{Z}{\obligations}{\eventualities}$ keeps the run alive. The children are conjunctive: a model must supply all of them, each inheriting $\Ctx$ -- this is where $\AX$ takes effect. A pursuit's residual $\nxQ\mu^\bullet$ rides {both} kinds of successor -- existentially to one ($\mathrm{Q}=\mathrm{E}$, the marking's choice), universally to all ($\mathrm{Q}=\mathrm{A}$, via the context) -- so $x_\mu$ advances by elapsing time as well as across edges. A timed window is therefore entered by delay, its in-window stop taken at the first successor that satisfies it; a pure-delay witness -- waiting in one location until $x_\mu\in\kI$, then stopping -- is a chain of time-successors ending in a stop, the stutter step supplying a discrete anchor only when the location must be left.
+
+\subsection{Loop handling}\label{ss:loop}
+
+During the depth-first search, whenever a node repeats an ancestor ($N_i\equiv N_j$, i.e.\ equal
+componentwise with zones modulo $\cong_M$) a {candidate loop}
+is detected. It is {accepting} iff {(i)} every postponed eventuality $e\in\eventualities$ is
+fulfilled on the segment -- a stop branch of $e$ is taken at some $k$, with $Z_k\cap(x_e\in\kI)\neq\emptyset$
+in the timed case -- and {(ii)} the loop is {time-progressing}: it elapses positive time and every
+clock not reset on it is extrapolated above $M$, so a delay-bounding clock is replenished each iteration. An
+accepting loop closes the cycle with a back-edge; otherwise $N_j$ is closed. Condition~(i) enforces the
+least-fixpoint semantics of until; condition~(ii) excludes Zeno cycles -- a loop pinned to $x<1$ on a
+never-reset clock could elapse only finite total time -- and is exactly necessary and sufficient for the
+unfolding to admit a non-Zeno run.
+
+\input{section/example_chk.tex}

@@ -1,0 +1,43 @@
+\section{Related Work}\label{sec:related}
+
+\paragraph{Decidability of TCTL satisfiability.}
+Satisfiability of full TCTL is undecidable~\cite{AlurCourcoubetisDill1990,AlurHenzinger1994ReallyTemporal},
+the source of undecidability being {punctual} timing constraints. La~Torre and
+Napoli~\cite{fsttcs2000-LN,LaTorreNapoli2001TimedTreeAutomata} delimited the decidability frontier
+by identifying the {non-punctual} fragment -- timing intervals may not be singular ($[a,a]$ is
+forbidden), while strict and non-strict bounds are both allowed -- and decided it in \textsc{ExpTime}
+by reducing satisfiability to emptiness of timed tree automata. We target exactly this fragment, with
+matching complexity, but replace the global automata reduction by a goal-directed tableau: clock
+valuations are kept symbolically as zones, only the demanded part of the state space is built, the
+calculus filters out physically unrealisable (Zeno) runs explicitly, and a successful search returns
+a witness model -- none of which the automata-theoretic decision procedure provides directly.
+
+\paragraph{Bounded and parametric approaches.}
+Penczek et al.~\cite{boundedTCTL} also address TCTL satisfiability, but from a bounded-synthesis
+angle: satisfiability is reduced to the existence of a bounded parametric timed automaton whose
+parameters are instantiated with the \textsc{Imitator} model checker. Termination stems from the
+imposed structural bound rather than from a decision procedure, so the method is incomplete; its
+fragment excludes nested modalities and permits punctual constraints, for which the problem stays
+undecidable. We instead decide a decidable fragment, without nesting restrictions, completely.
+
+\paragraph{Tableaux for branching-time logics.}
+Tableaux are the standard proof-search decision procedures for untimed branching-time
+logics~\cite{Clarke99,tableau_ctl}; we adapt the one-pass, context-based CTL tableau
+of~\cite{tableau_ctl} to dense time. The closest quantitative predecessor is Emerson et
+al.~\cite{EmersonEtAl1992QuantitativeTemporalReasoning}, a tableau for a CTL with {discrete}-time
+bounds. Discreteness sidesteps the two phenomena that drive our development -- symbolic dense clock
+valuations and time convergence -- so, while it demonstrates that tableaux extend to quantitative
+branching time, it does not yield a procedure for the dense-time fragment considered here.
+
+\paragraph{Model checking and \textsc{Uppaal}.}
+Most real-time verification effort targets {model checking} -- TCTL against a fixed timed
+automaton -- where \textsc{Uppaal}~\cite{BehrmannLarsenYi2004Uppaal} is the de-facto standard. It is
+worth contrasting the {specification logic} the two settings use. \textsc{Uppaal}'s query
+language is a deliberately {simplified}, flat fragment of TCTL: Boolean state properties under a
+single, non-nested path modality ($\mathrm{AG}$, $\mathrm{EF}$, $\mathrm{AF}$, $\mathrm{EG}$) plus a
+leads-to operator $\mathrm{AG}(\varphi\rightarrow\mathrm{AF}\,\psi)$,
+with timing expressed through clocks in the {model} rather than through nested bounded
+modalities in the formula. This keeps queries efficiently checkable but cannot express the nested,
+time-bounded branching properties our calculus decides. The flat \textsc{Uppaal} fragment is a
+syntactic restriction of our logic, so our procedure decides it as a special case; we use it later as
+a practical reference point for satisfiability of realistic specifications.

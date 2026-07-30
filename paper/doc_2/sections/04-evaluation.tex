@@ -1,0 +1,158 @@
+% ---------------------------------------------------------------------------
+%  04-evaluation.tex
+% ---------------------------------------------------------------------------
+\section{What it buys}
+\label{sec:eval}
+
+\subsection{Selecting the search}
+
+The two searches are a command-line flag, \code{--version v1|v2}, so a
+comparison needs no rebuild:
+
+\begin{center}\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\code{v1} & the search before this work: every optional optimisation off \\
+\code{v2} & adds both decomposition forms and goal subsumption \emph{(default)} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Two things about \code{v1} are worth stating plainly. It is a slower search, not
+a wrong one: the onset split points that the shifts introduce are a
+\emph{soundness} fix, not an optimisation, and they are in both versions ---
+without them $\mathrm{AG}(\mathrm{EF}_{[3,4]}p)\wedge\mathrm{AG}_{[4,5]}\neg p$
+is reported satisfiable. And \code{v2} stands down when \code{--model} is
+given, because a witness for a decomposed node is the product of its
+components' automata and the extractor does not build products.
+
+Measured end to end through the flag:
+
+\begin{center}\small
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+case & \code{v1} nodes & \code{v1} time & \code{v2} nodes & \code{v2} time & ratio \\
+\midrule
+\code{wide} $k{=}16$   & $262\,975$   & $1.35$\,s  & $192$   & $0.00$\,s & $349\times$ \\
+\code{wide} $k{=}20$   & $4\,195\,583$& $31.38$\,s & $240$   & $0.00$\,s & $\mathbf{8309\times}$ \\
+\code{buried} $k{=}14$ & $66\,181$    & $0.34$\,s  & $731$   & $0.01$\,s & $43\times$ \\
+tower $d{=}6$          & $4\,890$     & $0.01$\,s  & $4\,470$& $0.01$\,s & $1\times$ \\
+tower $d{=}8$          & $21\,025$    & $0.05$\,s  & $19\,349$&$0.05$\,s & $1\times$ \\
+$\mathrm{AG}(\mathrm{EF}p)\wedge\mathrm{AG}(\mathrm{EF}q)$
+                       & $352$        & $0.00$\,s  & $92$    & $0.00$\,s & $2\times$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Run over the whole $5000$-formula suite under both versions: \textbf{zero}
+disagreements, and zero mismatches against the by-construction expectations.
+The self-test passes $861/861$ under \code{v1}, under \code{v2}, and under every
+individual flag combination.
+
+\subsection{The family it was built for}
+
+$\bigwedge_{j<k}\mathrm{EF}_{[2+j,\,4+j]}\,p_j$, per-node decomposition:
+
+\begin{center}\small
+\begin{tabular}{@{}rrrrr@{}}
+\toprule
+$k$ & nodes off & nodes on & time off & time on \\
+\midrule
+$8$  & $1\,247$      & $271$   & $0.01$\,s & $0.01$\,s \\
+$12$ & $16\,863$     & $551$   & $0.08$\,s & $0.01$\,s \\
+$14$ & $66\,179$     & $727$   & $0.37$\,s & $0.01$\,s \\
+$16$ & $262\,975$    & $941$   & $1.94$\,s & $0.01$\,s \\
+$18$ & $1\,049\,619$ & $1\,249$& $9.35$\,s & $0.01$\,s \\
+$20$ & $4\,195\,583$ & $1\,869$& $46.66$\,s & $0.01$\,s \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The exponential is gone. Node counts $271, 551, 727, 941, 1249, 1869$ are linear
+in $k$ against a baseline that doubles, so the ratio is not a constant and grows
+without bound: $13\times$ at $k=12$, $244\times$ at $k=16$, $3478\times$ at
+$k=20$. Quoting a single speed-up figure would misrepresent it --- the change is
+$O(2^k)\to O(k)$, and any number quoted is a statement about which $k$ was
+measured.
+
+The static form is stronger still on this shape, having no per-node cost:
+$1\,247\to 96$, $16\,863\to 144$, $262\,975\to 192$, and at $k=20$
+$4\,195\,583\to 240$ --- $46.66$\,s to below the timer, $11\,884\times$.
+
+\subsection{The two forms compose}
+
+They see different things. The static form splits the root conjunction once and
+pays nothing per node; the dynamic form sees independence that only appears
+during the search. Neither subsumes the other, and running both takes the better
+of the two on every shape measured. Nodes, and time:
+
+\begin{center}\small
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+ & plain & static & dynamic & both \\
+\midrule
+\code{wide} $k{=}16$   & $262\,975$ / $1.91$\,s & $192$ / $0.00$\,s & $941$ / $0.01$\,s & $\mathbf{192}$ \\
+\code{wide} $k{=}20$   & $4\,195\,583$ / $46.6$\,s & $240$ / $0.00$\,s & $1\,869$ / $0.01$\,s & $\mathbf{240}$ \\
+\code{buried} $k{=}10$ & $4\,437$ / $0.02$\,s & $4\,437$ / $0.02$\,s & $403$ / $0.01$\,s & $\mathbf{403}$ \\
+\code{buried} $k{=}14$ & $66\,181$ / $0.45$\,s & $66\,181$ / $0.40$\,s & $731$ / $0.01$\,s & $\mathbf{731}$ \\
+\code{mixed} $k{=}14$  & $132\,774$ / $0.76$\,s & $176$ / $0.00$\,s & $750$ / $0.01$\,s & $\mathbf{176}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent\code{buried} is $\mathrm{EF}_{[0,1]}(\bigwedge_j \mathrm{EF}_{[a_j,b_j]}p_j)$:
+the independence is real but sits under a modality, so the root is not a
+conjunction and the static form cannot see it at all --- it returns the
+undecomposed node count exactly. \code{mixed} adds one shared conjunct, which
+the static split isolates and the dynamic one has to carry through every node.
+
+\subsection{The cost where it does not fire}
+
+Across the ten-family, $5000$-formula suite, verdicts are \textbf{identical} to
+the undecomposed search. Wall-clock, $p95$ and max per family:
+
+\begin{center}\small
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+family & $p95$ off & $p95$ on & max off & max on \\
+\midrule
+\code{wide}     & $42.8$ & $\mathbf{20.4}$ & $69.3$ & $\mathbf{38.0}$ \\
+\code{altern}   & $57.2$ & $62.0$ & $167.5$ & $189.9$ \\
+\code{persist}  & $13.1$ & $15.5$ & $15.6$ & $18.0$ \\
+\code{carry}    & $12.3$ & $13.7$ & $16.7$ & $18.3$ \\
+\code{release}  & $11.3$ & $13.8$ & $15.8$ & $19.0$ \\
+\code{boolmix}  & $14.3$ & $14.2$ & $17.6$ & $17.9$ \\
+\code{deadline} & $14.2$ & $14.0$ & $18.2$ & $15.8$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent All figures in milliseconds. The medians across every family sit near
+$8$--$10$\,ms and are dominated by process start-up, so only $p95$ and max carry
+signal.
+
+The honest reading: a large win on the one family that decomposes, and a
+$5$--$10\%$ tax everywhere else, paid for running a test that answers ``no''.
+The bitmasks and the no-split memo took that tax down from about $30\%$; what
+remains is building the item vector at nodes whose shape has not been seen
+before.
+
+\subsection{What these numbers do and do not show}
+
+They \emph{do} show that the $2^k$ in \cref{sec:problem} is an artefact of
+representation and that removing it is sound on every instance measured
+($5000$ formulas, plus a $700$-case soundness sweep over
+$\mathrm{AG}(\mathrm{EF}_{[a,b]}p)\wedge\mathrm{AG}_{[c,d]}\neg p$, plus the
+$861$-check self-test).
+
+They \emph{do not} show that this helps on formulas people write. \code{wide} is
+a family from our own suite, chosen to be a conjunction of independent
+obligations, which is exactly the shape the technique targets. The fair claim is
+about the mechanism, not about a speed-up on a workload: conjunctions of
+independent properties are common in practice --- a safety property and a
+liveness property over different signals --- but this suite is not evidence for
+how common.
+
+A second caveat: the static form's numbers are on top-level conjunctions, and
+splitting a top-level conjunction is close to running the tool twice. It should
+be presented as preprocessing, not as a search technique.

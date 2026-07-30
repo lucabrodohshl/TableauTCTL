@@ -1,0 +1,101 @@
+% ============================================================================
+% FLAVOR 1 — DEMAND-FIRST (top-down: the question, then the oracle, then the machine)
+% Entry point: what is being asked at a node, and what would let us answer it.
+% Drop-in replacement for the "Timed modalities" + "Cover rule" subsections.
+% Reuses labels tag:Uunf, tag:Runf, tag:chk, tag:chkstar.
+% ============================================================================
+
+\subsection{Timed modalities and the cover rule}\label{sec:timed}
+
+\paragraph{The question a node asks.}
+A node carries in its goal set $\Gamma$ the formulas that must hold at the current
+configuration. When $\Gamma$ contains a timed modality
+$\mu=\mathrm{Q}(\varphi\,\odot_\kI\,\psi)$, with $\mathrm{Q}\in\{\mathrm{E},\mathrm{A}\}$ and
+$\odot\in\{\mathbf{U},\mathbf{R}\}$, we say the node \emph{demands} $\mu$: it must be shown that
+$\mu$ holds at \emph{every} valuation of the node's zone $Z$. The bound $\kI$ is measured from the
+demanding configuration, not from the root, so a persistent context such as $\mathrm{AG}(\mu)$ issues
+a fresh demand, with its own window, at a dense family of configurations.
+
+Every timed rule below exists to answer one question: \emph{does the demanded $\mu$ hold throughout
+$Z$?} We answer it in two moves. First we assume an oracle and show the answer is a one-line test.
+Then we build the oracle.
+
+\paragraph{The oracle, and why the decision is then trivial.}
+Suppose we knew the set
+\[
+\Sat(\mu)\ \subseteq\ \mathbb{R}_{\ge0}^{\clockSet}
+\]
+of all clock valuations at which $\mu$ holds under the current context. The demand is then met exactly
+when the node's zone lies inside it, $Z\subseteq\Sat(\mu)$. That test \emph{is} the cover rule. When the
+cover is total, it discharges $\mu$ and continues; the launched copy is retained as the witness the model
+is later read from:
+\[
+\frac{\tup{\Gamma\cup\{\mu\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\begin{array}{ll}
+\tup{\Gamma}{\Ctx}{Z}{\obligations}{\eventualities} & (\text{discharge})\\[2pt]
+\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z\cap(x_\mu{=}0)}{\obligations\cup\{x_\mu\}}{\eventualities\cup\{\mu\}} & (\text{launch-U})\\[2pt]
+\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z\cap(x_\mu{=}0)}{\obligations\cup\{x_\mu\}}{\eventualities} & (\text{launch-R})
+\end{array}}
+\quad Z\subseteq\Sat(\mu)
+\tag{\textrm{Cov}}\label{tag:chk}
+\]
+When the cover is only partial, the demand is refined to the covered part and the rest closes:
+\[
+\frac{\tup{\Gamma\cup\{\mu\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\tup{\Gamma\cup\{\mu\}}{\Ctx}{Z_i}{\obligations}{\eventualities}}
+\qquad Z_i\in\mathsf{cc}\big(Z\cap\Sat(\mu)\big)
+\tag{\textrm{Cov}$^{*}$}\label{tag:chkstar}
+\]
+So the cover rule is trivial \emph{given} $\Sat(\mu)$: it is membership, $Z\subseteq\Sat(\mu)$, turned
+into a proof step. Everything difficult is in producing $\Sat(\mu)$ from the rules alone, with no model
+assumed. That is what the rest of the section does.
+
+\paragraph{Building the oracle: pursue the demand.}
+To find where $\mu$ holds we \emph{pursue} it. We reset a formula-clock $x_\mu$ at the demand, so that
+$x_\mu$ measures elapsed time against $\kI$, and we unfold the pursued modality $\mu^\bullet$ one step at a
+time. A step produces two kinds of child. A \emph{base} child settles the demand at once and drops
+$\mu^\bullet$. A \emph{recursive} child defers it, passing $\nxQ\mu^\bullet$ to a successor
+($\EX\mu^\bullet$ into $\Gamma$ if $\mathrm{Q}=\mathrm{E}$, $\AX\mu^\bullet$ into the context if
+$\mathrm{Q}=\mathrm{A}$), where the pursuit resumes; there $x_\mu$ keeps running, across delays as well
+as edges.
+
+An until stops when it reaches $\psi$ inside the window and otherwise goes, asserting $\varphi$ and
+deferring; a universal until additionally caps the deferral at the deadline $x_\mu\le\sup\kI$, so that no
+run may drift past the window with the eventuality unmet:
+\[
+\frac{\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\begin{array}{ll}
+\tup{\Gamma\cup\{\psi\}}{\Ctx}{Z\cap(x_\mu\!\in\!\kI)}{\obligations}{\eventualities\setminus\{\mu\}} & (\text{stop})\\[3pt]
+\tup{\Gamma\cup\{\varphi,\,\EX\mu^\bullet\}}{\Ctx}{Z}{\obligations}{\eventualities} & (\text{go},\ \mathrm{Q}{=}\mathrm{E})\\[3pt]
+\tup{\Gamma\cup\{\varphi\}}{\Ctx\cup\{\AX\mu^\bullet\}}{Z\cap(x_\mu\le\sup\kI)}{\obligations}{\eventualities} & (\text{go-A},\ \mathrm{Q}{=}\mathrm{A})
+\end{array}}
+\qquad \mu=\mathrm{Q}(\varphi\,\mathbf{U}_\kI\,\psi)
+\tag{$\mathbf{U}^\bullet$}\label{tag:Uunf}
+\]
+A release must hold across the whole window, so its pursuit splits $Z$ by the position of $x_\mu$ relative
+to $\kI$ into a before, in, and after part, and within the before and in parts either discharges through
+$\varphi$ or continues:
+\[
+\frac{\tup{\Gamma\cup\{\mu^\bullet\}}{\Ctx}{Z}{\obligations}{\eventualities}}
+{\begin{array}{ll}
+\tup{\Gamma\cup\{\varphi\}}{\Ctx}{Z^{<\kI}}{\obligations}{\eventualities} & (\text{before: }\varphi\text{ releases})\\[2pt]
+\tup{\Gamma\cup\{\nxQ\mu^\bullet\}}{\Ctx}{Z^{<\kI}}{\obligations}{\eventualities} & (\text{before: continue})\\[2pt]
+\tup{\Gamma\cup\{\psi,\,\nxQ\mu^\bullet\}}{\Ctx}{Z^{\in\kI}}{\obligations}{\eventualities} & (\text{in: }\psi,\text{ continue})\\[2pt]
+\tup{\Gamma\cup\{\varphi,\psi\}}{\Ctx}{Z^{\in\kI}}{\obligations}{\eventualities} & (\text{in: }\psi,\ \varphi\text{ releases})\\[2pt]
+\tup{\Gamma}{\Ctx}{Z^{>\kI}}{\obligations}{\eventualities} & (\text{after: lapsed})
+\end{array}}
+\qquad \mu=\mathrm{Q}(\varphi\,\mathbf{R}_\kI\,\psi)
+\tag{$\mathbf{R}^\bullet$}\label{tag:Runf}
+\]
+
+\paragraph{From the unfolding to the oracle.}
+A valuation lies in $\Sat(\mu)$ exactly when it settles at a base child, or it matches a recursive child
+whose deferred successors already lie in $\Sat(\mu)$ (some successor if $\mathrm{Q}=\mathrm{E}$, all if
+$\mathrm{Q}=\mathrm{A}$). Because $\Sat(\mu)$ appears on both sides, this is a recursive equation, not a
+plain definition, and it is solved symbolically: valuations are carried as zones, and since zones are
+compared up to $\cong_M$ the unfolding reaches only finitely many nodes, so the iteration terminates. An
+until takes the least solution, a valuation qualifying only if it can \emph{reach} a base child in finitely
+many steps; a release takes the greatest, a valuation qualifying as long as it can continue without ever
+violating the release. Either way $\Sat(\mu)$ is a finite union of zones, and a single $x_\mu$ serves all
+onsets of a persistent demand, since the dense family of onsets is absorbed into that union. With the
+oracle in hand, the cover rule above decides every demand.

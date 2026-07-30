@@ -1,0 +1,127 @@
+\section{Evaluation}\label{sec:eval}
+
+We evaluate our procedure through three research questions (RQs):
+
+\begin{enumerate}[start=1,label={\bfseries RQ\arabic*:}, itemindent=2em, ref=\bfseries RQ\arabic*, itemsep=0.1em]
+\item \label{rq:structural} Which structural parameters of the input formula drive the procedure's
+time and memory, and how does it scale in each?
+\item \label{rq:practicality} Is the procedure practical for \emph{specification sanity-checking} ---
+deciding the satisfiability of the flat, one-level TCTL queries engineers write for \textsc{Uppaal}?
+\item \label{rq:completeness} Completeness is guaranteed only over the non-punctual fragment. What
+does the procedure actually leave out, and when?
+\end{enumerate}
+
+\noindent
+\ref{rq:structural} characterises the \emph{worst-case} profile, isolating the parameters that drive
+the search and its \textsc{ExpTime} regime; \ref{rq:practicality} asks the complementary
+\emph{typical-case} question over the formulas engineers write; and \ref{rq:completeness} asks what
+the one gap in the guarantees costs in practice. Table~\ref{tab:bench-overview} is the benchmark in
+one view: every family, the parameter it sweeps, and what it is there to establish.
+
+% ---------------------------------------------------------------------------
+\begin{table}[t]\centering
+\caption{\textbf{Benchmark overview.} One row per family. \emph{Verdict} is known by construction,
+never read off the tool: an UNSAT family demands an atom that a co-occurring safety obligation
+forbids, and a SAT family is exhibited by an explicit model (\S\ref{ss:rq3}). The
+\ref{rq:structural} families vary one term of $2^{O(n)}\cdot M^{O(n^2)}$ each, with $M$ and size as
+flat controls; \ref{rq:practicality} covers the canonical \textsc{Uppaal} query shapes.}
+\label{tab:bench-overview}
+\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{llllcl}
+\toprule
+RQ & Family & Sweeps & Range & Verdict & Purpose \\
+\midrule
+\multirow{4}{*}{\ref{rq:structural}}
+ & \texttt{depth}    & nesting depth $d$      & $1$--$10$          & both & primary driver: AND--OR branching \\
+ & \texttt{clocks}   & live clocks $k$        & $1$--$16$          & both & DBM dimension, the $M^{O(n^2)}$ term \\
+ & \texttt{constant} & max constant $M$       & $2^0$--$2^{20}$    & both & control: is $M$ absorbed by zones? \\
+ & \texttt{size}     & propositional size $n$ & $2$--$2^{10}$      & SAT  & control: is closure size benign? \\
+\midrule
+\multirow{5}{*}{\ref{rq:practicality}}
+ & \texttt{reachability} & size, time bound & $n\le2^{10}$, $b\le2^{20}$ & --- & \texttt{E<>}\,$\phi$ \\
+ & \texttt{safety}       & size, time bound & $n\le2^{10}$, $b\le2^{20}$ & --- & \texttt{A[]}\,$\phi$ \\
+ & \texttt{liveness}     & size, time bound & $n\le2^{10}$, $b\le2^{20}$ & --- & \texttt{A<>}\,$\phi$ \\
+ & \texttt{leadsto}      & size, time bound & $n\le2^{10}$, $b\le2^{20}$ & --- & $\mathrm{AG}(q\rightarrow\mathrm{AF}_\kI\phi)$, depth two \\
+ & \texttt{epossibly}    & size, time bound & $n\le2^{10}$, $b\le2^{20}$ & --- & \texttt{E[]}\,$\phi$ \\
+\midrule
+\multirow{4}{*}{\ref{rq:completeness}}
+ & \texttt{ef\_nest}, \texttt{ag\_ef}, & \multirow{2}{*}{punctuality $\times$ depth} &
+   \multirow{2}{*}{$d\le8$} & \multirow{2}{*}{SAT} &
+   \multirow{2}{*}{satisfied by the witness $W$ of \S\ref{ss:rq3}} \\
+ & \texttt{eg\_ef}, \texttt{leadsto},\dots & & & & \\
+ & \texttt{pinned\_*}   & punctuality $\times$ depth & $d\le8$ & SAT   & only \emph{forced} models: no trivial witness \\
+ & \texttt{control\_unsat} & punctuality $\times$ depth & $d\le4$ & UNSAT & does the pipeline detect a miss at all? \\
+\bottomrule
+\end{tabular}
+\end{table}
+% ---------------------------------------------------------------------------
+
+Every instance carries an expected verdict established independently of the tool, so the harness
+classifies each disagreement automatically. Because the procedure is sound (Theorem~\ref{thm:soundness}),
+only two kinds exist: an expected-SAT instance answered \UNSAT{} is an \emph{incompleteness}
+instance, and an expected-UNSAT instance answered \SAT{} would be a soundness violation. We report
+both; no soundness violation occurred anywhere in this study.
+
+We record wall-clock time (median of three runs), peak resident memory, and the number of tableau
+\emph{nodes} explored --- deterministic and machine-independent, and therefore the primary scaling
+evidence, with wall-clock reported alongside. Each instance is given a $60$\,s budget,
+single-threaded on an Apple~M4~Pro.
+
+\subsection{RQ1 and RQ2: cost drivers and practicality}\label{ss:rq12}
+
+\input{tables/T1_rq1_drivers.tex}
+\input{tables/T2_rq2_envelope.tex}
+
+\subsection{RQ3: what the procedure leaves out}\label{ss:rq3}
+
+Completeness is guaranteed over the non-punctual fragment and, at nesting depth one, even with
+punctual intervals (Corollary~\ref{cor:depthone}). Since the procedure is sound, the one observable
+form of incompleteness is an \UNSAT{} verdict on a formula that \emph{is} satisfiable --- and
+detecting it needs a notion of satisfiability independent of the tool.
+
+\paragraph{An independent oracle.}
+We fix a concrete witness structure and evaluate TCTL on it exactly. The structure $W$ has one
+location with a self-loop, no invariant, diverging time, and each atom true on a set of times
+periodic with period $P$. Because the location and the labelling never change, every run from a
+configuration carries the same atom trace and that trace is a function of time alone; the path
+quantifiers therefore collapse on $W$, and TCTL over it becomes a metric logic over the timeline.
+Truth sets are then finite unions of rational intervals, and every operator is exact interval
+arithmetic: an interval $(l,h)$ of $T(\phi)$ contributes $(l-b,\,h-a)$ to
+$T(\mathrm{EF}_{[a,b]}\phi)$, $\mathrm{AG}$ is the dual, and the unbounded cases are settled by
+periodicity. A second structure adds a location behind a nondeterministic switch, so that $E$ and
+$A$ genuinely differ ($\mathrm{EF}$ unions over the two branches, $\mathrm{AG}$ intersects) --- without
+it the universal quantifier is never exercised at all.
+
+If $W$ satisfies $\varphi$ then $\varphi$ is satisfiable, with no appeal to the procedure. We
+therefore generate random shapes, keep only those a witness provably satisfies, and ask the solver;
+any \UNSAT{} answer is an incompleteness instance. The sweep is concentrated where the theory
+implicates a gap: instances the all-true structure already satisfies are discarded (their
+obligations are discharged the instant they are raised, so the punctual machinery never runs), and
+only formulas carrying a punctual window at modal depth $\ge2$ are kept.
+
+\input{tables/T3_rq3_search.tex}
+
+\paragraph{Result.}
+Across the sweeps of Table~\ref{tab:rq3-search} the procedure missed no model. The measurement is
+not vacuous: pointed at a deliberately weakened acceptance test --- one deciding each loop locally
+rather than by the reachability queries of \S\ref{ss:loop} --- the identical pipeline reports a
+$3.7\%$ incompleteness rate, every instance carrying a punctual window, at depths two to four. The
+search therefore detects the phenomenon it is looking for.
+
+\paragraph{What this does not show.}
+The oracle certifies satisfiability by \emph{exhibiting} a model, and every model it can exhibit is
+finitely representable. The punctuality caveat concerns the opposite case: formulas whose only
+models are \emph{not} finitely representable, where the obligations carried at a given moment depend
+on the exact offsets of unboundedly many pending onsets (Fig.~\ref{fig:punctual}). No oracle of this
+kind can produce such a formula, so this study cannot exhibit that gap however long it runs.
+What it establishes is that within the class of models the procedure is designed to find, none is
+missed. Closing the question needs a construction rather than a search.
+
+\paragraph{Threats to validity.}
+The benchmark is synthetic: no standard TCTL-\emph{satisfiability} suite exists, ours being the first
+decision procedure for the fragment, so the study is a characterisation and not a comparison. The
+\ref{rq:practicality} family mitigates this over the canonical query \emph{shapes}, though on
+abstract rather than deployed-model propositions. Located walls are relative to the $60$\,s budget,
+and we lean on the deterministic node counts rather than wall-clock, whose absolute values are only
+conservative. The \ref{rq:completeness} oracle's limits are stated above. The generator, solver and
+a reproducibility manifest accompany the paper.

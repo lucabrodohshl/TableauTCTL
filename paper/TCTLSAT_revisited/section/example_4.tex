@@ -1,0 +1,66 @@
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+  level 1/.style={sibling distance=6cm, level distance=1.8cm},
+  level 2/.style={sibling distance=3cm, level distance=1.8cm},
+  level 3/.style={sibling distance=3cm, level distance=1.8cm},
+  level 4/.style={sibling distance=3cm, level distance=1.8cm},
+  every node/.style={align=center, font=\normalsize},
+  edge from parent/.style={draw, -}
+]
+
+\node (Root) {$N_0:\ \{\, \psiU,\, \psiG \,\}$ \\[-1pt] $\Zone:\ x \ge 0$}
+  child {
+    node [xshift=30pt]{$ \{\, q,\, \psiG \,\}$ \\[-1pt] $\Zone:\ x \in [1,2]$}
+    child {
+      node {$ \{\, q,\, p,\, \AX{\psiG} \,\}$ \\[-1pt] $\Zone:\ x \in [1,2]$}
+      child {
+        node (LoopTargetLeft) {$N_1:\ \{\, \psiG \,\}$ \\[-1pt] $\Zone:\ x \ge 1$}
+        child {
+          node {$ \{\, p,\, \AX{\psiG} \,\}$ \\[-1pt] $\Zone:\ x \ge 1$}
+          child {
+            node (LoopSourceLeft) [yshift=10pt] {$N_2:\ \{\, \psiG \,\}$ \\[-1pt] $\Zone:\ x \ge 1$ \\ $\OPEN$}
+            edge from parent node[left=0.1cm] {\footnotesize $(Succ)$}
+          }
+          edge from parent node[left=0.05cm] {\footnotesize $(AR, \ref{tag:and})$}
+        }
+        edge from parent node[left=0.1cm] {\footnotesize $(Succ)$}
+      }
+      edge from parent node[left=0.05cm] {\footnotesize $(AR, \ref{tag:and})$}
+    }
+    edge from parent node[left=0.2cm] {\footnotesize $(\ref{tag:teu}, \text{stop})$}
+  }
+  child {
+    node [xshift=-30pt]{$ \{\, \EX{\psiU},$\\$ \psiG \,\}$ \\[-1pt] $\Zone:\ x \ge 0$}
+    child {
+      node {$ \{\, p,\, \EX{\psiU},$\\$ \AX{\psiG} \,\}$ \\[-1pt] $\Zone:\ x \ge 0$}
+      child {
+        node (LoopSourceRight) [yshift=-10pt] {$N_3:\ \{\, \psiU,$\\$ \psiG \,\}$ \\[-1pt] $\Zone:\ x \ge 0$ \\ $\CLOSED$}
+        edge from parent node[right=0.1cm] {\footnotesize $(Succ)$}
+      }
+      edge from parent node[right=0.05cm] {\footnotesize $(AR, \ref{tag:and})$}
+    }
+    edge from parent node[right=0.2cm] {\footnotesize $(\ref{tag:teu}, \text{go})$}
+  };
+
+  % Left branch loop (Accepting)
+  \draw[->, dashed, thick, rounded corners=8pt] 
+  (LoopSourceLeft.west) -- ++(-1.5,0) |- (LoopTargetLeft.west) 
+  node[pos=0.25, right] {\footnotesize $N_2 \equiv N_1$};
+
+  % Right branch loop (Rejecting)
+  \draw[->, dashed, thick, rounded corners=8pt] 
+  (LoopSourceRight.east) -- ++(1.5,0) |- (Root.east) 
+  node[pos=0.25, left] {\footnotesize $N_3 \equiv N_0$};
+
+\end{tikzpicture}
+\caption{Application of rule \ref{tag:teu} showing distinct accepting and rejecting cycles.}\label{fig:accepting_rejecting_loops}
+\end{figure}
+
+\begin{example}
+Figure~\ref{fig:accepting_rejecting_loops} illustrates the tableau expansion for a root node $N_0$ labelled by $\{\psi_U, \psi_G\}$, where $\psi_U = \tEU{\top}{q}{[1,2]}$ and $\psi_G = \AR{\bot}{p}$. The global invariant $\psi_G$ persistently enforces $p$ across all states, while $\psi_U$ represents a transient eventuality that must be fulfilled within the time bounds.
+
+The rule \ref{tag:teu} splits the execution into two distinct branches. On the left "stop" branch, the eventuality is fulfilled: the target $q$ is asserted, the formula $\psi_U$ is discarded from the obligations, and the zone is intersected with the interval constraint $x \in [1,2]$. After applying the release rule to $\psi_G$ and generating successors, time elapses to $\uparrow([1,2])$, yielding a new node $N_1$ with zone $x \ge 1$ and only the invariant obligation $\psi_G$ remaining. Expanding $N_1$ further produces $N_2$, which is structurally identical to $N_1$. Because the eventuality $\psi_U$ was successfully fulfilled and removed prior to entering this cycle, the loop $N_2 \equiv N_1$ trivially satisfies the acceptance condition and is declared successful ($\OPEN$).
+
+Conversely, on the right "go" branch, the eventuality is postponed via $\EX{\psi_U}$ and tracked in the set $\mathcal{E}$. The zone $x \ge 0$ remains unconstrained. Successor generation steps time forward to $\uparrow(x \ge 0)$, which remains $x \ge 0$, resulting in node $N_3$ being structurally identical to the root node $N_0$. This forms a candidate loop $N_3 \equiv N_0$. However, because the postponed eventuality $\psi_U \in \mathcal{E}$ is never fulfilled along this cycle, infinite repetition violates the semantics of the least-fixpoint until operator. Therefore, this loop is rejecting ($\CLOSED$).
+\end{example}

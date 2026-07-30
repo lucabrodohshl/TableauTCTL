@@ -1,0 +1,89 @@
+% ---------------------------------------------------------------------------
+%  01-problem.tex -- what the blow-up actually is
+% ---------------------------------------------------------------------------
+\section{The problem, separated by measurement}
+\label{sec:problem}
+
+A tableau node is $\tup{\Gam}{\Ctx}{\zone}{\obligations}{\Deadline}$ together
+with the pursuits live at it. Its cost has two independent causes, and the
+whole point of this document is that they are not the same problem.
+
+\subsection{Two regimes}
+
+Count, for a run, the number of \emph{distinct discrete shapes} --- nodes taken
+up to their zone and their edge markers --- against the number of nodes.
+
+\begin{center}\small
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+instance & shapes & nodes & zones per shape \\
+\midrule
+$16$ conjoined $\mathrm{EF}_{[a_j,b_j]}\,p_j$ & $262\,204$ & $263\,162$ & $\mathbf{1.00}$ \\
+depth-$7$ $\mathrm{AG}(\mathrm{EF}_{[0,2]}\cdots)$ tower & $5\,841$ & $10\,785$ & $1.85$ \\
+$4$-level tower, varied windows & $2\,635$ & $17\,370$ & $6.59$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The first row is the important one. On the most expensive family in the suite
+the zone contributes \emph{nothing}: there is one zone per discrete shape, and
+the quarter of a million nodes are a quarter of a million distinct
+\emph{discrete} states. No abstraction, no widening and no inclusion test can
+touch that number, because there is nothing to abstract.
+
+\subsection{What those discrete states are}
+
+Instrumenting the pursuit vector on the depth-$6$ tower gives a maximum of
+$12$ simultaneous pursuits, exactly two per nesting level, with no modality
+duplicated. The histogram of $|P|$ over the nodes is
+$5, 22, 77, 172, 323, 545, 824, 952, 903, 803, 485, 167, 25$: binomial, peaked
+in the middle. That is the signature of a search ranging over the
+\emph{subsets} of a set of independent obligations.
+
+For $\bigwedge_{j<k}\mathrm{EF}_{[a_j,b_j]}\,p_j$ the reading is direct. Each
+conjunct is an eventuality that is either still outstanding or already
+witnessed, the conjuncts do not interact, and the node records the whole
+vector of $k$ bits. The search visits $2^k$ of them, and measured node counts
+follow: $1\,247$, $16\,863$, $66\,179$, $262\,975$, $1\,049\,619$ for
+$k = 8,12,14,16,18$.
+
+\subsection{There is nothing to learn from, either}
+
+The obvious import from SAT and SMT is conflict-driven search: learn why a
+branch died and prune its siblings. Counting how each node ends says that this
+has no purchase here.
+
+\begin{center}\small
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+instance & accepted & rejected & closed \\
+\midrule
+$16$ conjoined eventualities (SAT) & $262\,975$ & $\mathbf{0}$ & $\mathbf{0}$ \\
+$4$-level tower (SAT)               & $12\,928$  & $1\,014$ & $790$ \\
+depth-$6$ tower (SAT)               & $4\,281$   & $609$   & $385$ \\
+$\mathrm{AG}(\mathrm{EF}_{[3,4]}p)\wedge\mathrm{AG}_{[4,5]}\neg p$ (UNSAT)
+                                    & $161$      & $108$   & $53$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+On the hardest instance every single node is accepted. The search is not
+thrashing through contradictory subtrees that a learned clause would have cut;
+it is enumerating states that are all genuinely consistent. This is the
+structural difference from DPLL, where clause learning pays precisely because
+the search spends most of its life in conflict.
+
+\begin{intuition}
+Asking a SAT solver's tricks to help here is asking a technique for
+\emph{failing faster} to speed up a search that never fails. What is needed is
+a technique for not enumerating a product, and that one does exist in the same
+literature --- component caching, from model counting.
+\end{intuition}
+
+\subsection{The claim}
+
+The $2^k$ is an artefact of representation, not of the problem. The $k$
+conjuncts share no atom and no clock; a model for the conjunction can be
+assembled from a model for each. \Cref{sec:theory} makes that precise and
+proves it, \cref{sec:algorithm} turns it into a test cheap enough to run at
+every node, and \cref{sec:eval} reports that the $2^{18}$ becomes $1\,249$.

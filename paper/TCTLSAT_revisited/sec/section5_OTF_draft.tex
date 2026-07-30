@@ -1,0 +1,533 @@
+%% =====================================================================
+%% DRAFT / extended version of Section 5.  NOT the file \input by
+%% ETAPS2026.tex; the shipped version is sec/section5_OTF.tex.
+%%
+%% This file is the same section with every proof inline and the
+%% punctuality figure kept in place (~6 pages).  The shipped version
+%% (~4.6 pages) states Proposition 1 and Lemmas 1-4 without proof and
+%% points at the appendix; APPENDIX A below is exactly that appendix,
+%% ready to \input after the bibliography.
+%%
+%% Design notes are at the end of the file.
+%% =====================================================================
+
+\section{The Decision Procedure}\label{sec:correct}
+
+Section~\ref{sec:tableau} defines success by a condition on a marking of a graph that no
+implementation can afford to build. We make that graph finite and identify the largest successful
+marking with a greatest fixpoint (\S\ref{ss:gfp}), give a procedure deciding membership of the root
+in it while building only what the search demands (\S\ref{ss:otf}), and prove that procedure sound
+for TCTL and complete for the non-punctual fragment (\S\ref{ss:sound}). Throughout $\varphi$ is the
+input, $n=|\FL(\varphi)|$, and $M$ the largest constant in its intervals. 
+
+\subsection{The tableau graph and its greatest marking}\label{ss:gfp}
+
+The calculus leaves the order of rule application open; the procedure fixes one. Let
+$\FL^{\bullet}(\varphi)$ extend $\FL(\varphi)$ with the pursuit markers $\mu^\bullet,\mu^{\ast}$ and
+with $\EX\chi,\AX\chi$ for $\chi$ in it, so that it holds every goal the rules produce and has size
+$O(n)$, and fix a linear order on it. Then $\Expand{N}$ is empty if $N$ is closed, and otherwise
+fires on the least goal of $\Gamma$ it fits the first applicable rule in the order \ruleref{Conj},
+\ruleref{Disj}, \ruleref{AX}, \ruleref{Roll}, \ruleref{Cov}, \ruleref{Rsplit},
+\ruleref{Runf_before}, \ruleref{Runf_in}, \ruleref{Uunf}, \ruleref{Uunfroll}; when none applies, $N$
+is saturated and $\Expand{N}$ returns the \ruleref{Delay} and \ruleref{EX} children together, both
+being conjunctive. Two conventions make this a function of the node: the clock a \ruleref{launch}
+allocates is determined by $\mu$ rather than drawn fresh, sound because \ruleref{Cov} blocks a second
+launch while a pursuit of $\mu$ is live, so $\clockSet=\{x_\mu\mid\mu$ timed in $\FL(\varphi)\}$ has
+size $O(n)$; and acceptance reads clock resets and stop branches off the graph, both properties of an
+edge, so each node records the clocks its rule reset and the modality it discharged.
+
+\begin{definition}[Tableau graph]\label{def:graph}
+$G(\varphi)$ is the least set of nodes containing $N_0=\tup{\{\varphi\}}{\emptyset}{\{\mathbf
+0\}}{\emptyset}{\emptyset}$ and closed under $\Expand{}$, two nodes being identified when they agree
+componentwise and their zones agree modulo $\cong_M$, with an edge $N\to N'$ for each
+$N'\in\Expand{N}$.
+\end{definition}
+
+\begin{lemma}[Finiteness]\label{lem:finiteness}
+$|G(\varphi)|\le 2^{O(n)}\cdot M^{O(n^{2})}$, and every node has $O(n)$ children.
+\end{lemma}
+\begin{proof}
+$\Gamma$, $\Ctx$, the reset set and the discharge marker range over subsets of
+$\FL^{\bullet}(\varphi)$ or of $\clockSet$; $\obligations$ is fixed by its domain; and $\Deadline$ gives each
+$x_\mu$ one of the bounds $\sup\kI$, $\sup\kI-\inf\kI$ with a strictness flag. Each contributes
+$2^{O(n)}$. A canonical $\cong_M$-zone over $K\le n+1$ clocks is a $(K{+}1)^{2}$ DBM with entries
+$\infty$ or in $\{-M,\dots,M\}\times\{<,\le\}$, giving $(4M{+}3)^{(n+2)^{2}}=M^{O(n^{2})}$ zones.
+Every rule has at most three children except \ruleref{EX}, with one per $\EX\psi\in\Gamma$.
+\end{proof}
+
+\noindent
+Identification up to $\cong_M$ dispenses with a termination argument for expansion, and so lets the
+calculus afford rules that re-impose their own premise: a chain of applications that would regress
+forever revisits a node and closes a cycle, which crosses no \ruleref{Delay} step and is discarded by
+\ref{M1}.
+
+A marking contains no closed node, at least one child of each of its \ORn-nodes and all children of
+each of its \ANDn-nodes, and is successful when every member satisfies \ref{M1} and \ref{M2}. Both
+clauses quantify over paths \emph{inside} the marking, so a successful marking is a set that survives
+the deletions it prescribes. For $A\subseteq G(\varphi)$ let $F(A)$ be $A$ minus:
+\begin{enumerate}[start=1,label={D\arabic*)}, itemindent=1.6em, ref=(D\arabic*), itemsep=0.02em]
+\item\label{D1} the closed nodes;
+\item\label{D2} the \ORn-nodes with no child in $A$, and the \ANDn-nodes with a child outside $A$;
+\item\label{D3} the nodes with no $A$-path to a node on a time-progressing cycle of $A$;
+\item\label{D4} for each until $\mu$, the nodes pursuing $\mu$ from which no $A$-path carrying the
+      pursuit throughout reaches a stop for $\mu$ taken where the zone meets $x_\mu\in\kI$.
+\end{enumerate}
+
+\begin{proposition}\label{prop:gfp}
+$F$ is monotone, and $A$ is a successful marking iff $A\subseteq F(A)$. Hence the successful markings
+have a greatest element $\mathcal M^{*}=\nu F$, and the tableau succeeds on $\varphi$ iff
+$N_0\in\mathcal M^{*}$.
+\end{proposition}
+\begin{proof}
+\ref{D1} ignores $A$; a node kept by \ref{D2} has its witnessing child, or all its children, in $A$
+and hence in any superset; \ref{D3} and \ref{D4} ask for a path in $A$, which survives enlargement.
+So $F$ is monotone on the finite lattice $2^{G(\varphi)}$, and $A\subseteq F(A)$ unfolds to the
+clauses defining a successful marking. Knaster--Tarski gives a greatest post-fixpoint, equal to $\nu
+F$ and to the union of all post-fixpoints, and the tableau succeeds iff one of them contains $N_0$.
+\end{proof}
+
+\subsection{The on-the-fly procedure}\label{ss:otf}
+
+Algorithm~\ref{alg:otf} decides $N_0\in\mathcal M^{*}$ without ever holding $G(\varphi)$.
+$\Expand{}$ applies the rules the first time the search reaches a node and returns the recorded
+children of a $\cong_M$-equal node otherwise, so the graph exists only as far as the search has
+demanded it. Tarjan's indices, used as a black box, ride along; a back edge yields a lowlink update
+and nothing else, a node still on the stack having no verdict and none being guessed for it. The
+third line of the loop is where the search stops at the first witness: a child settles its parent
+when the parent is an \ORn-node and the child holds, or an \ANDn-node and it fails, which is what
+$\val[w]=[\,v$ is $\ORn\,]$ says, and the parent retires with its remaining children unbuilt; the guard $\mathrm{top}(\Stack)=v$ makes this well defined, an earlier child
+possibly having left members of $v$'s component above $v$ on the stack. A component is decided the
+moment it closes, against the verdicts of the children it leaves: writing
+$\Out_C=\{w\notin C\mid w\in\ch[v]$ for some $v\in C$, $\val[w]=\top\}$ for those already accepted,
+$\nu F_C$ is the largest $A\subseteq C$ with $A\subseteq F(A\cup\Out_C)$, computed by deletion from
+$A=C$, each round applying \ref{D1} and \ref{D2} pointwise and then the backward reachabilities
+\ref{D3}, \ref{D4} over the survivors. A deletion can disconnect $A$, so the decomposition is
+recomputed each round.
+
+\begin{algorithm}[!tb]
+\footnotesize
+\DontPrintSemicolon
+\SetAlgoLined
+\SetKwProg{Fn}{procedure}{}{end}
+
+\Fn{\Decide{$\varphi$}}{
+  $\val[v]\gets{?}$ and $\idx[v]\gets\bot$ for all $v$; \ $\Stack\gets\varepsilon$; \ $\cnt\gets0$\;
+  \Explore{$N_0$} \ \textbf{where} $N_0=\tup{\{\varphi\}}{\emptyset}{\{\mathbf
+    0\}}{\emptyset}{\emptyset}$; \quad \Return{\SAT{} \textnormal{iff} $\val[N_0]=\top$}\;
+}
+\BlankLine
+\Fn{\Explore{$v$}}{
+  $\idx[v]\gets\low[v]\gets\cnt{+}{+}$; \ $\mathrm{push}(\Stack,v)$; \
+  $\ch[v]\gets\Expand{v}$ \tcp*{memoised on $\cong_M$}
+  \ForEach{$w\in\ch[v]$}{
+    \lIf{$\idx[w]=\bot$}{\Explore{$w$}; \ $\low[v]\gets\min(\low[v],\low[w])$}
+    \lElseIf{$w\in\Stack$}{$\low[v]\gets\min(\low[v],\idx[w])$}
+    \lIf{$\val[w]=[\,v\text{ is }\ORn\,]$ \textnormal{\textbf{and}} $\mathrm{top}(\Stack)=v$}
+        {$\val[v]\gets\val[w]$; \ $\mathrm{pop}(\Stack)$; \Return}
+  }
+  \lIf{$\low[v]=\idx[v]$}{$C\gets$ pop $\Stack$ down to $v$; \
+    $\val[u]\gets[\,u\in\nu F_C\,]$ for $u\in C$}
+}
+\caption{On-the-fly satisfiability.}\label{alg:otf}
+\end{algorithm}
+
+\begin{lemma}\label{lem:search}
+\emph{(i)} If $\val[w]$ is final and settles $v$, then $v\in\mathcal M^{*}$ iff $w\in\mathcal M^{*}$,
+and leaving the remaining children of $v$ unexpanded changes $\mathcal M^{*}$ at no node.
+\emph{(ii)} A strongly connected $T$ with an internal edge carries a time-progressing cycle iff some
+node of $T$ is a \ruleref{Delay}-successor and every clock is reset somewhere in $T$ or unbounded
+everywhere in $T$.
+\emph{(iii)} If $C$ is a maximal strongly connected set with $\val[c]=[\,c\in\mathcal M^{*}\,]$ for
+every child $c\notin C$ of a node of $C$, then $\mathcal M^{*}\cap C=\nu F_C$.
+\end{lemma}
+\begin{proof}
+(i) The first claim is \ref{D2}. The explored subgraph is closed under $\Expand{}$ except at retired
+nodes, so a path of $\mathcal M^{*}$ using an unexpanded child of $v$ passes through $v$; if
+$v\notin\mathcal M^{*}$ there is no such path, and if $v\in\mathcal M^{*}$ then $v$ satisfies
+\ref{M1}, and \ref{M2} for each pursuit active at it, so a node reaching $v$ inherits both witnesses
+by prefixing the path to $v$, which carries a pursuit exactly when it is active at $v$.
+
+(ii) $(\Leftarrow)$ Concatenating paths in $T$ gives a cycle through the \ruleref{Delay}-successor,
+which therefore elapses positive time, and through one reset node of every clock $T$ resets; the rest
+are unbounded throughout. $(\Rightarrow)$ A time-progressing cycle in $T$ elapses positive time,
+hence crosses a \ruleref{Delay} step; and a clock reset nowhere in $T$ is forced unbounded on that
+cycle, whence unbounded on all of $T$, since a path inside $T$ never resets it and its value, already
+above $M$, only grows.
+
+(iii) $C$ being maximal, a path of $\mathcal M^{*}$ from $N\in C$ either stays in $C$, and a witness
+for \ref{M1} or \ref{M2} then lies inside $C$; or it leaves $C$ once and for all at some
+$c\in\mathcal M^{*}\setminus C$, which by hypothesis lies in $\Out_C$ and itself satisfies \ref{M1},
+and \ref{M2} for every pursuit active at it, so prefixing the path from $N$ to $c$ turns either
+witness into one for $N$. Hence $\mathcal M^{*}\cap C\subseteq F(\mathcal M^{*}\cap C\cup\Out_C)$.
+Conversely any $A\subseteq C$ with $A\subseteq F(A\cup\Out_C)$ extends by the nodes of
+$\mathcal M^{*}$ reachable from $\Out_C$ to a post-fixpoint of $F$, which Proposition~\ref{prop:gfp}
+places inside $\mathcal M^{*}$. The greatest elements coincide.
+\end{proof}
+
+\begin{theorem}[Adequacy and complexity]\label{thm:alg}
+Algorithm~\ref{alg:otf} terminates and retires every node it builds with
+$\val[N]=[\,N\in\mathcal M^{*}\,]$; it returns \SAT{} iff $N_0\in\mathcal M^{*}$, and runs in time
+$2^{\mathrm{poly}(n)}$.
+\end{theorem}
+\begin{proof}
+By Lemma~\ref{lem:finiteness} with memoisation the traversal is a depth-first search of a finite
+graph, so it terminates. Components are popped in reverse topological order, and by the Tarjan
+invariant every child of $C$ outside $C$ has retired when $C$ is popped, one still on the stack
+dragging the lowlink of $C$'s root below its index; so $\Out_C$ is final and every pop meets
+Lemma~\ref{lem:search}(iii). The deletion loop decreases on a finite set and each step instantiates a
+clause of $F$, exact by Lemma~\ref{lem:search}(ii), so it reaches $\nu F_C=\mathcal M^{*}\cap C$, and
+by Lemma~\ref{lem:search}(i) pruning preserves every verdict.
+
+For the bound let $m$ be that of Lemma~\ref{lem:finiteness}. As $M$ occupies at most $n$ input
+symbols, $\log m=O(n)+O(n^{2})\log M=\mathrm{poly}(n)$. The explored graph has at most $m$ nodes and
+$O(nm)$ edges, and memoisation on $\cong_M$-classes expands each once, avoiding the doubly
+exponential blow-up of an ancestor-only unfolding. A component takes at most $|C|$ rounds,
+each deleting a node or stopping, of one decomposition and $O(n)$ backward reachabilities linear in
+the subgraph, and the components partition the nodes, so the run costs $2^{\mathrm{poly}(n)}$.
+\end{proof}
+
+\subsection{Soundness and Completeness}\label{ss:sound}
+
+\begin{lemma}\label{lem:zones}
+Let $N_0,\dots,N_k$ be a path of $G(\varphi)$ with non-empty zones. \emph{(i)} For every $\nu_k\in
+Z_k$ there are $\nu_i\in Z_i$ and delays realising every step, positive at every \ruleref{Delay}
+step. \emph{(ii)} If a delay crosses no integer hyperplane $x=b$ with $b\le M$, every subformula of
+$\varphi$ has constant truth on the open segment it sweeps. \emph{(iii)} A cycle of $G(\varphi)$ has
+a non-Zeno unfolding iff it is time-progressing, and then one whose iterations elapse a constant
+positive amount.
+\end{lemma}
+\begin{proof}
+(i) Every zone operation a rule performs (intersection with a single-clock guard, reset,
+time-successor, $\cong_M$-canonicalisation) back-propagates, non-empty precisely because the
+successor valuation lies in its image~\cite{Bouyer05TimedAutomata}; thread backwards from $\nu_k$,
+noting that $\Dopen Z$ and $\Dbd Z$ lie strictly ahead of $Z$ in time. (ii) No clock crosses an
+integer at or below $M$, so no integer part changes and no fractional ordering wraps, while clocks
+above $M$ are identified by extrapolation; the segment lies in one region, on which TCTL truth is
+constant~\cite{AlurCourcoubetisDill1990,Bouyer05TimedAutomata}, and its endpoints are nodes of their
+own by the integer split of \ruleref{Delay}. (iii) A cycle elapsing no time takes zero time over
+infinitely many traversals; otherwise some clock is neither reset nor extrapolated above $M$, so it
+keeps a bound $c\le M$, grows by exactly the delay elapsed, and caps the total at $c$. Conversely (i)
+yields a traversal elapsing some $\delta>0$, and the cycle returning to the same node, no rule
+distinguishes two visits and no budget depletes, so $\delta$ recurs at every iteration.
+\end{proof}
+
+\noindent
+\textbf{From a marking to an automaton.} Call a node of $\mathcal M^{*}$ a \emph{state} if it is
+saturated, so that its children are the successor steps; the remaining, \emph{expansion} edges
+neither elapse time nor change location, and reset a clock only through a \ruleref{launch} or a
+\ruleref{Ustoproll}. At most $n+1$ obligations are pending at $N$, the divergence requirement of
+\ref{M1} and the until pursuits active there, and \ref{M1}, \ref{M2} give a finite path $\pi_{N,o}$
+of $\mathcal M^{*}$ discharging each. A \emph{schedule} selects at every \ORn-node the child
+$\pi_{N,o}$ prescribes and moves round-robin to the next pending obligation once $o$ is discharged,
+so its memory, the pair (obligation, position on $\pi_{N,o}$), is finite. The witness
+$\mathcal A_\varphi$ has as locations the pairs (state, schedule memory), labelled by
+$\Gamma_{\mathsf{prop}}$ and carrying $\Inv(N)$, and as edges the scheduled successor steps, guarded
+by the zone of the next state reached through expansion edges and resetting the clocks that segment
+resets.
+
+\begin{lemma}[Recurrence]\label{lem:recurrence}
+Let $\mu=\mathrm{A}(\varphi\,\mathbf{U}_\kI\,\psi)$ with $a=\inf\kI$, $b=\sup\kI<\infty$, and let
+$\rho$ be a run of $\mathcal A_\varphi$ through a node carrying $\mu^{\ast}$, launched at $t_0$. Then
+\ruleref{Ustoproll} fires on $\rho$ at times $t_0<w_1<w_2<\cdots$ with $w_1-t_0\in\kI$ and
+$w_{j+1}-w_j\le b-a$, and $\rho\models\varphi\,\mathbf{U}_\kI\,\psi$ from every position at or after
+$t_0$.
+\end{lemma}
+\begin{proof}
+No rule drops $\mu^{\ast}$: \ruleref{Ustoproll} keeps it and \ruleref{Ugo} moves it to $\Ctx$, whence
+\ruleref{EX} returns it to $\Gamma$ at every successor. It is carried forever, and with it the
+deadline on $x_\mu$, which is $b$ until the first stop and $b-a$ after. Both are at most $M$, so
+$x_\mu$ is bounded along $\rho$ and, by Lemma~\ref{lem:search}(ii), every time-progressing cycle
+$\rho$ meets resets it. Only \ruleref{Ustoproll} does, \ruleref{Cov} being blocked while the pursuit
+is live, and by \ref{M1} the schedule reaches such a cycle and traverses it without end, so the stop
+recurs; its first guard is $x_\mu\in\kI$ and each later one is taken under $x_\mu\le b-a$ measured
+from the preceding stop, which are the two bounds. Now let $t\ge t_0$ be a position and
+$w_j$ the first stop at or after $t+a$. If $j=1$ then $w_1\le t_0+b\le t+b$; otherwise $w_{j-1}<t+a$,
+so $w_j\le w_{j-1}+(b-a)<t+b$. Either way $w_j-t\in\kI$, and $\psi$ holds at $w_j$ while
+\ruleref{Ugo} asserts $\varphi$ throughout, which is \eqref{eq:sat_u}.
+\end{proof}
+
+\begin{theorem}[Soundness]\label{thm:soundness}
+If Algorithm~\ref{alg:otf} returns \SAT{} then $\varphi$ is satisfiable, and $\mathcal A_\varphi$ is
+a witness for it.
+\end{theorem}
+\begin{proof}
+By Theorem~\ref{thm:alg} the root lies in $\mathcal M^{*}$, so $\mathcal A_\varphi$ is defined, and
+Lemma~\ref{lem:zones}(i) supplies valuations and delays along its paths. It is non-blocking: its only
+invariants are the deadlines in $\Deadline$, and cap and stop guard derive from the same interval with the
+same strictness, so the stop edge is enabled up to the cap and by \ref{M2} the schedule takes it. By
+\ref{M1} the schedule reaches a time-progressing cycle, which Lemma~\ref{lem:zones}(iii) unfolds into
+a run whose iterations each elapse a fixed $\delta>0$, so $\mathrm{Runs}^\infty$ is non-empty
+everywhere, which is all the semantics asks of it.
+
+We show $\mathcal T,(s_0,\mathbf 0)\models\varphi$ for the induced TTS by induction on $\varphi$
+along the marking. Propositional goals hold by saturation and closure of contradictory nodes;
+$\EX\psi$ obtains a successor satisfying $\psi$ from its \ruleref{EX} child, and $\AX\psi$ holds at
+all successors since each child inherits $\Ctx$. For a timed modality demanded at $N$,
+\ruleref{Cov} is conjunctive, so $\mathcal M^{*}$ retains both the discharge child, carrying the
+remaining goals, and the launch, which establishes $\mu$ with $x_\mu$ reset, so \kI is measured from
+this configuration and the pursuit rides every successor, as a goal under $\mathrm{E}$ and as context
+under $\mathrm{A}$. An existential until is witnessed by the path \ref{M2} supplies, extended past
+its \ruleref{Ustop} by a divergent run; a universal one cannot be evaded, $\Inv(N)$ blocking time at
+the cap while the pursuit is imposed on all successors, and when the demand is persistent this is
+Lemma~\ref{lem:recurrence}. \ruleref{Rsplit} discharges a release by partitioning the zone
+conjunctively: in the window \ruleref{Runf_in} asserts $\psi$ until $\varphi$ releases it, before it
+\ruleref{Runf_before} carries the pursuit on, and past it the obligation has lapsed.
+Lemma~\ref{lem:zones}(ii) lifts each conclusion to the positions between nodes.
+\end{proof}
+
+\begin{theorem}[Completeness]\label{thm:completeness}
+If $\varphi$ is non-punctual and satisfiable then Algorithm~\ref{alg:otf} returns \SAT.
+\end{theorem}
+\begin{proof}
+Completeness goes the other way: the realisable nodes of \S\ref{ss:nodes} are themselves a successful
+marking. Writing $R$ for them, we show $R\subseteq F(R)$; then $R\subseteq\mathcal M^{*}$ by
+Proposition~\ref{prop:gfp}, and $N_0\in R$ as $\varphi$ is satisfiable, so Theorem~\ref{thm:alg}
+returns \SAT.
+
+\ref{D1}: a realisable node has a non-empty zone and a consistent $\Gamma_{\mathsf{prop}}$.
+\ref{D2}: let $N\in R$ be realised by $\mathcal T$. All children of an \ANDn-rule are realised by the
+same $\mathcal T$: \ruleref{Cov} because $\mathcal T$ satisfies $\Gamma\setminus\{\mu\}$ and $\mu$
+alike, \ruleref{Rsplit} because its children partition $Z_N$ and realisability is monotone under
+narrowing, \ruleref{Delay} and \ruleref{EX} because $\mathcal T$ admits the passage of time and
+supplies a successor for every $\EX\psi$, each inheriting $\Ctx$. At an \ORn-rule $\mathcal T$ selects
+a child: a disjunct it satisfies for \ruleref{Disj}; for \ruleref{Uunf} and \ruleref{Uunfroll} the
+stop if $\psi$ holds now with $x_\mu\in\kI$ and \ruleref{Ugo} otherwise, the witness being later and
+$\varphi$ holding now; for \ruleref{Runf_before} and \ruleref{Runf_in} the stop if $\varphi$ has
+released the obligation and the recursive child otherwise. The zone operations being exact, no chosen
+zone is empty; and that realisability quantifies universally over $Z_N$ is what lets one child answer
+a demand re-imposed at a continuum of onsets.
+\ref{D3} and \ref{D4}: fix $N\in R$ and a run $\rho$ of $\mathcal T$ from a configuration for $N$. It
+is non-Zeno, so no clock stays both unreset and bounded along it, and following $\rho$ through the
+choices above gives a path of $R$ from $N$ which by Lemma~\ref{lem:finiteness} repeats a node; that
+segment elapses positive time with every clock reset on it or extrapolated above $M$, hence is a
+time-progressing cycle of $R$ reached from $N$. An until pursuit active at $N$ is one $\mathcal T$
+fulfils at a finite position of $\rho$, which the path following $\rho$ carries it to.
+
+Non-punctuality enters at the repetition step: a node summarises the pending obligations of a
+persistent universal until by $x_\mu$ alone, the time since the last witness capped at $b-a$, and by
+Lemma~\ref{lem:recurrence} that summary is faithful exactly when witnesses spaced at most $b-a$ apart
+answer every onset, which needs $b>a$.
+\end{proof}
+
+
+\begin{figure}[b]
+\centering
+\begin{tikzpicture}[x=1mm,y=1mm,font=\scriptsize]
+\begin{scope}
+\draw[->] (14,22) -- (58,22);
+\foreach \x/\lab in {20/1,34/2,48/3} \draw (\x,21.4) -- (\x,22.6) node[above=0pt]{\lab};
+\node at (13,17) {$0$};   \draw[line width=1.4pt] (20,17) -- (34,17);
+\myvdots{13}{14.7}{0.7}{0.1}
+\node at (13,11) {$0.4$}; \draw[line width=1.4pt] (25.6,11) -- (39.6,11);
+\myvdots{13}{8.7}{0.7}{0.1}
+\node at (13,5) {$0.8$};  \draw[line width=1.4pt] (31.2,5) -- (45.2,5);
+\myvdots{13}{2.7}{0.7}{0.1}
+\draw[dashed] (33,18.5) -- (33,3.5);
+\foreach \y in {17,11,5} \fill (33,\y) circle (0.75);
+\node at (36,-1) {(a)\ $\kI=[1,2]$};
+\end{scope}
+\begin{scope}[xshift=52mm]
+\draw[->] (14,22) -- (58,22);
+\foreach \x/\lab in {20/1,34/2,48/3} \draw (\x,21.4) -- (\x,22.6) node[above=0pt]{\lab};
+\node at (13,17) {$0$};   \fill (20,17) circle (0.75);
+\myvdots{13}{14.7}{0.7}{0.1}
+\node at (13,11) {$0.4$}; \fill (25.6,11) circle (0.75);
+\myvdots{13}{8.7}{0.7}{0.1}
+\node at (13,5) {$0.8$};  \fill (31.2,5) circle (0.75);
+\myvdots{13}{2.7}{0.7}{0.1}
+\node at (36,-1) {(b)\ $\kI=[1,1]$};
+\end{scope}
+\end{tikzpicture}
+\caption{Onsets of a persistent demand and their windows: overlapping for a
+non-punctual \kI\ \subref*{fig:non_punctual}, pairwise disjoint for a punctual one
+\subref*{fig:punctual}.}
+\label{fig:punctual_vs_nonpunctual}%
+\phantomsubcaption\label{fig:non_punctual}%
+\phantomsubcaption\label{fig:punctual}
+\end{figure}
+
+\begin{corollary}\label{cor:depthone}
+Satisfiability of non-punctual TCTL is \textsc{ExpTime}-complete, and the procedure is sound and
+complete for TCTL of temporal nesting depth at most one, punctual intervals included.
+\end{corollary}
+\begin{proof}
+Membership is Theorems~\ref{thm:alg}--\ref{thm:completeness}; hardness is inherited from CTL
+satisfiability~\cite{Clarke99} by fixing every interval to $[0,\infty)$. At depth one every argument
+is propositional, so no modality is demanded inside the pursuit of another and no fresh onset arises;
+the obligations live at a node are exactly the pursuits it carries, recorded in $\Gamma$, $\Ctx$ and
+$\Deadline$ with their elapsed time in $Z$, so a repeat agrees on the full obligation state and
+Theorem~\ref{thm:completeness} goes through for every \kI.
+\end{proof}
+
+\noindent
+Fig.~\ref{fig:punctual_vs_nonpunctual} draws the gap: for $\kI=[a,b]$ with $a<b$ the windows of
+nearby onsets overlap, so the pending obligations collapse to the earliest deadline and $x_\mu$
+records it, whereas for $\kI=[a,a]$ they are disjoint singletons and what a model owes depends on the
+exact offsets of every onset still pending.
+
+\noindent
+Depth one covers reachability, safety and inevitability, the queries
+\textsc{Uppaal}~\cite{BehrmannLarsenYi2004Uppaal} and \textsc{Romeo}~\cite{lime-TACAS-09} are asked
+for; the one common query beyond it, leads-to $\mathrm{AG}(p\rightarrow\mathrm{AF}_\kI q)$, stays
+covered by Theorem~\ref{thm:completeness} whenever \kI is non-punctual.
+
+
+%% =====================================================================
+%% APPENDIX A -- deferred proofs.  \input this after \bibliography in
+%% ETAPS2026.tex, inside an \appendix block:
+%%
+%%   \appendix
+%%   \input{sec/section5_OTF_draft.tex}   % only the part below
+%% =====================================================================
+\iffalse
+\section{Deferred proofs}\label{app:proofs}
+
+\begin{proof}[of Lemma~\ref{lem:finiteness}]
+$\Gamma$, $\Ctx$, the reset set and the discharge marker range over subsets of
+$\FL^{\bullet}(\varphi)$ or of $\clockSet$; $\obligations$ is fixed by its domain; and $\Deadline$ gives each
+$x_\mu$ one of the bounds $\sup\kI$, $\sup\kI-\inf\kI$ with a strictness flag. Each contributes
+$2^{O(n)}$. A canonical $\cong_M$-zone over $K\le n+1$ clocks is a $(K{+}1)^{2}$ DBM with entries
+$\infty$ or in $\{-M,\dots,M\}\times\{<,\le\}$, giving $(4M{+}3)^{(n+2)^{2}}=M^{O(n^{2})}$ zones.
+Every rule has at most three children except \ruleref{EX}, with one per $\EX\psi\in\Gamma$.
+\end{proof}
+
+\begin{proof}[of Proposition~\ref{prop:gfp}]
+\ref{D1} ignores $A$; a node kept by \ref{D2} has its witnessing child, or all its children, in $A$
+and hence in any superset; \ref{D3} and \ref{D4} ask for a path in $A$, which survives enlargement.
+So $F$ is monotone on the finite lattice $2^{G(\varphi)}$, and $A\subseteq F(A)$ unfolds to the
+clauses defining a successful marking. Knaster--Tarski gives a greatest post-fixpoint, equal to $\nu
+F$ and to the union of all post-fixpoints, and the tableau succeeds iff one of them contains $N_0$.
+\end{proof}
+
+\begin{proof}[of Lemma~\ref{lem:search}]
+(i) The first claim is \ref{D2}. The explored subgraph is closed under $\Expand{}$ except at retired
+nodes, so a path of $\mathcal M^{*}$ using an unexpanded child of $v$ passes through $v$; if
+$v\notin\mathcal M^{*}$ there is no such path, and if $v\in\mathcal M^{*}$ then $v$ satisfies
+\ref{M1}, and \ref{M2} for each pursuit active at it, so a node reaching $v$ inherits both witnesses
+by prefixing the path to $v$, which carries a pursuit exactly when it is active at $v$.
+
+(ii) $(\Leftarrow)$ Concatenating paths in $T$ gives a cycle through the \ruleref{Delay}-successor,
+which therefore elapses positive time, and through one reset node of every clock $T$ resets; the rest
+are unbounded throughout. $(\Rightarrow)$ A time-progressing cycle in $T$ elapses positive time,
+hence crosses a \ruleref{Delay} step; and a clock reset nowhere in $T$ is forced unbounded on that
+cycle, whence unbounded on all of $T$, since a path inside $T$ never resets it and its value, already
+above $M$, only grows.
+
+(iii) $C$ being maximal, a path of $\mathcal M^{*}$ from $N\in C$ either stays in $C$, and a witness
+for \ref{M1} or \ref{M2} then lies inside $C$; or it leaves $C$ once and for all at some
+$c\in\mathcal M^{*}\setminus C$, which by hypothesis lies in $\Out_C$ and itself satisfies \ref{M1},
+and \ref{M2} for every pursuit active at it, so prefixing the path from $N$ to $c$ turns either
+witness into one for $N$. Hence $\mathcal M^{*}\cap C\subseteq F(\mathcal M^{*}\cap C\cup\Out_C)$.
+Conversely any $A\subseteq C$ with $A\subseteq F(A\cup\Out_C)$ extends by the nodes of
+$\mathcal M^{*}$ reachable from $\Out_C$ to a post-fixpoint of $F$, which Proposition~\ref{prop:gfp}
+places inside $\mathcal M^{*}$. The greatest elements coincide.
+\end{proof}
+
+\begin{proof}[of Lemma~\ref{lem:zones}]
+(i) Every zone operation a rule performs (intersection with a single-clock guard, reset,
+time-successor, $\cong_M$-canonicalisation) back-propagates, non-empty precisely because the
+successor valuation lies in its image~\cite{Bouyer05TimedAutomata}; thread backwards from $\nu_k$,
+noting that $\Dopen Z$ and $\Dbd Z$ lie strictly ahead of $Z$ in time. (ii) No clock crosses an
+integer at or below $M$, so no integer part changes and no fractional ordering wraps, while clocks
+above $M$ are identified by extrapolation; the segment lies in one region, on which TCTL truth is
+constant~\cite{AlurCourcoubetisDill1990,Bouyer05TimedAutomata}, and its endpoints are nodes of their
+own by the integer split of \ruleref{Delay}. (iii) A cycle elapsing no time takes zero time over
+infinitely many traversals; otherwise some clock is neither reset nor extrapolated above $M$, so it
+keeps a bound $c\le M$, grows by exactly the delay elapsed, and caps the total at $c$. Conversely (i)
+yields a traversal elapsing some $\delta>0$, and the cycle returning to the same node, no rule
+distinguishes two visits and no budget depletes, so $\delta$ recurs at every iteration.
+\end{proof}
+
+\begin{proof}[of Lemma~\ref{lem:recurrence}]
+No rule drops $\mu^{\ast}$: \ruleref{Ustoproll} keeps it and \ruleref{Ugo} moves it to $\Ctx$, whence
+\ruleref{EX} returns it to $\Gamma$ at every successor. It is carried forever, and with it the
+deadline on $x_\mu$, which is $b$ until the first stop and $b-a$ after. Both are at most $M$, so
+$x_\mu$ is bounded along $\rho$ and, by Lemma~\ref{lem:search}(ii), every time-progressing cycle
+$\rho$ meets resets it. Only \ruleref{Ustoproll} does, \ruleref{Cov} being blocked while the pursuit
+is live, and by \ref{M1} the schedule reaches such a cycle and traverses it without end, so the stop
+recurs; its first guard is $x_\mu\in\kI$ and each later one is taken under $x_\mu\le b-a$ measured
+from the preceding stop, which are the two bounds. Now let $t\ge t_0$ be a position and
+$w_j$ the first stop at or after $t+a$. If $j=1$ then $w_1\le t_0+b\le t+b$; otherwise $w_{j-1}<t+a$,
+so $w_j\le w_{j-1}+(b-a)<t+b$. Either way $w_j-t\in\kI$, and $\psi$ holds at $w_j$ while
+\ruleref{Ugo} asserts $\varphi$ throughout, which is \eqref{eq:sat_u}.
+\end{proof}
+\fi
+
+
+%% =====================================================================
+%% DESIGN NOTES (not for the paper)
+%% =====================================================================
+%
+% 1. WHY THE OLD SECTION COULD NOT BE EDITED IN PLACE.
+%    sec/section5_OTF_old.tex is written against an earlier calculus: it
+%    cites \ruleref{Covstar} and the satisfaction sets $\Sat_\Ctx(\mu)$.
+%    Neither exists in sec/section4_nosat.tex, whose cover rule is the
+%    conjunctive discharge/launch pair.  Lemma lem:sat of the old file,
+%    its longest, related $\Sat_\Ctx$ to truth and has no referent any
+%    more; its work is now done by the OR/AND case analysis inside
+%    Theorem thm:completeness and by Lemma lem:recurrence.  The
+%    $\Sat_\Ctx$ paragraph of the old complexity proof is likewise gone.
+%
+% 2. WHAT IS NEW RELATIVE TO THE OLD SECTION.
+%    - Definition def:graph and the expansion order.  The old text never
+%      said what the children of a node are; without a deterministic
+%      \Expand{} the algorithm is not well defined and lem:finiteness
+%      counts nothing.
+%    - The observation that no local-termination lemma is needed:
+%      identifying nodes up to \cong_M turns a regressing rule chain into
+%      a cycle, and a cycle with no (Delay) step fails (M1).  This is why
+%      the calculus can afford rules that re-impose their own premise
+%      ((rec) of (U*), and (R^split)).
+%    - Proposition prop:gfp, stated and proved rather than asserted.
+%    - Lemma lem:recurrence.  This argument existed only as a
+%      commented-out paragraph in section4_nosat.tex (lines 489-495).  It
+%      is the semantic justification of the b-a retuning in (rec).
+%      Without it, soundness for a persistent universal until is not
+%      proved.
+%    - The schedule / finite memory in the model extraction.  The old
+%      proof said "its locations are the nodes of M*", which is wrong for
+%      an OR-node with two surviving children: the automaton would
+%      contain both, and a universal obligation could fail along the one
+%      the marking did not use to establish the disjunction.  The
+%      round-robin schedule is the standard fulfilling-path fix.
+%    - Completeness restructured as R \subseteq F(R) for R the realisable
+%      nodes.  Shorter, and it finally uses the realisability definition
+%      of \S4.1, which the old proof did not.
+%
+% 3. FAITHFULNESS TO Implementation/src/tableau.cpp.
+%    - Explore matches Engine::decide_scc (:1543); the settles test with
+%      the top-of-stack guard is settles (:1571).
+%    - \nu F_C matches evaluate_scc (:1284): optimistic start, inner
+%      local-test fixpoint, then query_progress (:1392) and query_until
+%      (:1435), outer loop until no deletion.
+%    - Lemma lem:search(ii) is progressing() (:1368): union of reset
+%      clocks, intersection of unbounded clocks, at least one (Delay).
+%    - Back edges get a lowlink update and no verdict (:1584).  The notes
+%      record this as load-bearing: optimistic back edges produced 82
+%      soundness violations.
+%    - "only the clocks of live pursuits and deadlines" is
+%      collapse_dead_clocks (:698), an exact active-clock reduction.
+%      (That sentence was cut from the shipped version for space.)
+%    - The reset/discharge markers in node identity are just_reset and
+%      discharges_until in acc_key (:1149-1157).
+%    NOT claimed here, deliberately: the prototype still computes
+%    satisfaction sets S_X for its cover rule and never populates
+%    Node::X.  Both are artefacts of the older calculus.  Align the
+%    prototype with \S4 before the evaluation numbers are cited.
+%
+% 4. OPEN QUESTION FOR \S4, NOT RESOLVED HERE.
+%    (Roll)'s side condition reads "mu = A(phi U_I psi), sup I < infty;
+%    otherwise mu^bullet is left unchanged".  What happens to the
+%    re-demanded mu in the "otherwise" case is not stated: if it stays in
+%    Gamma then (Cov) cannot fire on it (its side condition asks
+%    O(mu) undefined) and the node never saturates.  \S5 is written so it
+%    does not depend on the answer, using only that at most one pursuit
+%    per modality is live.  The implementation discharges the re-demand
+%    against the live pursuit (apply_cover, :117-144), which is
+%    presumably the intent and should be said in \S4.
+%
+% 5. THE FIGURE.
+%    sec/evaluation_new.tex cites \ref{fig:punctual} in "What this does
+%    not show".  The figure is kept here and in the shipped section it
+%    was dropped for space; either restore it in \S5 (costs ~0.25 page)
+%    or move the float above into sec/evaluation_new.tex.

@@ -61,6 +61,13 @@ Options parse_args(int argc, char* argv[]) {
             if (mode == "none") opts.bench_opts.abstraction_M_default = false;
             else if (mode == "M" || mode == "both") opts.bench_opts.abstraction_M_default = true;
             else throw std::runtime_error("--bench-abstraction must be M, none, or both");
+        } else if (arg == "--version") {
+            if (i + 1 >= argc)
+                throw std::runtime_error("--version needs v1 or v2");
+            const std::string v = argv[++i];
+            if (v == "v1" || v == "1")      opts.version = 1;
+            else if (v == "v2" || v == "2") opts.version = 2;
+            else throw std::runtime_error("--version takes v1 or v2, got: " + v);
         } else if (arg == "--model" || arg == "--show-model") {
             opts.show_model = true;
         } else if (arg == "--stats" || arg == "--show-stats") {
@@ -136,6 +143,10 @@ void print_usage(const char* program_name) {
         << "  --output <dir>  Directory to write extracted models (default: current)\n"
         << "  --real-vars a,b Declare variable names as Real-sorted (else Int)\n"
         << "  --tot, --all, --all_formula  Conjoin all input formulas and check as one\n"
+        << "  --version v1|v2  Which search to run (default v2).  v1 is the\n"
+        << "                   pre-decomposition baseline; v2 adds component\n"
+        << "                   decomposition and goal subsumption.  Both decide\n"
+        << "                   the same language and agree on every verdict.\n"
         << "  --help, -h    Show this message\n"
         << "\n"
         << "Benchmark options (use with --benchmark):\n"
@@ -203,6 +214,8 @@ int run(const Options& opts) {
     FormulaFactory factory;
     Tableau engine(factory);
     engine.set_extract_witness(opts.show_model);
+    engine.set_version(opts.version == 1 ? Tableau::Version::V1
+                                         : Tableau::Version::V2);
     bool had_errors = false;
 
     for (std::size_t i = 0; i < formulas.size(); ++i) {

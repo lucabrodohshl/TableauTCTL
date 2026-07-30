@@ -1,0 +1,251 @@
+\section{Benchmark Details}\label{sec:appendix_benchmar}
+
+\begin{longtable}{@{}ll|p{0.5\textwidth}@{}}
+
+\caption{Benchmark subfamilies used in the evaluation.}
+\label{tab:benchmark-subfamilies} \\
+
+\toprule
+\textbf{Family} & \textbf{Short name} & \textbf{Description} \\
+\midrule
+\endfirsthead
+
+\toprule
+\textbf{Family} & \textbf{Short name} & \textbf{Description} \\
+\midrule
+\endhead
+
+\midrule
+\multicolumn{3}{r}{{Continued on next page}} \\
+\midrule
+\endfoot
+
+\bottomrule
+\endlastfoot
+\multirow{4}{*}{\shortstack{\textbf{A} \\Depth Scaling}}
+& Untimed Baseline
+& Clock-free reference formula with alternating untimed modalities (e.g\ AG/EF), used as a baseline for structural scaling without timed operators. \\
+
+& Overlap SAT
+& Satisfiable conjunction of overlapping timed eventualities of the form
+  $\bigwedge_i EF_{[i,i+M]}\,p_i$,
+  where overlapping windows force zone interaction but each obligation remains schedulable. \\
+
+& Nested EU
+& Increasing-depth nesting of bounded existential until,
+  e.g.\ $E(\mathit{true}\ U_{[1,M]}\ E(\mathit{true}\ U_{[1,M]}\ \cdots))$,
+  accumulating timed eventuality obligations. \\
+
+& Killed UNSAT
+& Unsatisfiable variant in which a global invariant blocks every target atom, e.g.\
+  $\left(\bigwedge_i EF_{[i,i+M]} p_i\right) \wedge AG\,\bigwedge_i \neg p_i$. \\
+
+\midrule
+
+\multirow{7}{*}{\shortstack{\textbf{B} \\Max-Constant \\Sensitivity}}
+& EU Delay
+& Bounded-until benchmark of the form
+  $E(\neg p_0\ U_{[0,M]}\ p_0)$,
+  where satisfaction requires symbolic delay and only the maximal constant $M$ varies. \\
+
+& Deadline UNSAT
+& Deadline conflict between a reachability demand and a timed prohibition, e.g.\
+  $EF_{[1,M]} p_0 \wedge AG_{[0,M]} \neg p_0$,
+  making the formula unsatisfiable. \\
+
+& Negated Window
+& Immediate timed contradiction
+  $EF_{[0,M]} p_0 \wedge \neg EF_{[0,M]} p_0$,
+  stressing normalisation of negated bounded modalities. \\
+
+& Window Chain
+& Sequential chain of bounded windows partitioning the interval $[0,M]$, e.g.\
+  $\bigwedge_{j=1}^{k} EF_{[a_j,b_j]} p_j$
+  with consecutive segments and fixed structure as only endpoints grow. \\
+
+& Nested Chain
+& Fixed-depth nested bounded chain,
+  e.g.\ $E(\mathit{true}\ U_{[0,M]}\ E(\mathit{true}\ U_{[0,M]}\ \cdots))$,
+  isolating the impact of increasing $M$ on extrapolation. \\
+
+& Forced Delay
+& Reachability formula forcing delay close to the upper bound, e.g.\
+  $EF_{[M-1,M]} p_0$,
+  with extrapolation enabled. \\
+
+& No Extrapolation
+& Ablation of the forced-delay case using the same formula
+  $EF_{[M-1,M]} p_0$,
+  but with extrapolation disabled, exposing uncontrolled zone growth. \\
+
+\midrule
+
+\multirow{2}{*}{\shortstack{\textbf{C} \\Concurrent Timed\\ Obligations}}
+& Staggered
+& Conjunction of timed eventualities over distinct, non-overlapping windows,
+  e.g.\ $\bigwedge_i EF_{[i,i+2]} p_i$,
+  isolating clock concurrency without overlap. \\
+
+& Identical Windows
+& Conjunction of timed eventualities over the same window,
+  e.g.\ $\bigwedge_i EF_{[1,3]} p_i$,
+  maximising overlap between active timing constraints. \\
+
+\midrule
+
+\multirow{2}{*}{\shortstack{\textbf{D} \\Until Nesting}}
+& Nested Until
+& Increasing-depth nesting of existential bounded until at fixed $M$,
+  e.g.\ $E(\phi_1\ U_{[0,M]}\ E(\phi_2\ U_{[0,M]}\ \cdots))$. \\
+
+& Conjunctive Until
+& Width-oriented variant with multiple independent existential-until conjuncts,
+  e.g.\ $\bigwedge_i E(\phi_i\ U_{[0,M]} \psi_i)$,
+  contrasting width with nesting depth. \\
+
+\midrule
+
+\multirow{1}{*}{\shortstack{\textbf{E} \\Release Nesting}}
+& Nested Release
+& Increasing-depth nesting of timed release,
+  e.g.\ $E(\phi_1\ R_{[0,M]}\ E(\phi_2\ R_{[0,M]}\ \cdots))$,
+  capturing greatest-fixpoint preservation obligations. \\
+
+\midrule
+
+\multirow{1}{*}{\shortstack{\textbf{DE} \\Mixed\\Until--Release}}
+& Until + Release
+& Conjunction of nested least- and greatest-fixpoint formulas, combining until and release subformulas in a single benchmark. \\
+
+\midrule
+
+\multirow{3}{*}{\shortstack{\textbf{F} \\Zeno Rejection}}
+& Safety Vacuity
+& Timed safety formula such as $AG_{[1,M]}\ \mathit{false}$, satisfiable only under Zeno behaviour where time never reaches the interval $[1,M]$. \\
+
+& EG Conflict
+& Conflict between infinite-path persistence and timed prohibition, e.g.\
+  $EG\,p_0 \wedge AG_{[1,M]}\neg p_0$,
+  requiring anti-Zeno rejection for correctness. \\
+
+& Stacked Traps
+& Conjunction of many Zeno-sensitive AG/EG conflicts, scaling the number of independent anti-Zeno obligations with $M$. \\
+
+\midrule
+
+\multirow{3}{*}{\shortstack{\textbf{G} \\Clock \\Dimensionality}}
+& Conjunctive SAT
+& Satisfiable conjunction of many timed obligations introducing $k$ simultaneously active clocks, e.g.\
+  $\bigwedge_i EF_{[i,i+2]} p_i$. \\
+
+& Nested Clocks
+& $k$-deep nested eventualities of the form
+  $E(\mathit{true}\ U_{[0,M]}\ E(\mathit{true}\ U_{[0,M]}\ \cdots))$,
+  preventing early clock deallocation and keeping all clocks active. \\
+
+& Conjunctive UNSAT
+& Unsatisfiable counterpart of conjunctive clock scaling, obtained by adding a global blocker such as
+  $AG\,\bigwedge_i \neg p_i$
+  to the satisfiable conjunctive instance. \\
+
+\midrule
+
+\multirow{2}{*}{\shortstack{\textbf{H} \\Eventuality \\Chain Length}}
+& Chain SAT
+& Satisfiable existential-until chain with fixed $M=2$,
+  e.g.\ $E(p_1\ U_{[0,2]}\ E(p_2\ U_{[0,2]}\ \cdots E(p_n\ U_{[0,2]} q)\cdots))$,
+  where growth comes only from chain length. \\
+
+& Chain UNSAT
+& Unsatisfiable version of the same chain, with the terminal target blocked globally, e.g.\
+  $AG\,\neg q$
+  conjoined with the chain formula. \\
+
+\midrule
+
+\multirow{3}{*}{\shortstack{\textbf{I} \\Fixpoint Alternation}}
+& Pure Safety
+& Nesting of universal release only, e.g.\
+  $A(\phi_1\ R_{[0,1]}\ A(\phi_2\ R_{[0,1]}\ \cdots))$,
+  containing only greatest-fixpoint obligations. \\
+
+& Pure Liveness
+& Nesting of universal until only, e.g.\
+  $A(\phi_1\ U_{[0,1]}\ A(\phi_2\ U_{[0,1]}\ \cdots))$,
+  containing only least-fixpoint/eventuality obligations. \\
+
+& Alternating
+& Alternating universal until and release,
+  e.g.\ $A(\phi_1\ U_{[0,1]}\ A(\phi_2\ R_{[0,1]}\ A(\phi_3\ U_{[0,1]}\ \cdots)))$,
+  creating repeated interaction between liveness and safety constraints. \\
+
+\bottomrule
+%\end{tabular}
+%\caption{Benchmark subfamilies used in the evaluation, grouped by family. Descriptions expose the structural phenomenon tested; representative formula schemata are included where they clarify the intended obligation pattern.}
+%\label{tab:benchmark-subfamilies}
+\end{longtable}
+
+
+
+\begin{table*}[t]
+\centering
+\small
+\setlength{\tabcolsep}{6pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Category} & \textbf{Parameter} & \textbf{Value} \\
+\midrule
+
+\multicolumn{3}{l}{\textbf{Versioning}} \\
+\midrule
+ & Git commit & \texttt{63e993a} \\
+ & Command line & \shortstack{\texttt{--benchmark --bench-timeout 1800}\\ \texttt{--bench-max-depth 20 --bench-max-k 20}} \\
+
+\midrule
+\multicolumn{3}{l}{\textbf{Build Configuration}} \\
+\midrule
+ & Compiler & GCC 11.4.0 (Ubuntu 22.04) \\
+ & C++ standard & C++20 (\texttt{-std=c++20}) \\
+ & Build type & Release (NDEBUG defined) \\
+ & OpenMP & disabled \\
+
+\midrule
+\multicolumn{3}{l}{\textbf{Hardware \& OS}} \\
+\midrule
+ & OS & Ubuntu 22.04 \\
+ & CPU & Virtualised environment (KVM) \\
+ & Cores & 8 \\
+ & RAM & 125.8 GB \\
+
+\midrule
+\multicolumn{3}{l}{\textbf{Execution Configuration}} \\
+\midrule
+ & Seed & 1337 \\
+ & Threads & 1 \\
+ & Timeout per instance & 1800 s \\
+ & Warmup runs & 4 \\
+ & Abstraction mode & M-extrapolation \\
+ & Ablation study & enabled \\
+ & Memory limit & not enforced \\
+
+\midrule
+\multicolumn{3}{l}{\textbf{Benchmark Parameter Ranges}} \\
+\midrule
+ & Family A (depth) & $1 \ldots 20$ ($M=20$ fixed) \\
+ & Family B ($M$ values) & $1,2,4,\ldots,40768$ \\
+ & Family B4 (chain $k$) & $k=10$ \\
+ & Family B5 (nested depth) & $d=10$ \\
+ & Family C ($k$) & $1 \ldots 20$ \\
+ & Family D (until depth) & $1 \ldots 20$ (conj.\ cutoff $=10$) \\
+ & Family E (release depth) & $1 \ldots 20$ \\
+ & Family F ($M$) & $2 \ldots 20$ \\
+ & Family G (clocks $k$) & $1 \ldots 15$ ($M=10$ fixed) \\
+ & Family H (chain $n$) & $1 \ldots 30$ ($M=2$ fixed) \\
+ & Family I (alternation $n$) & $1 \ldots 40$ ($M=5$ fixed) \\
+
+\bottomrule
+\end{tabular}
+\caption{Reproducibility record for the TCTL benchmark evaluation. The table reports versioning information, build configuration, hardware environment, execution parameters, and the exact benchmark ranges used in all experiments.}
+\label{tab:reproducibility}
+\end{table*}

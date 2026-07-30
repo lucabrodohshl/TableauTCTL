@@ -206,13 +206,7 @@ struct CoverResult {
         /// continue with the rest of @f$\Gamma@f$, and the *launch*, which
         /// starts a pursuit of @f$\mu@f$ on a fresh formula-clock.
         Cover,
-        /// The cover is partial.  The node narrows to a convex component of the
-        /// covered part — sound by monotonicity of realisability under
-        /// narrowing — and the children are an OR, since it suffices to build a
-        /// model over one component.
-        PartialCover,
-        /// @f$Z \cap S_X(\mu) = \emptyset@f$ — neither rule applies
-        /// and the node is closed.
+        /// The node is closed.
         Close
     };
 
@@ -235,7 +229,7 @@ struct CoverResult {
 ///
 /// The onset is taken at @f$x_\mu = 0@f$: the launch resets the formula-clock,
 /// so the window is measured from this configuration onward.
-CoverResult apply_cover(const Node& n, FormulaId mu,
+CoverResult apply_cover(const Node& n, FormulaId mu, bool ag_context,
                         const std::map<FormulaId, ClockId>& cmap,
                         std::size_t num_clocks,
                         const std::vector<std::int32_t>& max, FormulaFactory& f,
@@ -316,6 +310,23 @@ public:
     ///         out; it is not a claim about satisfiability.
     Result check(FormulaId normalized_formula);
 
+    /// @brief Which set of search optimisations to run.
+    ///
+    /// @c V1 is the search as it stood before the decomposition work: every
+    /// optional optimisation off.  It is the baseline a comparison is made
+    /// against, not a different calculus --- both versions decide the same
+    /// language and, on every instance measured, return the same verdicts.
+    ///
+    /// @c V2 adds the two forms of component decomposition and goal
+    /// subsumption.  It is the default.
+    enum class Version { V1, V2 };
+
+    /// @brief Select the optimisation set.  See #Version.
+    void set_version(Version v) { version_ = v; }
+
+    /// @brief The optimisation set in force.
+    Version version() const { return version_; }
+
     /// @brief Set the time budget for subsequent calls to #check.
     /// @param timeout The budget; zero disables the limit.
     void set_timeout(std::chrono::seconds timeout) { timeout_ = timeout; }
@@ -361,6 +372,9 @@ private:
     bool                 has_witness_ = false;
     TimedAutomaton       witness_;
     SearchStats          stats_;
+    Version              version_ = Version::V2;
+    /// Split a top-level conjunction into atom-disjoint groups and solve each.
+    bool                 decompose_ = std::getenv("TCTL_DECOMPOSE") != nullptr;
 };
 
 }  // namespace tctl
