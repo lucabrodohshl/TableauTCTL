@@ -14,8 +14,17 @@ attempts --- zone subsumption, $LU$ abstraction, forced stops, collapsing the
 pursuit record, goal subsumption, encoding $\AG$ as context, and treating
 single-polarity atoms as non-linking --- either failed outright or bought a few
 per cent. Several failed instructively and are documented with the formula that
-breaks them. Our present belief is that the remaining growth on those shapes is
-the genuine $2^{O(n)}$ of the bound.
+breaks them. The last of them is worth stating here because the argument for it
+is so tempting: an atom occurring under a single polarity looks harmless,
+because a product of models could take the union of the labellings for it, and
+declaring such atoms non-linking would make conjunctions of obligations gated on
+a shared enabling signal decompose. It is unsound, and not because the
+monotonicity argument has a gap. Masking an atom out of the linking relation
+leaves it \emph{occurring} in both components, and \ref{S1} asks for disjoint
+atom sets, so the relaxation violates the theorem's hypothesis rather than
+weakening a side condition. A future attempt must rewrite the components so the
+shared atom really occurs in one of them only. Our present belief is that the
+remaining growth on nested shapes is the genuine $2^{O(n)}$ of the bound.
 
 Two methodological points seem worth more than the speed-ups. First, the
 profile was wrong three times running: the bottleneck was never where the

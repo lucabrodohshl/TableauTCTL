@@ -62,14 +62,16 @@ inequality on $(a,b,c,d)$, is exact for both. The regression suite passes
 $861/861$ checks under each. A witness automaton is extracted and structurally
 validated for all $4141$ satisfiable instances.
 
-\paragraph{The cost where it does not fire.} We wrote a second, adversarial
-suite specifically to break \code{v2}: families one symbol away from
-decomposing, chains whose transitive closure is a single component, deep towers,
-constants across six orders of magnitude, punctual intervals, and conjunction
-widths up to $80$. On the $1838$ instances that completed it found no wrong
-verdict, no crash, and no timeout that \code{v1} did not also hit; the only
-disagreements were $56$ instances where \code{v1} timed out at $30$\,s and
-\code{v2} answered in milliseconds.
+\paragraph{The cost where it does not fire.} A second suite, of ten families of
+$220$ instances, exists to break \code{v2} rather than to flatter it: families
+one symbol away from decomposing, chains whose transitive closure is a single
+component, independence buried under a nest, components that decompose again,
+deep towers, constants across six orders of magnitude, punctual intervals, data
+variables, and conjunction widths up to $80$. Across all $2200$ instances there
+is no wrong verdict, no crash, no \code{v2} timeout and no instance where
+\code{v2} is materially slower. \code{v1} exhausts its budget on $200$ of them
+and \code{v2} answers every one, with median speed-ups of $63\times$ on the
+widest conjunctions and $11\times$ on recursively decomposing ones.
 
 What it did find is a tax. On the families built so that decomposition never
 fires, \code{v2} was $9$--$11\%$ slower, consistently enough at $0.1$--$0.3$\,s

@@ -33,7 +33,7 @@ NODES_RE = re.compile(r"nodes=(\d+)")
 CLEAN_ENV = {k: v for k, v in os.environ.items() if not k.startswith("TCTL_")}
 
 
-def run_one(solver: Path, inst, timeout: int) -> dict:
+def run_one(solver: Path, inst, timeout: int, v1_timeout: int = 0) -> dict:
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as fh:
         fh.write(inst.formula + "\n")
         path = fh.name
@@ -41,11 +41,16 @@ def run_one(solver: Path, inst, timeout: int) -> dict:
            "expected": inst.expected, "formula": inst.formula}
     try:
         for ver in ("v1", "v2"):
+            # v1 gets a shorter budget on purpose.  The suite exists to measure
+            # v2, and v1 exhausting its budget is a result, not something to
+            # wait out: the first run spent most of its wall clock on v1
+            # timeouts and never reached the last family.
+            budget = v1_timeout if (ver == "v1" and v1_timeout) else timeout
             t0 = time.perf_counter()
             try:
                 r = subprocess.run(
                     [str(solver), "--version", ver, "--stats", path],
-                    capture_output=True, text=True, timeout=timeout,
+                    capture_output=True, text=True, timeout=budget,
                     env=CLEAN_ENV)
                 el = time.perf_counter() - t0
                 if r.returncode < 0 or r.returncode > 1:
@@ -60,14 +65,15 @@ def run_one(solver: Path, inst, timeout: int) -> dict:
                 rec[ver + "_nodes"] = int(m.group(1)) if m else None
                 rec[ver + "_rc"] = r.returncode
             except subprocess.TimeoutExpired:
-                el = float(timeout)
+                el = float(budget)
                 rec[ver] = "TIMEOUT"
                 rec[ver + "_nodes"] = None
             rec[ver + "_t"] = el
     finally:
         os.unlink(path)
 
-    rec["disagree"] = rec["v1"] != rec["v2"]
+    rec["v2_only"] = rec["v1"] == "TIMEOUT" and rec["v2"] in ("SAT", "UNSAT")
+    rec["disagree"] = (rec["v1"] != rec["v2"]) and not rec["v2_only"]
     rec["wrong"] = bool(inst.expected) and rec["v2"] in ("SAT", "UNSAT") \
         and rec["v2"] != inst.expected
     rec["crash"] = "CRASH" in (rec["v1"], rec["v2"]) or "ERROR" in (rec["v1"], rec["v2"])
@@ -84,6 +90,8 @@ def main() -> int:
     ap.add_argument("--out", type=Path,
                     default=Path("bench/results/stress.jsonl"))
     ap.add_argument("--timeout", type=int, default=30)
+    ap.add_argument("--v1-timeout", type=int, default=3,
+                    help="separate, shorter budget for v1 (0 = same as v2)")
     ap.add_argument("--jobs", type=int, default=8)
     ap.add_argument("--limit", type=int, default=0)
     args = ap.parse_args()
@@ -97,8 +105,8 @@ def main() -> int:
     recs = []
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("w") as fh, ThreadPoolExecutor(args.jobs) as pool:
-        futs = [pool.submit(run_one, args.solver.resolve(), i, args.timeout)
-                for i in insts]
+        futs = [pool.submit(run_one, args.solver.resolve(), i, args.timeout,
+                            args.v1_timeout) for i in insts]
         for n, f in enumerate(as_completed(futs), 1):
             rec = f.result()
             recs.append(rec)

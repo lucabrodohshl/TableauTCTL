@@ -137,6 +137,42 @@ The bitmasks and the no-split memo took that tax down from about $30\%$; what
 remains is building the item vector at nodes whose shape has not been seen
 before.
 
+\subsection{The adversarial suite}
+
+A second suite exists to break \code{v2} rather than to flatter it: ten families
+of $220$ instances each, one symbol away from decomposing (\code{almost},
+\code{chain}), chained so the transitive closure is one component, buried under
+a nest, decomposing recursively, and pushing nesting depth, constant magnitude,
+punctual intervals and conjunction width up to $80$. Both versions run on every
+instance, with \code{v1} on a shorter budget: it is \code{v2} being measured,
+and \code{v1} exhausting its budget is a result rather than something to wait
+out.
+
+\begin{center}\small
+\begin{tabular}{@{}lrrrrrr@{}}
+\toprule
+family & $n$ & \code{v1} t/o & \code{v2} t/o & wrong & disagree & median $\times$\\
+\midrule
+\code{almost}     & 220 & 0 & 0 & 0 & 0 & $0.94$ \\
+\code{chain}      & 220 & 0 & 0 & 0 & 0 & $0.92$ \\
+\code{onevar}     & 220 & 0 & 0 & 0 & 0 & $1.07$ \\
+\code{deepsplit}  & 220 & 0 & 0 & 0 & 0 & $1.19$ \\
+\code{recursive}  & 220 & 36 & 0 & 0 & 0 & $11.48$ \\
+\code{tower}      & 220 & 0 & 0 & 0 & 0 & $0.97$ \\
+\code{bigM}       & 220 & 0 & 0 & 0 & 0 & $0.98$ \\
+\code{punct}      & 220 & 0 & 0 & 0 & 0 & $1.08$ \\
+\code{manyclocks} & 220 & 164 & 0 & 0 & 0 & $62.82$ \\
+\code{unsatwin}   & 220 & 0 & 0 & 0 & 0 & $1.00$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Across all $2200$: no wrong verdict, no crash, no \code{v2} timeout, and no
+instance where \code{v2} is materially slower. \code{v1} exhausts its budget on
+$200$ of them and \code{v2} answers every one. The families that were built so
+decomposition never fires cost between two and eight per cent, which is the
+honest price of asking.
+
 \subsection{What these numbers do and do not show}
 
 They \emph{do} show that the $2^k$ in \cref{sec:problem} is an artefact of

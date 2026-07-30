@@ -99,18 +99,32 @@ downwards, with the polarity uniform so there is no other constraint to
 violate. Only an atom appearing both ways would link, and data variables would
 stay exempt, a constraint over one being monotone in neither direction.
 
-Implemented, the polarity analysis is correct --- on
-$\mathrm{AG}_{[0,4]}\mathrm{E}(p\,\mathbf{U}_{[1,2]}q)\wedge\mathrm{AG}_{[0,3]}\neg q$
-it classifies $q$ as both-polarity and $p$ as positive-only, which is what the
-rule intends --- and five self-test checks fail, including that formula, which
-is unsatisfiable and comes back satisfiable. So the monotonicity argument has a
-gap. A plausible place to look is that a component is decided against a
-\emph{node}, not against the root formula, and an AND-sibling of that node
-carries constraints that the component's own atoms do not mention; but that is
-a conjecture, not a diagnosis.
+It is unsound, and the reason is not a gap in the monotonicity argument but a
+misuse of the theorem. Restricting the relaxation to positive-only atoms fails
+the same five checks as taking both polarities, which rules out the dual
+half being at fault. Deciding each split twice, once by components and once
+without, and reporting the first divergence, gives the node directly:
+\[
+  \Gam=\{p\},\qquad
+  P=\{\mathrm{E}(p\,\mathbf{U}_{[1,2]}q)^{\bullet},\;
+       \mathrm{AG}_{[0,4]}(\cdots)^{\bullet},\;
+       \mathrm{AG}_{[0,3]}(\neg q)^{\bullet}\}
+\]
+which splits into $\{p\}$ and the three pursuits, is satisfiable by components
+and unsatisfiable without.
 
-Recorded rather than fixed: the idea is worth more thought, the reasoning above
-is where to resume, and the failing formula is the test to resume against.
+The fault is visible once the node is: $p$ is put in one component, and it still
+\emph{occurs} in the other, inside $\mathrm{E}(p\,\mathbf{U}_{[1,2]}q)$.
+Masking an atom out of the linking relation is not the same as making the atom
+sets disjoint, and \ref{S1} asks for the latter. The relaxation does not weaken
+a side condition of \cref{thm:decomp}; it violates its hypothesis, so the
+theorem simply does not apply and no amount of care about the product
+construction repairs that.
+
+Any future attempt has to make the sets genuinely disjoint --- by rewriting the
+components so the shared atom occurs in one of them only --- rather than by
+declaring a shared atom harmless. Recorded here because the argument for the
+relaxation is genuinely tempting and this is why it does not work.
 
 \subsection{Conflict-driven anything}
 
