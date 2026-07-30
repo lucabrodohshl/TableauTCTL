@@ -82,6 +82,36 @@ relaunches. Restricting it to modalities under no enclosing until keeps the wins
 and caps the loss at $8\%$. Left behind a flag, default off; the regression is
 real and unbounded in depth.
 
+\subsection{Single-polarity atoms as non-linking}
+
+The partition joins two items whenever they share an atom, so a conjunction of
+$k$ obligations that all mention one shared enabling proposition never
+decomposes --- the shape \code{almost} in the adversarial suite, and the one
+that most obviously ought to yield.
+
+The argument for splitting anyway: the input is in negation normal form, so an
+atom occurring under a single polarity cannot be the subject of a disagreement.
+Give the product the union of the two labellings for an atom that only ever
+occurs positively and the intersection for one that only occurs negatively;
+each component's formulas should then survive by monotonicity, a positive
+literal being monotone upwards in the states where it holds and a negative one
+downwards, with the polarity uniform so there is no other constraint to
+violate. Only an atom appearing both ways would link, and data variables would
+stay exempt, a constraint over one being monotone in neither direction.
+
+Implemented, the polarity analysis is correct --- on
+$\mathrm{AG}_{[0,4]}\mathrm{E}(p\,\mathbf{U}_{[1,2]}q)\wedge\mathrm{AG}_{[0,3]}\neg q$
+it classifies $q$ as both-polarity and $p$ as positive-only, which is what the
+rule intends --- and five self-test checks fail, including that formula, which
+is unsatisfiable and comes back satisfiable. So the monotonicity argument has a
+gap. A plausible place to look is that a component is decided against a
+\emph{node}, not against the root formula, and an AND-sibling of that node
+carries constraints that the component's own atoms do not mention; but that is
+a conjecture, not a diagnosis.
+
+Recorded rather than fixed: the idea is worth more thought, the reasoning above
+is where to resume, and the failing formula is the test to resume against.
+
 \subsection{Conflict-driven anything}
 
 See \cref{sec:problem}: zero rejected and zero closed nodes on the hardest
