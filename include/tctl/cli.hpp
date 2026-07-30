@@ -26,6 +26,9 @@ struct Options {
     bool        show_stats = false;
     bool        help = false;
     bool        tot = false; // conjoin all formulas in the input with AND and check as one formula
+    /// Which search to run.  This branch implements v1 only; --version v2 is
+    /// rejected, and v2 itself lives on the 'v2' branch.
+    int         version = 1;
 
     // ── Benchmark mode ──────────────────────────────────────────────────
     bool              benchmark = false;

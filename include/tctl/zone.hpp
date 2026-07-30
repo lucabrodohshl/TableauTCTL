@@ -154,6 +154,11 @@ public:
     
     /// Free a clock (remove all constraints involving it except clock >= 0)
     void free(ClockId clock);
+
+    /// @brief Existentially quantify out every clock flagged in @p dead.
+    /// Equivalent to a #free per flagged clock, at one closure rather than one
+    /// per clock.  @p dead is indexed by ClockId and must cover the dimension.
+    void free_many(const std::vector<unsigned char>& dead);
     
     /// Extrapolate using max bounds per clock. Abstracts away clock values
     /// beyond the maximum constant they are compared against, ensuring

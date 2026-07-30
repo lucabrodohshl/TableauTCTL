@@ -61,6 +61,16 @@ Options parse_args(int argc, char* argv[]) {
             if (mode == "none") opts.bench_opts.abstraction_M_default = false;
             else if (mode == "M" || mode == "both") opts.bench_opts.abstraction_M_default = true;
             else throw std::runtime_error("--bench-abstraction must be M, none, or both");
+        } else if (arg == "--version") {
+            if (i + 1 >= argc)
+                throw std::runtime_error("--version needs v1 or v2");
+            const std::string v = argv[++i];
+            if (v == "v1" || v == "1")      opts.version = 1;
+            else if (v == "v2" || v == "2")
+                throw std::runtime_error(
+                    "--version v2: not implemented yet on this branch "
+                    "(see the 'v2' branch)");
+            else throw std::runtime_error("--version takes v1 or v2, got: " + v);
         } else if (arg == "--model" || arg == "--show-model") {
             opts.show_model = true;
         } else if (arg == "--stats" || arg == "--show-stats") {
@@ -136,6 +146,10 @@ void print_usage(const char* program_name) {
         << "  --output <dir>  Directory to write extracted models (default: current)\n"
         << "  --real-vars a,b Declare variable names as Real-sorted (else Int)\n"
         << "  --tot, --all, --all_formula  Conjoin all input formulas and check as one\n"
+        << "  --version v1     The search this branch implements (the default).\n"
+        << "                   v2 is not implemented here; it lives on the\n"
+        << "                   'v2' branch, where it adds component\n"
+        << "                   decomposition and goal subsumption.\n"
         << "  --help, -h    Show this message\n"
         << "\n"
         << "Benchmark options (use with --benchmark):\n"
@@ -203,6 +217,7 @@ int run(const Options& opts) {
     FormulaFactory factory;
     Tableau engine(factory);
     engine.set_extract_witness(opts.show_model);
+    engine.set_version(Tableau::Version::V1);   // v2 lives on the 'v2' branch
     bool had_errors = false;
 
     for (std::size_t i = 0; i < formulas.size(); ++i) {
