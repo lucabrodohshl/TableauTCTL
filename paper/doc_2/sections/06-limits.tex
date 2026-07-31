@@ -12,6 +12,24 @@ atoms --- and their growth is untouched. Six separate attempts on that growth
 are recorded in \cref{sec:negative}; none moved it. The remaining growth is
 believed to be the genuine $2^{O(n)}$ of the bound.
 
+\paragraph{The clock condition is a guard, not a heuristic.}
+\ref{S2} refuses the split when a clock is constrained but owned by no
+component, and it was worth asking whether a cleverer test --- dropping a clock
+whose value no rule can still read --- would recover splits. It would recover
+none. Counted over every family of both suites, that branch fires zero times
+against $1590$ successful splits: dead-clock elimination has already freed
+anything no pursuit and no deadline reads, so a clock still constrained at this
+point is live and therefore owned. The condition stays as a guard against a
+future rule that leaves a clock behind.
+
+\paragraph{Splitting is not always worth it.}
+The two families written so that decomposition cannot fire, \code{almost} and
+\code{chain}, in fact split $436$ and $1099$ times: the shared atom stops
+mattering once it has been consumed, and the residuals do fall apart. Both
+families still measure below $1.0$ against the undecomposed search. So a split
+that is available is not automatically a split that pays, and nothing here tries
+to predict which is which.
+
 \paragraph{The test can only see syntactic independence.}
 Two components sharing a symbol are never split even when the symbol is used in
 ways that do not interact. The symbols counted are atomic propositions and data

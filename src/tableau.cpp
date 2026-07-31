@@ -1959,6 +1959,10 @@ private:
             int cnt = 0;
             for (const auto& o : owns) cnt += o[c] ? 1 : 0;
             if (cnt > 1) return {};
+            // Measured over every family of both suites, this second test never
+            // fires: collapse_dead_clocks has already freed anything no pursuit
+            // and no deadline reads, so a clock still constrained here is live
+            // and therefore owned. It is kept as a guard, not as a heuristic.
             if (cnt == 0 && !n.Z.get_bound(c, kReferenceClock).is_infinity())
                 return {};        // constrained but unowned: do not split
         }
