@@ -2631,6 +2631,23 @@ const char* result_to_string(const Result& r) noexcept {
     return "UNKNOWN";
 }
 
+// Peak resident size of this process, in bytes.
+//
+// The field existed and nothing ever wrote it, so --stats never printed a
+// memory figure and every harness that read one recorded zero. getrusage
+// reports the high-water mark for the whole process, which is what a
+// single-formula run wants; the unit differs by platform, bytes on macOS and
+// kilobytes on Linux.
+static std::uint64_t peak_resident_bytes() {
+    struct rusage ru;
+    if (getrusage(RUSAGE_SELF, &ru) != 0) return 0;
+#if defined(__APPLE__)
+    return static_cast<std::uint64_t>(ru.ru_maxrss);
+#else
+    return static_cast<std::uint64_t>(ru.ru_maxrss) * 1024ull;
+#endif
+}
+
 std::string SearchStats::to_string() const {
     // Only counters the engine actually maintains are reported: printing a
     // field that is always zero reads as a measurement rather than as an
@@ -2786,6 +2803,7 @@ Result Tableau::check(FormulaId normalized_formula) {
     else                          verdict = Result::Value::Unsatisfiable;
 
     stats_.nodes_created = engine.nodes();
+    stats_.peak_memory_bytes = peak_resident_bytes();
 
     const auto t1 = std::chrono::steady_clock::now();
     return Result(verdict, std::chrono::duration<double>(t1 - t0).count());
