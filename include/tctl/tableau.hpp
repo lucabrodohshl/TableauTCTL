@@ -288,6 +288,13 @@ struct SearchStats {
     std::uint64_t distinct_zones    = 0;  ///< Distinct @f$\cong_M@f$-zones encountered.
     std::uint64_t loop_checks       = 0;  ///< Candidate loops tested for acceptance.
     std::uint64_t peak_memory_bytes = 0;  ///< Peak resident size observed.
+    /// @brief Zones that straddled a release window.
+    ///
+    /// Delay cuts each clock at the constants the rules read, and a release's
+    /// endpoints are among them, so a zone should lie wholly before, wholly
+    /// inside or wholly beyond its window.  This counts the times that failed
+    /// and the partition rule had to fire; it should stay at zero.
+    std::uint64_t straddles = 0;
 
     /// Reset every counter to zero.
     void reset() noexcept { *this = SearchStats{}; }

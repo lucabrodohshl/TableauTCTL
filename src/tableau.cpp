@@ -491,6 +491,7 @@ public:
     }
 
     std::uint64_t nodes() const { return expansions_ + sub_nodes_; }
+    std::uint64_t straddles() const { return straddle_; }
     bool budget_hit() const { return budget_hit_; }
 
     /// Witness automaton for the marking of the last successful decide().
@@ -1447,6 +1448,43 @@ private:
                 in.pursuits[i].stage = Pursuit::Stage::Here;
                 return {Expansion::Kind::And, {in}};
             }
+            // Cells never straddle a window boundary: Delay cuts each clock at
+            // the constants the rules read, and a release's endpoints are among
+            // them, so Z lies wholly before, wholly inside or wholly beyond I.
+            // Determine which and act, instead of partitioning.  The partition
+            // below is kept only for a zone that does straddle; straddle_ counts
+            // how often that happens, and on the whole suite it should be never.
+            {
+                Zone before = n.Z; before.add_upper_bound(p.x_mu, w.lo, !w.lo_strict);
+                Zone in = n.Z; constrain_in_window(in, p.x_mu, w);
+                const int parts = (!before.is_empty()) + (!in.is_empty());
+                Zone after = n.Z;
+                bool after_ne = false;
+                const Window ow2 = window_of(p.mu, f_);
+                if (p.persistent && !ow2.hi_inf && p.y_mu != kNoClock) {
+                    after.add_lower_bound(p.y_mu, ow2.hi, !ow2.hi_strict);
+                    after_ne = !after.is_empty();
+                } else if (!w.hi_inf) {
+                    after.add_lower_bound(p.x_mu, w.hi, !w.hi_strict);
+                    after_ne = !after.is_empty();
+                }
+                if (parts + (after_ne ? 1 : 0) == 1) {
+                    Node one = n;
+                    if (!before.is_empty()) {
+                        one.pursuits[i].part = Pursuit::Part::BeforeI;
+                        one.pursuits[i].stage = Pursuit::Stage::Here;
+                    } else if (!in.is_empty()) {
+                        one.pursuits[i].part = Pursuit::Part::InI;
+                        one.pursuits[i].stage = Pursuit::Stage::Here;
+                    } else {
+                        one.pursuits.erase(one.pursuits.begin() +
+                                           static_cast<long>(i));
+                    }
+                    return {Expansion::Kind::And, {one}};
+                }
+                ++straddle_;
+            }
+
             // (R^split): partition Z by x_mu vs I; pursue before/in, lapse after.
             Expansion e; e.kind = Expansion::Kind::And;
             // before: x_mu ≤ lo (strict iff lo ∈ I)
@@ -2691,6 +2729,8 @@ private:
     ClockMap cmap_;
     /// The onset clock y_mu of every modality that can become persistent.
     ClockMap ymap_;
+    /// Zones that straddled a release window: the cell discipline says none can.
+    mutable std::uint64_t straddle_ = 0;
     std::size_t nc_ = 1;
     std::vector<std::int32_t> max_;
     std::vector<std::int32_t> bounds_;   // sorted formula interval endpoints (+0)
@@ -2762,6 +2802,7 @@ std::string SearchStats::to_string() const {
     if (distinct_zones)    os << " distinct_zones=" << distinct_zones;
     if (loop_checks)       os << " loop_checks=" << loop_checks;
     if (peak_memory_bytes) os << " peak_mem_kb=" << (peak_memory_bytes + 1023) / 1024;
+    if (straddles)         os << " straddles=" << straddles;
     return os.str();
 }
 
@@ -2908,6 +2949,7 @@ Result Tableau::check(FormulaId normalized_formula) {
     else                          verdict = Result::Value::Unsatisfiable;
 
     stats_.nodes_created = engine.nodes();
+    stats_.straddles = engine.straddles();
     stats_.peak_memory_bytes = peak_resident_bytes();
 
     const auto t1 = std::chrono::steady_clock::now();
