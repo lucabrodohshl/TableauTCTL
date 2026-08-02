@@ -132,3 +132,9 @@ UDBM
 # The per-instance JSONL is 50+ MB per sweep and is a build product of
 # bench/*.py; the summaries next to it are small and are kept.
 bench/results/*.jsonl
+
+outputs_perf/
+bench/
+benchmark_001/
+benchmark_002/
+.venv/

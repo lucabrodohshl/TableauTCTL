@@ -316,10 +316,46 @@ public:
         for (ClockId c = 1; c < nc_; ++c)
             max_[c] = clock_bounds_[c].empty() ? 0 : clock_bounds_[c].back();
         add_onset_shifts(root, f);
+        add_band_splits(root, f);
         collect_top_ags(root, f);
         number_atoms(root, f);
         debug_ = std::getenv("TCTL_DEBUG") != nullptr;
         words_ = (nc_ + 63) / 64;
+    }
+
+    /// Band splits: cut a until-clock every (b-a) across its live range.
+    ///
+    /// EXPERIMENT (completeness). A witness of the until's right argument at
+    /// time t answers exactly the onsets d with t+d in I, an interval of width
+    /// b-a.  So a zone whose x_mu range is wider than b-a holds onsets that no
+    /// single witness serves, and the (EX) child on that zone has no one
+    /// configuration realising it -- the step the completeness proof cannot
+    /// discharge.  Cutting x_mu at a, a+(b-a), a+2(b-a), ... makes every zone
+    /// narrow enough that one witness covers it.
+    ///
+    /// The cost is that the cut count is b/(b-a), which depends on the
+    /// magnitude of the constants and not only on their number, so this trades
+    /// the flat-in-M behaviour for the proof step.  Guarded by TCTL_BANDS so
+    /// the default search is unchanged.
+    void add_band_splits(FormulaId root, FormulaFactory& f) {
+        if (std::getenv("TCTL_BANDS") == nullptr) return;
+        std::function<void(FormulaId)> walk = [&](FormulaId x) {
+            if (x == kInvalidId) return;
+            const FormulaNode& n = f.node(x);
+            if (is_timed(n.kind) && is_until_modality(n.kind)) {
+                const ClockId c = clock_of(cmap_, x);
+                if (c != kNoClock && c < nc_) {
+                    for (std::int32_t k = 1; k < max_[c]; ++k)
+                        clock_bounds_[c].push_back(k);
+                }
+            }
+            walk(n.children[0]); walk(n.children[1]);
+        };
+        walk(root);
+        for (std::vector<std::int32_t>& bs : clock_bounds_) {
+            std::sort(bs.begin(), bs.end());
+            bs.erase(std::unique(bs.begin(), bs.end()), bs.end());
+        }
     }
 
     /// Split points a clock needs so that *onsets* stay distinguishable.
