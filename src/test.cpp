@@ -2584,7 +2584,8 @@ static void test_satisfaction_set(TestContext& ctx) {
 // A node demanding `mu` at the onset (Z = all clocks zero over S_X's space).
 static Node make_demand_node(FormulaId mu, const FormulaSet& X, FormulaFactory& f) {
     ClockMap cm = assign_clocks(mu, f);
-    std::size_t nc = 1 + cm.size();
+    ClockMap ym = assign_onset_clocks(mu, f, static_cast<ClockId>(1 + cm.size()));
+    std::size_t nc = 1 + cm.size() + ym.size();
     Node n;
     n.Gamma.insert(mu);
     n.X = X;

@@ -128,10 +128,13 @@ CoverResult apply_cover(const Node& n, FormulaId mu, bool ag_context_,
     // the relaunch resets x_mu and pursues the new onset, while the discharge
     // child of that (Cov) carries the running pursuit onward.
     const NodeKind mk0 = f.node(mu).kind;
-    const Window mw0 = window_of(mu, f);
-    const bool recover_redemand =
-        clock_of(cmap, mu) != kNoClock && !mw0.hi_inf &&
-        !(is_until_modality(mk0) && is_universal(mk0));
+    // A re-demand is folded into the running pursuit exactly when the modality
+    // is universal.  Every run must comply with every onset, so one pursuit can
+    // serve them all.  An existential modality is never absorbed: distinct
+    // onsets may be witnessed by distinct runs, so a recurring demand launches a
+    // fresh pursuit on the launch branch while the running one rides the
+    // discharge branch, and the launch drops the deferred pursuits so only one
+    // is ever live per modality.
     // (Absorb).  The paper states this rule for an until: a re-demand whose
     // window is unbounded is discharged against the running pursuit, because the
     // pursuits still to be launched witness psi at unboundedly large times and an
@@ -144,13 +147,18 @@ CoverResult apply_cover(const Node& n, FormulaId mu, bool ag_context_,
     // restricting this to untils keeps every verdict and the whole suite, and
     // costs a couple of extra nodes per nested release (AG(AG p): 23 vs 21).
     for (const Pursuit& p : n.pursuits) {
-        if (p.mu == mu && !recover_redemand) {
+        if (p.mu == mu && is_universal(mk0)) {
             CoverResult only;
             only.kind = CoverResult::Kind::Cover;
             Node discharge;
             discharge.Gamma = gamma_without(n.Gamma, mu);
             discharge.X = n.X; discharge.Z = n.Z; discharge.O = n.O;
             discharge.D = n.D; discharge.pursuits = n.pursuits; discharge.phase = n.phase;
+            // This demand is the newest onset the pursuit owes an answer to.
+            if (p.y_mu != kNoClock) {
+                discharge.Z.reset(p.y_mu);
+                discharge.just_reset.push_back(p.y_mu);
+            }
             // The re-demand itself is the evidence that this demand is
             // persistent.  Discharging it against the live pursuit is sound for
             // the *window*, but nothing then bounds the time to the NEXT
@@ -162,10 +170,20 @@ CoverResult apply_cover(const Node& n, FormulaId mu, bool ag_context_,
             // witnesses on one run over-constrains it (measured: it turns
             // AG(EF[1,3](AG(EF[4,6](AG(EF[7,9]p))))) UNSAT, which is SAT).
             const Window rw = window_of(mu, f);
-            if (is_until_modality(f.node(mu).kind) && is_universal(f.node(mu).kind) &&
-                !rw.hi_inf && clock_of(cmap, mu) != kNoClock) {
-                for (Pursuit& q : discharge.pursuits)
-                    if (q.mu == mu) q.persistent = true;
+            if (clock_of(cmap, mu) != kNoClock) {
+                for (Pursuit& q : discharge.pursuits) {
+                    if (q.mu != mu) continue;
+                    if (is_until_modality(mk0)) {
+                        // A recurrence, not a deadline: witnesses at most
+                        // sup I - inf I apart answer every onset carried in.
+                        if (!rw.hi_inf) q.persistent = true;
+                    } else {
+                        // A release merges exactly: while nothing has released
+                        // it, the onsets in [t0,t] demand psi over the union of
+                        // their windows, which is [t0 + inf I, inf).
+                        q.persistent = true;
+                    }
+                }
             }
             only.children.push_back(std::move(discharge));
             return only;
@@ -1228,6 +1246,9 @@ private:
     /// witness, so the guard is the *recurrence* window [0, sup I - inf I].
     Window pursuit_window(const Pursuit& p) const {
         Window w = window_of(p.mu, f_);
+        // A persistent release runs to infinity from its first onset: the
+        // windows of the onsets absorbed into it union to [inf I, inf).
+        if (p.persistent && !p.is_until) { w.hi_inf = true; w.hi_strict = false; return w; }
         if (!p.rolled || w.hi_inf) return w;
         Window r;
         r.lo = 0; r.lo_strict = false;
@@ -1336,8 +1357,39 @@ private:
             constrain_in_window(stopZ, p.x_mu, w);
             if (!stopZ.is_empty()) {
                 for (const Zone& r : integer_regions(stopZ, p.x_mu)) {
+                    // The stop of a persistent pursuit also asserts phi when
+                    // inf I > 0: an onset s with w - s < inf I is not answered
+                    // at w and must wait for the next witness, so phi is still
+                    // owed here.  At inf I = 0 every onset up to w is answered
+                    // at w and nothing is owed.
+                    const Window ow0 = window_of(p.mu, f_);
+                    const bool owes_phi = p.persistent && ow0.lo > 0;
+
+                    // (U*-drop): a persistent pursuit may stop being persistent.
+                    // A witness at w answers every onset at or before w - inf I,
+                    // so the pursuit ends here exactly when no onset has been
+                    // raised since inf I before now -- y_mu >= inf I.  Without
+                    // this the recurrence is eternal and
+                    // AG[0,5](AF[1,2] q) & AG[8,inf) !q, which is satisfiable,
+                    // is rejected.
+                    if (p.persistent && p.y_mu != kNoClock) {
+                        Node drop = n;
+                        drop.Gamma.insert(psi);
+                        if (owes_phi) drop.Gamma.insert(phi);
+                        drop.Z = r;
+                        drop.Z.add_lower_bound(p.y_mu, ow0.lo, true);
+                        if (!drop.Z.is_empty()) {
+                            drop.pursuits.erase(drop.pursuits.begin() +
+                                                static_cast<long>(i));
+                            drop.D = drop_deadline(n.D, p.x_mu);
+                            drop.discharges_until = p.mu;
+                            e.children.push_back(std::move(drop));
+                        }
+                    }
+
                     Node stop = n;
                     stop.Gamma.insert(psi);
+                    if (owes_phi) stop.Gamma.insert(phi);
                     stop.Z = r;
                     if (p.persistent) {
                         // Persistent demand: the obligation recurs, so the
@@ -1405,8 +1457,23 @@ private:
                     e.children.push_back(in);
                 }
             }
-            // after: x_mu ≥ hi (strict iff hi ∈ I) → lapsed, drop pursuit
-            if (!w.hi_inf) {
+            // after: lapsed, drop the pursuit.
+            //
+            // An ordinary release lapses once x_mu passes sup I.  A persistent
+            // one cannot: its window is [inf I, inf), because the onsets absorbed
+            // into it union to that.  What ends it is the onsets stopping -- the
+            // last of them, y_mu ago, outliving its own window -- so it lapses on
+            // y_mu > sup I against the *original* window.
+            const Window ow = window_of(p.mu, f_);
+            const bool lapse_on_y = p.persistent && !ow.hi_inf && p.y_mu != kNoClock;
+            if (lapse_on_y) {
+                Node after = n;
+                after.Z.add_lower_bound(p.y_mu, ow.hi, !ow.hi_strict);
+                if (!after.Z.is_empty()) {
+                    after.pursuits.erase(after.pursuits.begin() + static_cast<long>(i));
+                    e.children.push_back(after);
+                }
+            } else if (!w.hi_inf) {
                 Node after = n; after.Z.add_lower_bound(p.x_mu, w.hi, !w.hi_strict);
                 if (!after.Z.is_empty()) {
                     after.pursuits.erase(after.pursuits.begin() + static_cast<long>(i));
