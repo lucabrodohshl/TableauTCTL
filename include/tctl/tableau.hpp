@@ -109,6 +109,17 @@ struct Pursuit {
 
     FormulaId mu;                    ///< The launched modality @f$Q(\varphi \circ_I \psi)@f$.
     ClockId   x_mu;                  ///< Its formula-clock; also a key in @f$O@f$.
+    /// @brief The onset clock @f$y_\mu@f$: time since the demand was last raised.
+    ///
+    /// Reset at launch and again by every absorbed re-demand, so it measures the
+    /// age of the newest onset the pursuit owes an answer to.  A witness answers
+    /// every onset at or before @f$w - \inf I@f$, so a persistent pursuit may
+    /// stop at a witness exactly when @f$y_\mu \geq \inf I@f$ -- nothing has been
+    /// demanded since.  Without it the recurrence would be eternal, and
+    /// @f$AG_{[0,5]}AF_{[1,2]}q \wedge AG_{[8,\infty)}\neg q@f$, which is
+    /// satisfiable, would be rejected.  #kNoClock for an existential modality,
+    /// which is never absorbed.
+    ClockId   y_mu = kNoClock;
     Stage     stage = Stage::Here;   ///< Current proof-theoretic marker.
     Part      part  = Part::Whole;   ///< Region being pursued (releases only).
     bool      is_until = true;       ///< Until pursuits are subject to loop condition (i).
@@ -133,13 +144,15 @@ struct Pursuit {
     bool      rolled = false;
 
     bool operator==(const Pursuit& o) const noexcept {
-        return mu == o.mu && x_mu == o.x_mu && stage == o.stage &&
+        return mu == o.mu && x_mu == o.x_mu && y_mu == o.y_mu &&
+               stage == o.stage &&
                part == o.part && is_until == o.is_until &&
                persistent == o.persistent && rolled == o.rolled;
     }
     bool operator<(const Pursuit& o) const noexcept {
         if (mu != o.mu)       return mu < o.mu;
         if (x_mu != o.x_mu)   return x_mu < o.x_mu;
+        if (y_mu != o.y_mu)   return y_mu < o.y_mu;
         if (stage != o.stage) return stage < o.stage;
         if (part != o.part)   return part < o.part;
         if (persistent != o.persistent) return persistent < o.persistent;
@@ -231,6 +244,7 @@ struct CoverResult {
 /// so the window is measured from this configuration onward.
 CoverResult apply_cover(const Node& n, FormulaId mu, bool ag_context,
                         const std::map<FormulaId, ClockId>& cmap,
+                        const std::map<FormulaId, ClockId>& ymap,
                         std::size_t num_clocks,
                         const std::vector<std::int32_t>& max, FormulaFactory& f,
                         SatCache& sx_cache);

@@ -106,6 +106,7 @@ PooledVec<Deadline> drop_deadline(const PooledVec<Deadline>& D, ClockId x) {
 // does not have.  They are kept so the call sites need not change.
 CoverResult apply_cover(const Node& n, FormulaId mu, bool ag_context_,
                         const std::map<FormulaId, ClockId>& cmap,
+                        const std::map<FormulaId, ClockId>& ymap,
                         [[maybe_unused]] std::size_t num_clocks,
                         [[maybe_unused]] const std::vector<std::int32_t>& max,
                         FormulaFactory& f,
@@ -209,6 +210,7 @@ CoverResult apply_cover(const Node& n, FormulaId mu, bool ag_context_,
     }
 
     const ClockId x_mu = clock_of(cmap, mu);    // kNoClock if mu is untimed
+    const ClockId y_mu = clock_of(ymap, mu);    // kNoClock unless mu is universal
 
     // Onset: the launch resets x_mu, so start measuring the window now by
     // *resetting* x_mu (not intersecting with x_mu=0 — the clock may already
@@ -241,6 +243,11 @@ CoverResult apply_cover(const Node& n, FormulaId mu, bool ag_context_,
         if (x_mu != kNoClock) {
             launch.Z.reset(x_mu);
             launch.just_reset.push_back(x_mu);
+            // The launch is itself an onset, so y_mu starts here too.
+            if (y_mu != kNoClock) {
+                launch.Z.reset(y_mu);
+                launch.just_reset.push_back(y_mu);
+            }
             bool haveO = false;
             for (const auto& e : launch.O)
                 if (e.first == mu) { haveO = true; break; }
@@ -250,7 +257,7 @@ CoverResult apply_cover(const Node& n, FormulaId mu, bool ag_context_,
                 std::sort(launch.O.begin(), launch.O.end());
             }
         }
-        Pursuit p; p.mu = mu; p.x_mu = x_mu;
+        Pursuit p; p.mu = mu; p.x_mu = x_mu; p.y_mu = y_mu;
         p.stage = Pursuit::Stage::Here; p.part = Pursuit::Part::Whole;
         p.is_until = until_kind;
         // A relaunch (E re-demand) replaces the live pursuit rather than
@@ -300,7 +307,11 @@ public:
         }
         root_formula_ = root;
         cmap_ = assign_clocks(root, f);
-        nc_ = 1 + cmap_.size();
+        // y_mu numbers after every x_mu, so a clock index still identifies its
+        // map by range and the two never collide.
+        ymap_ = assign_onset_clocks(root, f,
+                                    static_cast<ClockId>(1 + cmap_.size()));
+        nc_ = 1 + cmap_.size() + ymap_.size();
         std::int32_t M = max_constant(root, f);
         max_.assign(nc_, M);
         max_[0] = 0;
@@ -313,49 +324,29 @@ public:
         // M^O(K^2) zone count of Lemma 1 directly.  The maximum is read off the
         // clock's *own* constants, before the shifts added below, which only
         // refine where time is split and never widen what a guard can see.
+        // An onset clock is tested only against its own modality's endpoints:
+        // y_mu >= inf I lets a persistent until stop, y_mu > sup I lets a
+        // persistent release lapse.  Those two are its cut points and sup I its
+        // maximum, so it is as flat in M as x_mu is.
+        for (const auto& [mu, y] : ymap_) {
+            const FormulaNode& mn = f.node(mu);
+            clock_bounds_[y].push_back(
+                static_cast<std::int32_t>(mn.time_lower.value));
+            if (!mn.time_upper.is_infinity)
+                clock_bounds_[y].push_back(
+                    static_cast<std::int32_t>(mn.time_upper.value));
+            std::sort(clock_bounds_[y].begin(), clock_bounds_[y].end());
+            clock_bounds_[y].erase(
+                std::unique(clock_bounds_[y].begin(), clock_bounds_[y].end()),
+                clock_bounds_[y].end());
+        }
         for (ClockId c = 1; c < nc_; ++c)
             max_[c] = clock_bounds_[c].empty() ? 0 : clock_bounds_[c].back();
         add_onset_shifts(root, f);
-        add_band_splits(root, f);
         collect_top_ags(root, f);
         number_atoms(root, f);
         debug_ = std::getenv("TCTL_DEBUG") != nullptr;
         words_ = (nc_ + 63) / 64;
-    }
-
-    /// Band splits: cut a until-clock every (b-a) across its live range.
-    ///
-    /// EXPERIMENT (completeness). A witness of the until's right argument at
-    /// time t answers exactly the onsets d with t+d in I, an interval of width
-    /// b-a.  So a zone whose x_mu range is wider than b-a holds onsets that no
-    /// single witness serves, and the (EX) child on that zone has no one
-    /// configuration realising it -- the step the completeness proof cannot
-    /// discharge.  Cutting x_mu at a, a+(b-a), a+2(b-a), ... makes every zone
-    /// narrow enough that one witness covers it.
-    ///
-    /// The cost is that the cut count is b/(b-a), which depends on the
-    /// magnitude of the constants and not only on their number, so this trades
-    /// the flat-in-M behaviour for the proof step.  Guarded by TCTL_BANDS so
-    /// the default search is unchanged.
-    void add_band_splits(FormulaId root, FormulaFactory& f) {
-        if (std::getenv("TCTL_BANDS") == nullptr) return;
-        std::function<void(FormulaId)> walk = [&](FormulaId x) {
-            if (x == kInvalidId) return;
-            const FormulaNode& n = f.node(x);
-            if (is_timed(n.kind) && is_until_modality(n.kind)) {
-                const ClockId c = clock_of(cmap_, x);
-                if (c != kNoClock && c < nc_) {
-                    for (std::int32_t k = 1; k < max_[c]; ++k)
-                        clock_bounds_[c].push_back(k);
-                }
-            }
-            walk(n.children[0]); walk(n.children[1]);
-        };
-        walk(root);
-        for (std::vector<std::int32_t>& bs : clock_bounds_) {
-            std::sort(bs.begin(), bs.end());
-            bs.erase(std::unique(bs.begin(), bs.end()), bs.end());
-        }
     }
 
     /// Split points a clock needs so that *onsets* stay distinguishable.
@@ -544,6 +535,7 @@ private:
         for (const Pursuit& p : n.pursuits)
             pursuit_scratch_.push_back({static_cast<std::uint32_t>(p.mu),
                                         static_cast<std::uint32_t>(p.x_mu),
+                                        static_cast<std::uint32_t>(p.y_mu),
                                         static_cast<std::uint32_t>(p.stage),
                                         static_cast<std::uint32_t>(p.part),
                                         static_cast<std::uint32_t>(p.is_until),
@@ -1297,7 +1289,7 @@ private:
         // Demanded modality in Gamma → cover.
         for (FormulaId id : n.Gamma.elements()) {
             if (is_modality(f_.node(id).kind)) {
-                CoverResult cr = apply_cover(n, id, ag_context_for(id), cmap_,
+                CoverResult cr = apply_cover(n, id, ag_context_for(id), cmap_, ymap_,
                                              nc_, max_, f_, sx_cache_);
                 switch (cr.kind) {
                     case CoverResult::Kind::Close:
@@ -2622,6 +2614,8 @@ private:
     Key intern_key_;
 
     ClockMap cmap_;
+    /// The onset clock y_mu of every modality that can become persistent.
+    ClockMap ymap_;
     std::size_t nc_ = 1;
     std::vector<std::int32_t> max_;
     std::vector<std::int32_t> bounds_;   // sorted formula interval endpoints (+0)
@@ -2644,7 +2638,7 @@ private:
     std::vector<const Key*> key_of_;                       // node id → its key
     std::size_t words_ = 1;                                // clock-bitmap width
     // key-building scratch, reused so the hot path allocates nothing
-    mutable std::vector<std::array<std::uint32_t, 7>> pursuit_scratch_;
+    mutable std::vector<std::array<std::uint32_t, 8>> pursuit_scratch_;
     mutable std::vector<std::array<std::uint32_t, 4>> deadline_scratch_;
     mutable std::vector<std::uint32_t> scratch32_;
     mutable std::vector<char>          live_scratch_;   ///< clocks a live pursuit/deadline reads

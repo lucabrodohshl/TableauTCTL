@@ -43,6 +43,11 @@ bool is_timed_kind(NodeKind k) noexcept {
            k == NodeKind::TimedER || k == NodeKind::TimedAR;
 }
 
+bool is_universal_kind(NodeKind k) noexcept {
+    return k == NodeKind::AU || k == NodeKind::AR ||
+           k == NodeKind::TimedAU || k == NodeKind::TimedAR;
+}
+
 // The window I of a modality, decoded into DBM-friendly bounds.
 struct Interval {
     std::int32_t lo        = 0;      // lower bound value
@@ -273,6 +278,19 @@ void assign_clocks_rec(FormulaId id, FormulaFactory& f, ClockMap& cmap,
         if (c != kInvalidId) assign_clocks_rec(c, f, cmap, next);
 }
 
+void assign_onset_clocks_rec(FormulaId id, FormulaFactory& f, ClockMap& ymap,
+                             ClockId& next) {
+    const FormulaNode& n = f.node(id);
+    // Only a timed *universal* modality can be absorbed into a persistent
+    // pursuit, and only a persistent pursuit reads y_mu.  Everything else would
+    // carry a clock that no side condition ever tests.
+    if (is_timed_kind(n.kind) && is_universal_kind(n.kind) &&
+        ymap.find(id) == ymap.end())
+        ymap[id] = next++;
+    for (FormulaId c : n.children)
+        if (c != kInvalidId) assign_onset_clocks_rec(c, f, ymap, next);
+}
+
 std::int32_t max_constant_impl(FormulaId id, FormulaFactory& f) {
     const FormulaNode& n = f.node(id);
     std::int32_t m = 0;
@@ -292,6 +310,13 @@ ClockMap assign_clocks(FormulaId root, FormulaFactory& f) {
     ClockId next = 1;  // clock 0 = reference
     assign_clocks_rec(root, f, cmap, next);
     return cmap;
+}
+
+ClockMap assign_onset_clocks(FormulaId root, FormulaFactory& f, ClockId first) {
+    ClockMap ymap;
+    ClockId next = first;
+    assign_onset_clocks_rec(root, f, ymap, next);
+    return ymap;
 }
 
 std::int32_t max_constant(FormulaId root, FormulaFactory& f) {

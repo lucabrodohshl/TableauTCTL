@@ -2595,11 +2595,12 @@ static Node make_demand_node(FormulaId mu, const FormulaSet& X, FormulaFactory& 
 // Cover using the same global clock map the engine would use for `mu`.
 static CoverResult cover_of(const Node& n, FormulaId mu, FormulaFactory& f) {
     ClockMap cm = assign_clocks(mu, f);
-    std::size_t nc = 1 + cm.size();
+    ClockMap ym = assign_onset_clocks(mu, f, static_cast<ClockId>(1 + cm.size()));
+    std::size_t nc = 1 + cm.size() + ym.size();
     std::vector<std::int32_t> max(nc, max_constant(mu, f));
     max[0] = 0;
     SatCache sx;
-    return apply_cover(n, mu, false, cm, nc, max, f, sx);
+    return apply_cover(n, mu, false, cm, ym, nc, max, f, sx);
 }
 
 // ── Onsets under a persistent context ───────────────────────────────────────

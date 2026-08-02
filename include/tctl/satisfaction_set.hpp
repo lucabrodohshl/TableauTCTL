@@ -100,6 +100,22 @@ bool is_modality(NodeKind k) noexcept;
 /// of `root`; returns the map.  Clock 0 stays the reference clock.
 ClockMap assign_clocks(FormulaId root, FormulaFactory& f);
 
+/// @brief Assign the *onset* clock @f$y_\mu@f$ of every modality that can become
+/// persistent, numbering from `first`.
+///
+/// A pursuit reads two quantities.  @f$x_\mu@f$, from assign_clocks(), measures
+/// the time since it last answered a demand and bounds the next witness.
+/// @f$y_\mu@f$ measures the time since the demand was last *raised*, and is what
+/// tells a persistent pursuit when it may stop: a witness answers every onset at
+/// or before @f$w - \inf I@f$, so the pursuit may end at a witness exactly when
+/// no onset has been raised since @f$\inf I@f$ before it.
+///
+/// Only a *universal* modality is ever absorbed into a persistent pursuit --
+/// distinct onsets of an existential one may be served by distinct runs -- so
+/// only a timed universal modality needs a @f$y_\mu@f$.  Allocating one for
+/// every modality would double the DBM dimension for nothing.
+ClockMap assign_onset_clocks(FormulaId root, FormulaFactory& f, ClockId first);
+
 /// The largest integer constant M appearing in any time interval of `root`.
 std::int32_t max_constant(FormulaId root, FormulaFactory& f);
 
