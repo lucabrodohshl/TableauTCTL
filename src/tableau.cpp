@@ -1372,7 +1372,15 @@ private:
                     // this the recurrence is eternal and
                     // AG[0,5](AF[1,2] q) & AG[8,inf) !q, which is satisfiable,
                     // is rejected.
-                    if (p.persistent && p.y_mu != kNoClock) {
+                    // The guard has content only when inf I > 0.  At inf I = 0
+                    // a witness at w answers the onset raised at w itself, so
+                    // y_mu >= 0 holds while onsets are still arriving, and
+                    // retiring the pursuit there drops the recurrence rate: the
+                    // node left behind carries no deadline, and this engine
+                    // re-raises a demand only at a discrete step, so a delay can
+                    // then run past the rate unchallenged.  Generalising to
+                    // inf I = 0 needs the context re-imposed at every cell.
+                    if (p.persistent && p.y_mu != kNoClock && ow0.lo > 0) {
                         Node drop = n;
                         drop.Gamma.insert(psi);
                         if (owes_phi) drop.Gamma.insert(phi);
