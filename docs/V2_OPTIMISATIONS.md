@@ -136,17 +136,24 @@ techniques that attack that, roughly in order of how much I would expect from th
    deadline that emptied the zone — and reuse it to close sibling branches without expanding them.
    Tableaux for modal logics do this as "lemma caching"; the analogue of a CDCL learned clause.
    The node table is already the place to hang it.
-4. **Simulation-based merging.** Weaker than bisimulation and cheaper: if node `A`'s obligations are
-   a subset of `B`'s on the same zone, `B` accepted implies `A` accepted. Zone *subsumption* was
-   measured and cannot fire — `(Delay)` partitions into **disjoint** cells, so nested zones almost
-   never arise — but subsumption on the goal/pursuit component, at equal zone, is untested.
-5. **Sharing the `Ful` fixpoint across untils.** `query_until` recomputes a backward reachability per
-   modality per SCC. On the giant component that is `|mus|` passes over 64 627 nodes.
+4. **Sharing the `Ful` fixpoint across untils.** `query_until` recomputes a backward reachability per
+   modality per SCC. On the giant component that is `|mus|` passes over 64 627 nodes. Speeds the
+   fixpoint; does not reduce node count.
 
 Explicitly *not* worth it, each measured:
 
 - **Zone subsumption in the node table** — disjoint cells, essentially never fires, and zones are
   stored packed so each test would cost an unpack.
+- **Goal/pursuit subsumption at equal zone** — the one that looked most promising, and the
+  measurement is worth keeping. Structurally the opportunity is large: **26 971 of 68 624 nodes are
+  strictly dominated** by another node with the same zone and invariant and a superset of goals and
+  pursuits (more obligations = harder, so the dominator's acceptance implies the dominated one's).
+  But exploiting it needs the *dominator already decided*, and only **536 of those 26 971 (2%)**
+  were decided by the time the dominated node was created. Same structural cause as the 3.5% prune
+  rate: in a single 64 627-node SCC nothing is decided until the whole component closes. A
+  domination memo would fire on 0.8% of nodes.
+- **Conflict-driven learning, on this shape** — F1 has only 631 closed nodes out of 68 624. There is
+  almost nothing to learn from; the formula is satisfiable and hardly any branch closes locally.
 - **Search-order heuristics / reordering children** — pruning fires on 3.5% and cannot fire more, for
   the structural reason above.
 - **Extra_LU in place of Extra_M** — coarser, but tuned to preserve reachability, an existential
