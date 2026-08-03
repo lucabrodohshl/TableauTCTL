@@ -66,10 +66,7 @@ Options parse_args(int argc, char* argv[]) {
                 throw std::runtime_error("--version needs v1 or v2");
             const std::string v = argv[++i];
             if (v == "v1" || v == "1")      opts.version = 1;
-            else if (v == "v2" || v == "2")
-                throw std::runtime_error(
-                    "--version v2: not implemented yet on this branch "
-                    "(see the 'v2' branch)");
+            else if (v == "v2" || v == "2") opts.version = 2;
             else throw std::runtime_error("--version takes v1 or v2, got: " + v);
         } else if (arg == "--model" || arg == "--show-model") {
             opts.show_model = true;
@@ -146,10 +143,11 @@ void print_usage(const char* program_name) {
         << "  --output <dir>  Directory to write extracted models (default: current)\n"
         << "  --real-vars a,b Declare variable names as Real-sorted (else Int)\n"
         << "  --tot, --all, --all_formula  Conjoin all input formulas and check as one\n"
-        << "  --version v1     The search this branch implements (the default).\n"
-        << "                   v2 is not implemented here; it lives on the\n"
-        << "                   'v2' branch, where it adds component\n"
-        << "                   decomposition and goal subsumption.\n"
+        << "  --version v1|v2  v1 is the plain search (the default).  v2 adds\n"
+        << "                   component decomposition and goal subsumption;\n"
+        << "                   both are verdict-preserving, so the versions\n"
+        << "                   decide the same language and differ only in how\n"
+        << "                   much of the graph they build.\n"
         << "  --help, -h    Show this message\n"
         << "\n"
         << "Benchmark options (use with --benchmark):\n"
@@ -217,7 +215,8 @@ int run(const Options& opts) {
     FormulaFactory factory;
     Tableau engine(factory);
     engine.set_extract_witness(opts.show_model);
-    engine.set_version(Tableau::Version::V1);   // v2 lives on the 'v2' branch
+    engine.set_version(opts.version == 2 ? Tableau::Version::V2
+                                         : Tableau::Version::V1);
     bool had_errors = false;
 
     for (std::size_t i = 0; i < formulas.size(); ++i) {

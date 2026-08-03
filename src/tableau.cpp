@@ -341,14 +341,37 @@ public:
         cmap_ = assign_clocks(root, f);
         // y_mu numbers after every x_mu, so a clock index still identifies its
         // map by range and the two never collide.
-        ymap_ = assign_onset_clocks(root, f,
-                                    static_cast<ClockId>(1 + cmap_.size()));
+        if (use_y_)
+            ymap_ = assign_onset_clocks(root, f,
+                                        static_cast<ClockId>(1 + cmap_.size()));
         nc_ = 1 + cmap_.size() + ymap_.size();
+        build_feeders(root, f);
         std::int32_t M = max_constant(root, f);
         max_.assign(nc_, M);
         max_[0] = 0;
         collect_boundaries(root, f);
         collect_clock_bounds(root, f);
+        // Without an onset clock, a persistent pursuit of mu reads its feeding
+        // release's clock at sup I_sigma + inf I_mu (the drop) and at
+        // sup I_sigma + sup I_mu (the persistent lapse).  A guard's constants
+        // have to be cut points of the clock it reads, or no cell ever entails
+        // the test and the guard silently never fires.
+        if (!use_y_)
+            for (const auto& [mu, fs] : feeders_) {
+                const Window wm = window_of(mu, f);
+                for (FormulaId sg : fs) {
+                    const Window ws = window_of(sg, f);
+                    if (ws.hi_inf) continue;
+                    const ClockId xs = clock_of(cmap_, sg);
+                    if (xs == kNoClock || xs >= nc_) continue;
+                    clock_bounds_[xs].push_back(ws.hi + wm.lo);
+                    if (!wm.hi_inf) clock_bounds_[xs].push_back(ws.hi + wm.hi);
+                }
+            }
+        for (std::vector<std::int32_t>& bs : clock_bounds_) {
+            std::sort(bs.begin(), bs.end());
+            bs.erase(std::unique(bs.begin(), bs.end()), bs.end());
+        }
         // A formula-clock is only ever compared against the endpoints of its own
         // window, so extrapolating every clock at the global maximum constant M
         // preserves distinctions no guard can observe.  Per-clock maxima are
@@ -399,6 +422,74 @@ public:
     /// clock gains at most two split points per modality below it, and none of
     /// them depends on the magnitude of a constant, which is what keeps the
     /// search flat in M.
+    /// F(mu): every release whose body syntactically contains mu.  A demand of
+    /// mu is raised by such a release re-imposing its body, so these are the
+    /// contexts whose ceasing lets a recurrence of mu end.
+    void build_feeders(FormulaId root, FormulaFactory& f) {
+        feeders_.clear();
+        std::function<void(FormulaId)> outer = [&](FormulaId x) {
+            if (x == kInvalidId) return;
+            const FormulaNode& n = f.node(x);
+            if (is_modality(n.kind) && !is_until_modality(n.kind) &&
+                n.children[1] != kInvalidId) {
+                std::function<void(FormulaId)> inner = [&](FormulaId y) {
+                    if (y == kInvalidId) return;
+                    const FormulaNode& m = f.node(y);
+                    if (is_modality(m.kind)) feeders_[y].push_back(x);
+                    inner(m.children[0]); inner(m.children[1]);
+                };
+                inner(n.children[1]);
+            }
+            outer(n.children[0]); outer(n.children[1]);
+        };
+        outer(root);
+        for (auto& [k, v] : feeders_) {
+            std::sort(v.begin(), v.end());
+            v.erase(std::unique(v.begin(), v.end()), v.end());
+        }
+    }
+
+    /// Has every context feeding @p mu stopped demanding it at least @p off
+    /// ago?  This is what y_mu used to measure: while a feeding release still
+    /// demands, (Delay) re-imposes its body and the demand is raised again, so
+    /// y_mu is zero; once the release passes sup I_sigma, y_mu is exactly
+    /// x_sigma - sup I_sigma.  Reading it off x_sigma costs no clock.
+    ///
+    /// Conjunctive over F(mu): the recurrence may end only when *every* context
+    /// that feeds it has ceased.  An unbounded release never ceases, so its
+    /// presence makes this permanently false -- as it must.
+    bool feeders_past(const Node& n, FormulaId mu, std::int32_t off,
+                      bool strict) const {
+        const auto it = feeders_.find(mu);
+        if (it == feeders_.end() || it->second.empty()) return false;
+        for (FormulaId sg : it->second) {
+            const Window w = window_of(sg, f_);
+            if (w.hi_inf) return false;              // never stops demanding
+            const ClockId xs = clock_of(cmap_, sg);
+            if (xs == kNoClock || xs >= nc_) return false;
+            Zone t = n.Z;
+            t.add_lower_bound(xs, w.hi + off, strict);
+            if (t.is_empty() || !(t == n.Z)) return false;
+        }
+        return true;
+    }
+
+    /// Is @p sigma's clock still needed as the cessation witness of some live
+    /// persistent pursuit?  (Rlapse) would otherwise free it at exactly the
+    /// moment it starts carrying information.
+    bool feeder_clock_needed(const Node& c, FormulaId sigma) const {
+        if (use_y_) return false;
+        for (const Pursuit& q : c.pursuits) {
+            if (!q.persistent) continue;
+            const auto it = feeders_.find(q.mu);
+            if (it == feeders_.end()) continue;
+            if (std::find(it->second.begin(), it->second.end(), sigma) !=
+                it->second.end())
+                return true;
+        }
+        return false;
+    }
+
     void add_onset_shifts(FormulaId root, FormulaFactory& f) {
         if (!onset_shifts_) return;
         // Every timed modality of the formula, with its window.
@@ -540,11 +631,19 @@ public:
     /// variables still act as per-feature overrides, so a single optimisation
     /// can be isolated for a measurement without rebuilding.
     void apply_version(bool v2) {
-        // This branch is v1.  The optional optimisations stay off whatever the
-        // caller or the environment asks for; v2 lives on the 'v2' branch.
-        (void)v2;
-        decomp_ = false;
-        subsume_goals_ = false;
+        // v2 is the optional optimisations taken as a set: component
+        // decomposition and goal subsumption.  Both are verdict-preserving, so
+        // the two versions decide the same language and differ only in how much
+        // of the graph they build.
+        decomp_        = v2;
+        subsume_goals_ = v2;
+        // Per-feature overrides, so one optimisation can be isolated for a
+        // measurement without rebuilding.  Present-but-"0" turns a feature off
+        // even under v2; present-and-anything-else turns it on even under v1.
+        if (const char* e = std::getenv("TCTL_COMPONENTS"))
+            decomp_ = std::string(e) != "0";
+        if (const char* e = std::getenv("TCTL_SUBSUME_GOALS"))
+            subsume_goals_ = std::string(e) != "0";
     }
     bool can_extract() const { return root_id_ != kNoRegion; }
 
@@ -1370,6 +1469,19 @@ private:
             if (p.persistent && p.y_mu != kNoClock && p.y_mu < nc_ &&
                 (p.is_until || !window_of(p.mu, f_).hi_inf))
                 live_scratch_[p.y_mu] = 1;
+            // Without an onset clock, a persistent pursuit reads the clock of
+            // every context that feeds it -- that is what tells it the demands
+            // have ceased.  Those contexts have usually lapsed by then, so
+            // nothing else keeps their clocks alive, and freeing them loses
+            // exactly the information the guard wants.
+            if (!use_y_ && p.persistent) {
+                const auto it = feeders_.find(p.mu);
+                if (it != feeders_.end())
+                    for (FormulaId sg : it->second) {
+                        const ClockId xs = clock_of(cmap_, sg);
+                        if (xs != kNoClock && xs < nc_) live_scratch_[xs] = 1;
+                    }
+            }
         }
         for (const Deadline& d : n.D)
             if (d.x_mu < nc_) live_scratch_[d.x_mu] = 1;
@@ -1470,10 +1582,10 @@ private:
         for (std::size_t i = 0; i < n.pursuits.size(); ++i) {
             const Pursuit& p = n.pursuits[i];
             if (p.is_until || p.stage != Pursuit::Stage::Here) continue;
-            if (!lapsed(n.Z, p)) continue;
+            if (!lapsed(n, p)) continue;
             Node c = n;
             c.pursuits.erase(c.pursuits.begin() + static_cast<long>(i));
-            free_pursuit_clocks(c.Z, p);
+            free_pursuit_clocks(c, p);
             c.D = drop_deadline(n.D, p.x_mu);
             if (m2_tracks_release(p)) c.discharges_until = p.mu;
             return {Expansion::Kind::And, {std::move(c)}};
@@ -1675,13 +1787,22 @@ private:
     /// persistent and @f$Z \models y_\mu > b@f$.  A persistent release has had
     /// its window rewritten to @f$[a,\infty)@f$ and so can never pass it; what
     /// ends it is its last onset outliving the *original* window.
-    bool lapsed(const Zone& z, const Pursuit& p) const {
-        if (past_window(z, p.x_mu, pursuit_window(p))) return true;
+    bool lapsed(const Node& n, const Pursuit& p) const {
+        if (past_window(n.Z, p.x_mu, pursuit_window(p))) return true;
         const Window ow = window_of(p.mu, f_);
-        if (p.persistent && p.y_mu != kNoClock && !ow.hi_inf) {
-            Zone t = z;
-            t.add_upper_bound(p.y_mu, ow.hi, ow.hi_strict);
-            if (t.is_empty()) return true;
+        if (p.persistent && !ow.hi_inf) {
+            // Its last onset has outlived its own window.  With the onset clock
+            // that is y_mu > b; without it, every context feeding mu stopped
+            // demanding more than b ago.
+            if (use_y_) {
+                if (p.y_mu != kNoClock) {
+                    Zone t = n.Z;
+                    t.add_upper_bound(p.y_mu, ow.hi, ow.hi_strict);
+                    if (t.is_empty()) return true;
+                }
+            } else if (feeders_past(n, p.mu, ow.hi, true)) {
+                return true;
+            }
         }
         return false;
     }
@@ -1694,9 +1815,15 @@ private:
     }
 
     /// @f$Z \backslash x_\mu y_\mu@f$: a stopped pursuit frees its clocks.
-    void free_pursuit_clocks(Zone& z, const Pursuit& p) const {
-        if (p.x_mu != kNoClock && p.x_mu < nc_) z.free(p.x_mu);
-        if (p.y_mu != kNoClock && p.y_mu < nc_) z.free(p.y_mu);
+    void free_pursuit_clocks(Node& c, const Pursuit& p) const {
+        // x_mu outlives its own pursuit when some live persistent pursuit reads
+        // it as a cessation witness -- see feeders_past().  (Rlapse) fires
+        // exactly when the release stops demanding, which is the instant the
+        // clock starts carrying the information the guard wants.
+        if (p.x_mu != kNoClock && p.x_mu < nc_ &&
+            !feeder_clock_needed(c, p.mu))
+            c.Z.free(p.x_mu);
+        if (p.y_mu != kNoClock && p.y_mu < nc_) c.Z.free(p.y_mu);
     }
 
     /// A member of @f$\Gamma_{\mathsf{prop}}@f$: an atom or a negated atom.
@@ -1753,7 +1880,7 @@ private:
             stop.Gamma.insert(phi);
             if (in_window) stop.Gamma.insert(psi);
             drop_at(stop);
-            free_pursuit_clocks(stop.Z, p);
+            free_pursuit_clocks(stop, p);
             // Only a release (M2) actually tracks -- a bounded existential one
             // -- needs its discharge recorded.  For any other release the mark
             // is read by nothing and merely splits the node from its unmarked
@@ -1775,7 +1902,7 @@ private:
                 Node stop = n;                                // (Ustop)
                 stop.Gamma.insert(psi);
                 drop_at(stop);
-                free_pursuit_clocks(stop.Z, p);
+                free_pursuit_clocks(stop, p);
                 stop.D = drop_deadline(n.D, p.x_mu);
                 stop.discharges_until = p.mu;
                 e.children.push_back(std::move(stop));
@@ -1807,12 +1934,13 @@ private:
             // (Ustopdrop): a recurrence that never ended would be wrong.  The
             // pursuit may end at a witness exactly when no onset has been
             // raised since a before it.
-            if (onsets_ceased(n.Z, p.y_mu, ow.lo)) {
+            if (use_y_ ? onsets_ceased(n.Z, p.y_mu, ow.lo)
+                       : feeders_past(n, p.mu, ow.lo, ow.lo == 0)) {
                 Node d = n;
                 d.Gamma.insert(psi);
                 if (theta_a) d.Gamma.insert(phi);
                 drop_at(d);
-                free_pursuit_clocks(d.Z, p);
+                free_pursuit_clocks(d, p);
                 d.D = drop_deadline(n.D, p.x_mu);
                 d.discharges_until = p.mu;
                 e.children.push_back(std::move(d));
@@ -1898,7 +2026,18 @@ private:
             a.has_nb = next_own_bound(c, a.lv, a.nb);
             out.push_back(a);
         };
-        for (const Pursuit& p : n.pursuits) { note(p.x_mu); note(p.y_mu); }
+        for (const Pursuit& p : n.pursuits) {
+            note(p.x_mu); note(p.y_mu);
+            // A feeding release's clock is read by the cessation guard of a
+            // persistent pursuit, so time has to be cut at its change points
+            // too -- otherwise the zone spans a range straddling the threshold
+            // and no cell ever entails the test.
+            if (!use_y_ && p.persistent) {
+                const auto it = feeders_.find(p.mu);
+                if (it != feeders_.end())
+                    for (FormulaId sg : it->second) note(clock_of(cmap_, sg));
+            }
+        }
         for (const Deadline& d : n.D) note(d.x_mu);
         return out;
     }
@@ -3273,6 +3412,12 @@ private:
     bool budget_hit_ = false;
     bool has_deadline_ = false;
     bool debug_ = false;
+    /// Keep the onset clock y_mu.  Off: its two guards are rewritten over the
+    /// feeding release's own clock instead (not_track/Y_CLOCK_ELIMINATION.md).
+    /// TCTL_ONSET_CLOCK=1 restores it, for the ablation.
+    bool use_y_ = std::getenv("TCTL_ONSET_CLOCK") != nullptr;
+    /// F(mu): the releases whose body demands mu.  Purely syntactic.
+    std::unordered_map<FormulaId, std::vector<FormulaId>> feeders_;
     /// Cut points isolating doomed onsets; see add_onset_shifts().
     /// TCTL_ONSET_SHIFTS=0 drops them, for the ablation.  Dropping them is a
     /// large *loss*: they are not only a completeness aid but a canonicaliser,
