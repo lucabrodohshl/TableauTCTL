@@ -328,9 +328,14 @@ class Engine {
 public:
     static constexpr std::uint32_t kNoRegion = static_cast<std::uint32_t>(-1);
 
+    /// @param refine  CEGAR level.  0 keeps only each clock's *own* window
+    ///                endpoints as cut points; 1 adds the onset shifts.  See
+    ///                docs/CEGAR.md for why that is the one safe axis to
+    ///                coarsen.
     Engine(FormulaFactory& f, FormulaId root, double timeout_s,
-           bool keep_graph = false)
-        : f_(f), keep_graph_(keep_graph) {
+           bool keep_graph = false, int refine = 1, std::uint64_t node_cap = 0)
+        : f_(f), keep_graph_(keep_graph), node_cap_(node_cap) {
+        if (refine < 1) onset_shifts_ = false;
         if (timeout_s > 0) {
             deadline_ = std::chrono::steady_clock::now() +
                         std::chrono::duration_cast<std::chrono::steady_clock::duration>(
@@ -2858,6 +2863,12 @@ private:
             budget_hit_ = true;
             return false;
         }
+        // A capped run is an *attempt*: the caller falls back to the full
+        // search when the cap is hit, so giving up costs only the cap.
+        if (node_cap_ && expansions_ > node_cap_) {
+            budget_hit_ = true;
+            return false;
+        }
         Node n = std::move(*g_[v].n);
         g_[v].n.reset();                        // release: only metadata is kept
         if (node_closed(n.Gamma, f_) || n.Z.is_empty()) {
@@ -3427,6 +3438,7 @@ private:
     SatCache sx_cache_;                  // persistent S_X(mu,X) memo
     std::uint64_t expansions_ = 0;
     bool budget_hit_ = false;
+    std::uint64_t node_cap_ = 0;   ///< 0 = unlimited; see expand_node()
     bool has_deadline_ = false;
     bool debug_ = false;
     /// Keep the onset clock y_mu.  Off: its two guards are rewritten over the
@@ -3658,8 +3670,49 @@ Result Tableau::check(FormulaId normalized_formula) {
     // Decomposition changes what a witness is (the product of the components'
     // automata) and the extractor does not build products, so both forms stand
     // down when one is asked for.
-    const bool v2 = false;                  // v1 branch: never decompose
-    if (false) {
+    const bool v2 = (version_ == Version::V2);
+
+    // ── CEGAR (v2) ──────────────────────────────────────────────────────
+    //
+    // Coarsen the cut points to each clock's own window endpoints, dropping the
+    // onset shifts.  That is the one axis it is safe to coarsen in a single
+    // direction: every guard's own endpoints stay cut points, so a zone still
+    // lies wholly inside or wholly outside any window on that clock and the
+    // entailment tests stay exact.  What the shifts alone provide is the
+    // isolation of *doomed onsets*, and losing that can only turn an UNSAT into
+    // a SAT -- never the reverse.  So an UNSAT on the abstraction is a genuine
+    // UNSAT and we are done; a SAT may be spurious and is refined by re-running
+    // with the shifts, which is the full engine and therefore correct.
+    //
+    // Worst case is two runs, the second being exactly the v1 search, so the
+    // verdict is always the v1 verdict.  Witness extraction skips this: the
+    // abstraction would produce an automaton for the coarse cut points.
+    std::uint64_t cegar_nodes = 0;
+    if (v2 && cegar_ && !extract_witness_) {
+        // The abstraction is *budgeted*.  Dropping the shifts also drops their
+        // canonicalising effect, so on a satisfiable formula the coarse search
+        // can be dearer than the full one (measured: 68 624 -> 251 032 nodes on
+        // the nested-E family).  Capping it keeps the whole downside bounded by
+        // the cap while still deciding the unsatisfiable instances, which is
+        // where the abstraction pays -- they close on the coarse cut points at
+        // roughly half the nodes.
+        Engine coarse(factory_, normalized_formula,
+                      static_cast<double>(timeout_.count()), false, 0,
+                      cegar_cap_);
+        coarse.apply_version(v2);
+        const bool sat0 = coarse.decide(normalized_formula);
+        cegar_nodes = coarse.nodes();
+        if (!coarse.budget_hit() && !sat0) {
+            stats_.nodes_created = cegar_nodes;
+            stats_.peak_memory_bytes = peak_resident_bytes();
+            has_witness_ = false;
+            const auto te = std::chrono::steady_clock::now();
+            return Result(Result::Value::Unsatisfiable,
+                          std::chrono::duration<double>(te - t0).count());
+        }
+    }
+
+    if (v2 && !extract_witness_) {
         const auto groups = decompose(normalized_formula, factory_);
         if (!groups.empty()) {
             std::uint64_t total = 0;
@@ -3706,7 +3759,7 @@ Result Tableau::check(FormulaId normalized_formula) {
     else if (sat)                 verdict = Result::Value::Satisfiable;
     else                          verdict = Result::Value::Unsatisfiable;
 
-    stats_.nodes_created = engine.nodes();
+    stats_.nodes_created = engine.nodes() + cegar_nodes;
     stats_.straddles = engine.straddles();
     stats_.peak_memory_bytes = peak_resident_bytes();
 

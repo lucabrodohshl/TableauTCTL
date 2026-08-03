@@ -48,6 +48,7 @@
 #include "tctl/zone.hpp"
 
 #include <chrono>
+#include <cstdlib>
 #include <cstdint>
 #include <map>
 #include <utility>
@@ -408,9 +409,29 @@ private:
     bool                 has_witness_ = false;
     TimedAutomaton       witness_;
     SearchStats          stats_;
-    Version              version_ = Version::V1;
+    /// TCTL_VERSION=2 selects v2 without the CLI, so the self-test can be run
+    /// end to end under it.
+    Version              version_ = [] {
+        const char* v = std::getenv("TCTL_VERSION");
+        return (v && std::string(v) == "2") ? Version::V2 : Version::V1;
+    }();
     /// Split a top-level conjunction into atom-disjoint groups and solve each.
     bool                 decompose_ = std::getenv("TCTL_DECOMPOSE") != nullptr;
+    /// CEGAR over the onset-shift cut points, under v2.  TCTL_CEGAR=0 disables.
+    /// CEGAR over the onset-shift cut points, under v2.  **Off by default**:
+    /// measured, the abstraction is only ~2x cheaper on the unsatisfiable
+    /// instances it decides, while costing a whole extra search on every
+    /// satisfiable one, so it is a net loss on the current mix.  See
+    /// docs/CEGAR.md.  TCTL_CEGAR=1 enables it.
+    bool                 cegar_ = [] {
+        const char* v = std::getenv("TCTL_CEGAR");
+        return v && std::string(v) != "0";
+    }();
+    /// Node budget for the CEGAR abstraction; 0 disables the cap.
+    std::uint64_t        cegar_cap_ = [] {
+        const char* v = std::getenv("TCTL_CEGAR_CAP");
+        return v ? std::strtoull(v, nullptr, 10) : 4000ull;
+    }();
 };
 
 }  // namespace tctl
