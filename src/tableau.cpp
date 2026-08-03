@@ -24,6 +24,8 @@
 #include <array>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <set>
@@ -152,8 +154,9 @@ CoverResult apply_cover(const Node& n, FormulaId mu, bool ag_context_,
             only.kind = CoverResult::Kind::Cover;
             Node discharge;
             discharge.Gamma = gamma_without(n.Gamma, mu);
-            discharge.X = n.X; discharge.Z = n.Z; discharge.O = n.O;
-            discharge.D = n.D; discharge.pursuits = n.pursuits; discharge.phase = n.phase;
+            discharge.X = n.X; discharge.Z = n.Z;
+            discharge.D = n.D; discharge.pursuits = n.pursuits; discharge.inv = n.inv;
+            discharge.interval_witness = n.interval_witness;
             // This demand is the newest onset the pursuit owes an answer to.
             if (p.y_mu != kNoClock) {
                 discharge.Z.reset(p.y_mu);
@@ -220,8 +223,9 @@ CoverResult apply_cover(const Node& n, FormulaId mu, bool ag_context_,
             ctxc.Gamma = gamma_without(n.Gamma, mu);
             ctxc.Gamma.insert(mn.children[1]);          // psi holds here
             ctxc.X = n.X; ctxc.X.insert(mu);            // and at every successor
-            ctxc.Z = n.Z; ctxc.O = n.O; ctxc.D = n.D;
-            ctxc.pursuits = n.pursuits; ctxc.phase = n.phase;
+            ctxc.Z = n.Z; ctxc.D = n.D;
+            ctxc.pursuits = n.pursuits; ctxc.inv = n.inv;
+            ctxc.interval_witness = n.interval_witness;
             only.children.push_back(std::move(ctxc));
             return only;
         }
@@ -245,8 +249,9 @@ CoverResult apply_cover(const Node& n, FormulaId mu, bool ag_context_,
 
     Node base;
     base.Gamma = gamma_without(n.Gamma, mu);
-    base.X = n.X; base.Z = n.Z; base.O = n.O; base.D = n.D;
-    base.pursuits = n.pursuits; base.phase = n.phase;
+    base.X = n.X; base.Z = n.Z; base.D = n.D;
+    base.pursuits = n.pursuits; base.inv = n.inv;
+    base.interval_witness = n.interval_witness;
 
     // (Cov) is unconditional (paper §4.2): a demanded mu forks into a discharge
     // and a launch, full stop.  There is no satisfaction-set side condition --
@@ -266,17 +271,26 @@ CoverResult apply_cover(const Node& n, FormulaId mu, bool ag_context_,
                 launch.Z.reset(y_mu);
                 launch.just_reset.push_back(y_mu);
             }
-            bool haveO = false;
-            for (const auto& e : launch.O)
-                if (e.first == mu) { haveO = true; break; }
-            if (!haveO) {
-                // keep O sorted; it is written once per launch and never searched
-                launch.O.emplace_back(mu, x_mu);
-                std::sort(launch.O.begin(), launch.O.end());
-            }
         }
+        // A release launched at an *interval witness* (the abutting stop of
+        // §4.2, whose zone is a crossing with extent rather than an instant)
+        // whose window opens at 0 bans within the very crossing that asserts
+        // it: a position later in the cell lies inside the window of one
+        // earlier in it.  So its body is asserted here rather than deferred.
+        // A window opening at 1 or later acts only beyond the cell and defers
+        // as usual.
+        // Strictness at 0 makes no difference: what matters is that the window
+        // contains arbitrarily small positive offsets, so a position later in
+        // the crossing lies inside the window of one earlier in it.  A ban like
+        // AG(0,1] !q therefore bans within the cell that asserts q, which is
+        // what closes the abutting child on a rate contradiction.
+        if (n.interval_witness && !until_kind) {
+            const Window lw = window_of(mu, f);
+            if (lw.lo == 0) launch.Gamma.insert(f.node(mu).children[1]);
+        }
+
         Pursuit p; p.mu = mu; p.x_mu = x_mu; p.y_mu = y_mu;
-        p.stage = Pursuit::Stage::Here; p.part = Pursuit::Part::Whole;
+        p.stage = Pursuit::Stage::Here;
         p.is_until = until_kind;
         // A relaunch (E re-demand) replaces the live pursuit rather than
         // appending a second one: one clock, one pursuit per modality.
@@ -365,6 +379,7 @@ public:
         number_atoms(root, f);
         debug_ = std::getenv("TCTL_DEBUG") != nullptr;
         words_ = (nc_ + 63) / 64;
+        rw32_  = (nc_ + 31) / 32;
     }
 
     /// Split points a clock needs so that *onsets* stay distinguishable.
@@ -386,7 +401,7 @@ public:
     /// search flat in M.
     void add_onset_shifts(FormulaId root, FormulaFactory& f) {
         // Every timed modality of the formula, with its window.
-        struct Mod { FormulaId id; std::int32_t a, b; bool binf; };
+        struct Mod { FormulaId id; std::int32_t a, b; bool binf; bool rel; };
         std::vector<Mod> mods;
         std::function<void(FormulaId)> walk = [&](FormulaId x) {
             if (x == kInvalidId) return;
@@ -395,7 +410,8 @@ public:
                 mods.push_back({x, static_cast<std::int32_t>(n.time_lower.value),
                                 n.time_upper.is_infinity ? 0
                                     : static_cast<std::int32_t>(n.time_upper.value),
-                                n.time_upper.is_infinity});
+                                n.time_upper.is_infinity,
+                                !is_until_modality(n.kind)});
             walk(n.children[0]); walk(n.children[1]);
         };
         walk(root);
@@ -407,14 +423,35 @@ public:
             const ClockId ec = clock_of(cmap_, rho.id);
             if (ec == kNoClock || ec >= nc_ || clock_bounds_[ec].empty()) continue;
             std::vector<std::int32_t>& bs = clock_bounds_[ec];
+            auto cut = [&](std::int32_t v) {
+                if (v > 0 && v < max_[ec]) bs.push_back(v);
+            };
             for (const Mod& mu : mods) {
                 if (mu.id == rho.id) continue;
-                const std::int32_t lo = rho.a - mu.a;
-                if (lo > 0 && lo < max_[ec]) bs.push_back(lo);
-                if (!rho.binf && !mu.binf) {
-                    const std::int32_t hi = rho.b - mu.b;
-                    if (hi > 0 && hi < max_[ec]) bs.push_back(hi);
-                }
+                // Which shifts isolate the doomed onsets depends on what the
+                // demanded modality owes.  An until needs one witness inside
+                // its window, so it is doomed only where the window is wholly
+                // *contained* in the ban: t in [c-a, d-b].  A release obliges
+                // its body at *every* position of its window, so a single
+                // banned instant suffices and it is doomed wherever the window
+                // merely *overlaps* the ban: t in [c-b, d-a].  Cutting with the
+                // wrong family leaves the doomed onsets inside a cell that also
+                // holds servable ones -- on AG(EG[2,4] p) & AG[6,7] !p, whose
+                // onsets in [2,5] are all doomed, the containment shifts cut
+                // that clock at 3 and 4 and never at 2 or 5, and it came back
+                // SAT.  Two cuts per pair either way, so the count, and with it
+                // M-independence, is unchanged.
+                cut(rho.a - mu.a);
+                if (!rho.binf && !mu.binf) cut(rho.b - mu.b);
+                // A release is doomed where its window merely *overlaps* the
+                // ban, t in [c-b, d-a], not where it is contained in it -- it
+                // obliges its body at every position, so one banned instant
+                // suffices.  Adding those two cuts (rho.a-mu.b, rho.b-mu.a when
+                // mu is a release) does isolate the doomed onsets of
+                // AG(EG[2,4] p) & AG[6,7] !p at 2 and 5, but measured it does
+                // not change that verdict and it costs the M-independence of
+                // the constant-free family, so the laundering there is not the
+                // cell granularity.  Left out; see the note in tableau.hpp.
             }
         }
         for (std::vector<std::int32_t>& bs : clock_bounds_) {
@@ -486,7 +523,7 @@ public:
         Node n;
         n.Gamma.insert(root);
         n.Z = Zone::zero(nc_);
-        n.phase = Phase::Elapse;
+        n.inv = Inv::Unset;
         return decide_scc(n);
     }
 
@@ -540,6 +577,90 @@ private:
 
     static void put(Key& k, std::uint32_t w) { k.push_back(w); }
 
+    static std::uint64_t key_hash(const std::uint32_t* p, std::size_t n) {
+        std::uint64_t h = 1469598103934665603ull;
+        for (std::size_t i = 0; i < n; ++i) { h ^= p[i]; h *= 1099511628211ull; }
+        return h;
+    }
+    /// The stored key of @p v.  Invalidated by the next intern(), so read it
+    /// out before interning anything else.
+    const std::uint32_t* key_at(std::uint32_t v) const {
+        const std::uint32_t off = koff_[v];
+        return kblocks_[off >> kBlkShift].get() + (off & kBlkMask);
+    }
+    /// Copy @p n words into the arena and return their global offset.  A key is
+    /// never split across blocks, so key_at() can hand back a plain pointer and
+    /// klookup() can memcmp against it.
+    std::uint32_t karena_put(const std::uint32_t* p, std::uint32_t n) {
+        if (kfill_ + n > kBlkWords) {
+            const std::uint32_t need = n > kBlkWords ? n : kBlkWords;
+            kblocks_.push_back(std::make_unique<std::uint32_t[]>(need));
+            kfill_ = 0;
+        }
+        const auto blk = static_cast<std::uint32_t>(kblocks_.size() - 1);
+        const std::uint32_t off = (blk << kBlkShift) | kfill_;
+        std::memcpy(kblocks_.back().get() + kfill_, p, n * sizeof(std::uint32_t));
+        kfill_ += n;
+        return off;
+    }
+    void ktab_grow() {
+        const std::size_t ns = ktab_.empty() ? 1024 : ktab_.size() * 2;
+        std::vector<std::uint32_t> t(ns, 0);
+        const std::size_t mask = ns - 1;
+        for (std::uint32_t e : ktab_) {
+            if (!e) continue;
+            std::size_t s = static_cast<std::size_t>(khash_[e - 1]) & mask;
+            while (t[s]) s = (s + 1) & mask;
+            t[s] = e;
+        }
+        ktab_.swap(t);
+        kmask_ = mask;
+    }
+    /// Find the key @p p, or report where to put it.  Linear probing: the table
+    /// holds node ids, so a probe is one contiguous read, and the payload lives
+    /// in the arena rather than behind a pointer per entry.
+    std::uint32_t klookup(const std::uint32_t* p, std::size_t n,
+                          std::uint64_t h, std::size_t& slot) {
+        if (ktab_.empty()) ktab_grow();
+        slot = static_cast<std::size_t>(h) & kmask_;
+        while (ktab_[slot]) {
+            const std::uint32_t id = ktab_[slot] - 1;
+            if (khash_[id] == h && klen_[id] == n &&
+                std::memcmp(key_at(id), p, n * sizeof(std::uint32_t)) == 0)
+                return id;
+            slot = (slot + 1) & kmask_;
+        }
+        return kNoRegion;
+    }
+
+    // A pursuit costs three key words rather than eight: the modality, its two
+    // clocks packed 16:16 (kNoClock as 0xFFFF, so no real clock id collides),
+    // and its flags as a bitfield.  The key is built once per interned node and
+    // stored for the life of the search, so its width is the dominant
+    // per-node memory cost.  Packing preserves injectivity, so sorting the
+    // packed tuples still yields one canonical encoding per set.
+    /// Both clocks and all five flags of a pursuit in one word: 12 bits each
+    /// for x_mu and y_mu (0xFFF standing for kNoClock, which no real clock id
+    /// can reach -- the tableau uses at most 2n+1 of them) and five flag bits.
+    static std::uint32_t pack_pursuit(const Pursuit& p) {
+        const std::uint32_t xs = (p.x_mu == kNoClock) ? 0xFFFu : (p.x_mu & 0xFFFu);
+        const std::uint32_t ys = (p.y_mu == kNoClock) ? 0xFFFu : (p.y_mu & 0xFFFu);
+        return (xs << 20) | (ys << 8) |
+               static_cast<std::uint32_t>(p.stage) |
+               (static_cast<std::uint32_t>(p.is_until)   << 2) |
+               (static_cast<std::uint32_t>(p.persistent) << 3) |
+               (static_cast<std::uint32_t>(p.rolled)     << 4);
+    }
+    static void unpack_pursuit(std::uint32_t w, Pursuit& p) {
+        const std::uint32_t xs = (w >> 20) & 0xFFFu, ys = (w >> 8) & 0xFFFu;
+        p.x_mu       = (xs == 0xFFFu) ? kNoClock : static_cast<ClockId>(xs);
+        p.y_mu       = (ys == 0xFFFu) ? kNoClock : static_cast<ClockId>(ys);
+        p.stage      = static_cast<Pursuit::Stage>(w & 3u);
+        p.is_until   = ((w >> 2) & 1u) != 0;
+        p.persistent = ((w >> 3) & 1u) != 0;
+        p.rolled     = ((w >> 4) & 1u) != 0;
+    }
+
     void append_struct_key(const Node& n, Key& k) const {
         // Interned sets contribute one word each rather than one per element.
         put(k, n.Gamma.handle());
@@ -553,32 +674,26 @@ private:
         pursuit_scratch_.clear();
         for (const Pursuit& p : n.pursuits)
             pursuit_scratch_.push_back({static_cast<std::uint32_t>(p.mu),
-                                        static_cast<std::uint32_t>(p.x_mu),
-                                        static_cast<std::uint32_t>(p.y_mu),
-                                        static_cast<std::uint32_t>(p.stage),
-                                        static_cast<std::uint32_t>(p.part),
-                                        static_cast<std::uint32_t>(p.is_until),
-                                        static_cast<std::uint32_t>(p.persistent),
-                                        static_cast<std::uint32_t>(p.rolled)});
+                                        pack_pursuit(p)});
         std::sort(pursuit_scratch_.begin(), pursuit_scratch_.end());
         put(k, static_cast<std::uint32_t>(pursuit_scratch_.size()));
         for (const auto& t : pursuit_scratch_)
             for (std::uint32_t w : t) put(k, w);
 
         deadline_scratch_.clear();
-        for (const Deadline& d : n.D) {
-            const auto b = static_cast<std::uint64_t>(d.bound);
-            deadline_scratch_.push_back({static_cast<std::uint32_t>(d.x_mu),
-                                         static_cast<std::uint32_t>(b >> 32),
-                                         static_cast<std::uint32_t>(b),
-                                         static_cast<std::uint32_t>(d.strict)});
-        }
+        for (const Deadline& d : n.D)
+            deadline_scratch_.push_back(
+                {(static_cast<std::uint32_t>(d.x_mu) << 1) |
+                     static_cast<std::uint32_t>(d.strict),
+                 static_cast<std::uint32_t>(static_cast<std::int32_t>(d.bound))});
         std::sort(deadline_scratch_.begin(), deadline_scratch_.end());
         put(k, static_cast<std::uint32_t>(deadline_scratch_.size()));
         for (const auto& t : deadline_scratch_)
             for (std::uint32_t w : t) put(k, w);
 
-        put(k, static_cast<std::uint32_t>(n.phase));
+        put(k, static_cast<std::uint32_t>(n.inv) |
+               (static_cast<std::uint32_t>(n.interval_witness) << 4) |
+               (static_cast<std::uint32_t>(n.delayed_here) << 5));
     }
 
     // The ~=_M-canonical zone's contribution to the key.
@@ -716,10 +831,10 @@ private:
     std::vector<std::uint32_t> marked_children(std::uint32_t v) const {
         std::vector<std::uint32_t> out;
         if (g_[v].kind == Expansion::Kind::Or) {
-            for (std::uint32_t c : g_[v].ch)
+            for (std::uint32_t c : ch_of(v))
                 if (g_[c].val) { out.push_back(c); break; }   // one suffices
         } else {
-            for (std::uint32_t c : g_[v].ch)
+            for (std::uint32_t c : ch_of(v))
                 if (g_[c].val) out.push_back(c);
         }
         return out;
@@ -753,7 +868,7 @@ private:
         const std::size_t m = g_.size();
         std::vector<std::uint32_t> d(m, kFar);
         auto carries = [&](std::uint32_t v) {
-            const std::vector<FormulaId>& u = g_[v].untils;
+            const Span u = us_of(v);
             return std::find(u.begin(), u.end(), mu) != u.end();
         };
         // Relaxation rather than a plain BFS: the max at (AND) nodes is not a
@@ -764,13 +879,13 @@ private:
             for (std::uint32_t v = 0; v < m; ++v) {
                 if (!g_[v].done || !g_[v].val || !carries(v)) continue;
                 std::uint32_t nd = kFar;
-                for (std::uint32_t c : g_[v].ch)
+                for (std::uint32_t c : ch_of(v))
                     if (c != v && g_[c].val && g_[c].discharges == mu) { nd = 0; break; }
                 if (nd != 0) {
                     const bool orn = g_[v].kind == Expansion::Kind::Or;
                     bool any = false;
                     std::uint32_t acc = orn ? kFar : 0;
-                    for (std::uint32_t c : g_[v].ch) {
+                    for (std::uint32_t c : ch_of(v)) {
                         if (c == v || !g_[c].val || !carries(c)) continue;
                         any = true;
                         const std::uint32_t dc = d[c] == kFar ? kFar : d[c] + 1;
@@ -790,7 +905,7 @@ private:
     /// pending pursuit cyclically after it, so no pursuit is passed over twice.
     /// kInvalidId means nothing is pending and any accepted child will do.
     FormulaId next_obligation(std::uint32_t v, FormulaId cur) const {
-        std::vector<FormulaId> u = g_[v].untils;
+        std::vector<FormulaId> u(us_of(v).begin(), us_of(v).end());
         std::sort(u.begin(), u.end());
         u.erase(std::unique(u.begin(), u.end()), u.end());
         if (u.empty()) return kInvalidId;
@@ -824,9 +939,9 @@ private:
             // without this the loop below reads it as a free stop and takes the
             // loop for ever, leaving a location with no successor step at all.
             bool other = false;
-            for (std::uint32_t c : g_[v].ch) if (c != v && g_[c].val) other = true;
+            for (std::uint32_t c : ch_of(v)) if (c != v && g_[c].val) other = true;
             std::uint32_t best = kNoRegion, bestd = kFar;
-            for (std::uint32_t c : g_[v].ch) {
+            for (std::uint32_t c : ch_of(v)) {
                 if (!g_[c].val || (other && c == v)) continue;
                 std::uint32_t dc = 0;
                 if (mu != kInvalidId && g_[c].discharges != mu) {
@@ -841,7 +956,7 @@ private:
             }
             if (best != kNoRegion) out.push_back({best, after(best)});
         } else {
-            for (std::uint32_t c : g_[v].ch)
+            for (std::uint32_t c : ch_of(v))
                 if (g_[c].val) out.push_back({c, after(c)});
         }
         return out;
@@ -855,7 +970,7 @@ private:
         std::vector<std::uint32_t> d(m, kFar);
         for (std::uint32_t v = 0; v < m; ++v)
             if (g_[v].done && g_[v].val &&
-                is_saturated(decode_key(*key_of_[v]))) d[v] = 0;
+                is_saturated(decode_node(v))) d[v] = 0;
         for (bool changed = true; changed;) {
             changed = false;
             for (std::uint32_t v = 0; v < m; ++v) {
@@ -863,7 +978,7 @@ private:
                 const bool orn = g_[v].kind == Expansion::Kind::Or;
                 bool any = false;
                 std::uint32_t acc = orn ? kFar : 0;
-                for (std::uint32_t c : g_[v].ch) {
+                for (std::uint32_t c : ch_of(v)) {
                     if (c == v || !g_[c].val) continue;
                     any = true;
                     const std::uint32_t dc = d[c] == kFar ? kFar : d[c] + 1;
@@ -887,7 +1002,7 @@ private:
         wdist_.clear();
         for (std::uint32_t v = 0; v < g_.size(); ++v)
             if (g_[v].done && g_[v].val)
-                for (FormulaId mu : g_[v].untils)
+                for (FormulaId mu : us_of(v))
                     if (!wdist_.count(mu)) wdist_.emplace(mu, stop_distance(mu));
         sdist_ = saturated_distance();
 
@@ -928,7 +1043,7 @@ private:
                 // it has since been discharged.
                 const FormulaId mu = next_obligation(v, mu0);
 
-                const Node n = decode_key(*key_of_[v]);
+                const Node n = decode_node(v);
                 // (R^split) is conjunctive but partitions the *zone*, so its
                 // children describe disjoint sets of valuations rather than one
                 // configuration.  Folding them into a single region would union
@@ -940,9 +1055,9 @@ private:
                 if (!is_saturated(n) && g_[v].kind == Expansion::Kind::And) {
                     const Zone* first = nullptr;
                     Node prev;
-                    for (std::uint32_t c : g_[v].ch) {
+                    for (std::uint32_t c : ch_of(v)) {
                         if (!g_[c].val) continue;
-                        Node cn = decode_key(*key_of_[c]);
+                        Node cn = decode_node(c);
                         if (!first) { prev = std::move(cn); first = &prev.Z; }
                         else if (!(cn.Z == *first)) { partitions = true; break; }
                     }
@@ -976,7 +1091,7 @@ private:
             // the union of their literals rather than one member's.
             std::map<ClockId, Deadline> inv;
             for (std::uint32_t v : members[r]) {
-                const Node n = decode_key(*key_of_[v]);
+                const Node n = decode_node(v);
                 for (FormulaId id : n.Gamma.elements()) {
                     const FormulaNode& fn = f_.node(id);
                     if (fn.kind == NodeKind::Atom) loc.atoms.insert(fn.atom_name);
@@ -1015,7 +1130,7 @@ private:
             e.target = to;
             // (EX) does not advance time, so the step's zone is the target's;
             // the guard is that zone, read off as single-clock bounds.
-            const Node tgt = decode_key(*key_of_[heads[to].first]);
+            const Node tgt = decode_node(heads[to].first);
             for (ClockId c = 1; c < nc_; ++c) {
                 const Bound ub = tgt.Z.get_bound(c, kReferenceClock);
                 if (!ub.is_infinity()) {
@@ -1031,7 +1146,7 @@ private:
             // A launch resets its formula-clock, so the window is measured from
             // the configuration that demanded it.
             for (std::uint32_t v : members[to])
-                for (ClockId c : decode_key(*key_of_[v]).just_reset)
+                for (ClockId c : decode_node(v).just_reset)
                     if (c != kNoClock && c != kReferenceClock && c < nc_ &&
                         std::find(e.resets.begin(), e.resets.end(), c) == e.resets.end())
                         e.resets.push_back(c);
@@ -1050,7 +1165,11 @@ private:
     // minimal graph.  Every section is length-prefixed or fixed-width, so the
     // encoding inverts, and the witness extractor can reconstruct any node it
     // needs instead of the engine holding them all.
-    Node decode_key(const Key& k) const {
+    /// Rebuild the node @p v from its stored key.
+    Node decode_node(std::uint32_t v) const {
+        return decode_key(key_at(v), klen_[v]);
+    }
+    Node decode_key(const std::uint32_t* k, std::size_t klen) const {
         Node n;
         std::size_t i = 0;
         n.Gamma     = FormulaSet::from_handle(k[i++]);
@@ -1059,27 +1178,25 @@ private:
         const std::uint32_t np = k[i++];
         for (std::uint32_t t = 0; t < np; ++t) {
             Pursuit p;
-            p.mu       = static_cast<FormulaId>(k[i++]);
-            p.x_mu     = static_cast<ClockId>(k[i++]);
-            p.stage      = static_cast<Pursuit::Stage>(k[i++]);
-            p.part       = static_cast<Pursuit::Part>(k[i++]);
-            p.is_until   = k[i++] != 0;
-            p.persistent = k[i++] != 0;
-            p.rolled     = k[i++] != 0;
+            p.mu = static_cast<FormulaId>(k[i++]);
+            unpack_pursuit(k[i++], p);
             n.pursuits.push_back(p);
         }
 
         const std::uint32_t nd = k[i++];
         for (std::uint32_t t = 0; t < nd; ++t) {
             Deadline dl;
-            dl.x_mu = static_cast<ClockId>(k[i++]);
-            const std::uint64_t hi = k[i++], lo = k[i++];
-            dl.bound  = static_cast<std::int64_t>((hi << 32) | lo);
-            dl.strict = k[i++] != 0;
+            const std::uint32_t w = k[i++];
+            dl.x_mu   = static_cast<ClockId>(w >> 1);
+            dl.strict = (w & 1u) != 0;
+            dl.bound  = static_cast<std::int64_t>(static_cast<std::int32_t>(k[i++]));
             n.D.push_back(dl);
         }
 
-        n.phase = static_cast<Phase>(k[i++]);
+        const std::uint32_t iw = k[i++];
+        n.inv = static_cast<Inv>(iw & 0xFu);
+        n.interval_witness = ((iw >> 4) & 1u) != 0;
+        n.delayed_here     = ((iw >> 5) & 1u) != 0;
 
         if (k[i++] == 0) {                       // the zone was empty
             n.Z = Zone::empty(nc_);
@@ -1092,10 +1209,17 @@ private:
 
         // acc_key's tail: the clocks reset on the edge into this node, then the
         // until it discharges here.
-        if (i < k.size()) {
-            const std::uint32_t nr = k[i++];
-            for (std::uint32_t t = 0; t < nr; ++t)
-                n.just_reset.push_back(static_cast<ClockId>(k[i++]));
+        if (i < klen) {
+            for (std::size_t w = 0; w < rw32_; ++w) {
+                std::uint32_t bits = k[i++];
+                while (bits) {
+                    const std::uint32_t b = static_cast<std::uint32_t>(
+                        __builtin_ctz(bits));
+                    n.just_reset.push_back(
+                        static_cast<ClockId>(w * 32 + b));
+                    bits &= bits - 1;
+                }
+            }
             n.discharges_until = static_cast<FormulaId>(k[i++]);
         }
         return n;
@@ -1222,8 +1346,30 @@ private:
     void collapse_dead_clocks(Node& n) const {
         if (n.Z.is_empty()) return;
         live_scratch_.assign(nc_, 0);
-        for (const Pursuit& p : n.pursuits)
+        for (const Pursuit& p : n.pursuits) {
             if (p.x_mu != kNoClock && p.x_mu < nc_) live_scratch_[p.x_mu] = 1;
+            // The onset clock is read as much as the window clock, but only
+            // once the pursuit is *persistent*: (Ustopdrop) ends a recurrence
+            // on y_mu >= a ∧ y_mu > 0, and a persistent release lapses on
+            // y_mu > b.  Freeing it outright left both guards testing an
+            // unconstrained clock, which no zone entails, so no recurrence
+            // could ever end.  Keeping it always is the other extreme: an
+            // ordinary pursuit never reads y_mu, and (Abs) *resets* it at the
+            // very step that makes the pursuit persistent, so whatever it held
+            // before is discarded anyway.  Carrying it regardless only splits
+            // zones on a value no rule looks at -- and zone variety, not goal
+            // variety, is what the graph size is made of.
+            // ... and only where some rule can actually read it: (Ustopdrop)
+            // for an until, the persistent (Rlapse) for a release with a finite
+            // window.  An *unbounded* persistent release -- an untimed AG, the
+            // commonest pursuit there is -- never lapses on y_mu and never
+            // stops, so its onset clock is pure zone-splitting: it carries a
+            // value no guard reads, and every distinct value it takes is a
+            // distinct zone and hence a distinct node.
+            if (p.persistent && p.y_mu != kNoClock && p.y_mu < nc_ &&
+                (p.is_until || !window_of(p.mu, f_).hi_inf))
+                live_scratch_[p.y_mu] = 1;
+        }
         for (const Deadline& d : n.D)
             if (d.x_mu < nc_) live_scratch_[d.x_mu] = 1;
         dead_scratch_.assign(nc_, 0);
@@ -1268,9 +1414,11 @@ private:
         for (FormulaId id : n.Gamma.elements()) os << f_.to_string(id) << ',';
         os << "} P{";
         for (const Pursuit& p : n.pursuits)
-            os << f_.to_string(p.mu) << "/s" << int(p.stage) << "/pt" << int(p.part)
-               << (p.is_until ? "U" : "R") << ' ';
-        os << "} ph" << int(n.phase) << " Z=" << n.Z.to_string() << '\n';
+            os << f_.to_string(p.mu) << "/s" << int(p.stage)
+               << (p.is_until ? "U" : "R")
+               << (p.persistent ? "*" : "") << (p.rolled ? "@" : "")
+               << "/x" << int(p.x_mu) << "/y" << int(p.y_mu) << ' ';
+        os << "} inv" << int(n.inv) << " Z=" << n.Z.to_string() << '\n';
         std::fputs(os.str().c_str(), stderr);
     }
 
@@ -1281,6 +1429,17 @@ private:
         n.discharges_until = kInvalidId;
         if (node_closed(n.Gamma, f_) || n.Z.is_empty())
             return {Expansion::Kind::Closed, {}};
+
+        // A node carrying a pursuit of an until whose window it has passed is
+        // closed (§4.1): that pursuit has no witness left to find.  A rolled
+        // pursuit is exempt — its window is the recurrence [0, b-a] and the
+        // cell just past it is where (Ustopabut) fires, the rolled deadline
+        // being what stops the zone one cell later.
+        for (const Pursuit& p : n.pursuits) {
+            if (!p.is_until || p.rolled) continue;
+            if (past_window(n.Z, p.x_mu, pursuit_window(p)))
+                return {Expansion::Kind::Closed, {}};
+        }
 
         // Saturation: (∧) then (∨).
         for (FormulaId id : n.Gamma.elements()) {
@@ -1303,325 +1462,419 @@ private:
             }
         }
 
-        // Here-pursuit.
+        // (Rlapse), §4.2.  A release pursuit the zone has outlived is
+        // discharged: it was met by being survived.  Ordered before (Abs) so a
+        // lapsed pursuit never absorbs a fresh demand into an obligation that
+        // no longer exists.
+        for (std::size_t i = 0; i < n.pursuits.size(); ++i) {
+            const Pursuit& p = n.pursuits[i];
+            if (p.is_until || p.stage != Pursuit::Stage::Here) continue;
+            if (!lapsed(n.Z, p)) continue;
+            Node c = n;
+            c.pursuits.erase(c.pursuits.begin() + static_cast<long>(i));
+            free_pursuit_clocks(c.Z, p);
+            c.D = drop_deadline(n.D, p.x_mu);
+            c.discharges_until = p.mu;
+            return {Expansion::Kind::And, {std::move(c)}};
+        }
+
+        // (Abs) then (Cov): a demanded modality folds into a running universal
+        // pursuit if there is one, and otherwise forks into discharge ⊕ launch.
+        // Both live in apply_cover, which tries them in that order.  Ordered
+        // before the unfolding rules so a modality and its own pursuit never
+        // sit in Γ together unhandled.
+        for (FormulaId id : n.Gamma.elements()) {
+            if (!is_modality(f_.node(id).kind)) continue;
+            CoverResult cr = apply_cover(n, id, ag_context_for(id), cmap_, ymap_,
+                                         nc_, max_, f_, sx_cache_);
+            switch (cr.kind) {
+                case CoverResult::Kind::Close:
+                    return {Expansion::Kind::Closed, {}};
+                case CoverResult::Kind::Cover:
+                    return {Expansion::Kind::And, onset_cells(id, std::move(cr.children))};
+            }
+        }
+
+        // (Uunf), (Uunfcarry), (Runf): unfold a pursuit standing at this node.
         for (std::size_t i = 0; i < n.pursuits.size(); ++i)
             if (n.pursuits[i].stage == Pursuit::Stage::Here)
                 return unfold_pursuit(n, i);
 
-        // Demanded modality in Gamma → cover.
-        for (FormulaId id : n.Gamma.elements()) {
-            if (is_modality(f_.node(id).kind)) {
-                CoverResult cr = apply_cover(n, id, ag_context_for(id), cmap_, ymap_,
-                                             nc_, max_, f_, sx_cache_);
-                switch (cr.kind) {
-                    case CoverResult::Kind::Close:
-                        return {Expansion::Kind::Closed, {}};
-                    case CoverResult::Kind::Cover:
-                        return {Expansion::Kind::And, std::move(cr.children)};
-                }
-            }
-        }
+        // (Dinv): the node is saturated; fix the invariant its location carries.
+        if (n.inv == Inv::Unset) return choose_invariant(n);
 
-        // Successor generation.
+        // (Delay) and (EX) together, conjunctively.
         return successors(n);
     }
 
+    /// Partition the (launch) child of an existential timed until into the
+    /// integer cells of every other live clock.
+    ///
+    /// The launch resets @f$x_\mu@f$, so the age of the onset it starts from is
+    /// read off the *other* clocks as @f$x_c - x_\mu = x_c@f$.  One launch zone
+    /// therefore stands for a whole family of onsets, and the (Uunf) branching
+    /// below it may narrow away not only witness *times* but whole *onsets*: the
+    /// accepting stop child keeps the onsets it can serve, and the doomed ones
+    /// survive only in closed siblings, so a demand that no run can meet is
+    /// never seen.  On AG(EF[3,4] p) & AG[4,5] !p the doomed onset is the single
+    /// point t = 1, and without this split the offset to the ban's clock stays
+    /// the loose x_c - x_mu ∈ [0,∞) and the formula comes back SAT.
+    ///
+    /// Splitting conjunctively makes onset-dropping impossible: a doomed cell is
+    /// a child in its own right and closes.  The constraints are single-clock —
+    /// the launch has just zeroed @f$x_\mu@f$ — so no difference constraint
+    /// enters the DBM, the construction stays diagonal-free, and Extra_M applies
+    /// unchanged.  (Do not switch to Extra_LU: it is coarser and is tuned to
+    /// preserve reachability, an existential property, whereas realisability of
+    /// a node is universal over its zone.)
+    std::vector<Node> onset_cells(FormulaId mu, std::vector<Node>&& kids) {
+        // Existential modalities only: a universal one is absorbed rather than
+        // relaunched, so its onsets are already merged by (Abs).  Both the
+        // until and the release need it — the release perhaps more, since
+        // nothing plays (M2)'s role for it, so a doomed onset left inside a
+        // cell with servable ones is never refuted by any other means.
+        const NodeKind k = f_.node(mu).kind;
+        if (!onset_cells_ ||
+            (k != NodeKind::TimedEU && k != NodeKind::TimedER) || kids.size() != 2)
+            return std::move(kids);
+        const ClockId x_mu = clock_of(cmap_, mu);
+        if (x_mu == kNoClock) return std::move(kids);
+
+        Node launch = std::move(kids[1]);
+        // Live clocks other than x_mu: those a rule can still read.  A clock no
+        // pursuit and no deadline reads has been freed out of the zone and
+        // carries no onset information, so splitting on it only adds nodes.
+        std::vector<ClockId> others;
+        for (const Pursuit& p : launch.pursuits) {
+            for (ClockId c : {p.x_mu, p.y_mu})
+                if (c != kNoClock && c < nc_ && c != x_mu &&
+                    std::find(others.begin(), others.end(), c) == others.end() &&
+                    !clock_bounds_[c].empty())
+                    others.push_back(c);
+        }
+        if (others.empty()) { kids[1] = std::move(launch); return std::move(kids); }
+
+        std::vector<Node> out;
+        out.push_back(std::move(kids[0]));                    // discharge
+        std::function<void(std::size_t, Zone)> rec =
+            [&](std::size_t i, Zone z) {
+                if (z.is_empty()) return;
+                if (i == others.size()) {
+                    Node c = launch;
+                    c.Z = std::move(z);
+                    out.push_back(std::move(c));
+                    return;
+                }
+                for (Zone& r : clock_cells(z, others[i])) rec(i + 1, std::move(r));
+            };
+        rec(0, launch.Z);
+        if (debug_)
+            std::fprintf(stderr, "CELLS mu=%s others=%zu -> %zu cells\n",
+                         f_.to_string(mu).c_str(), others.size(), out.size() - 1);
+        // Never drop the launch.  If the partition yielded nothing the launch
+        // zone is unrealisable, and the obligation must then *close* its branch
+        // — returning the discharge alone would discard the demand instead, and
+        // (Cov) is conjunctive precisely so that cannot happen.
+        if (out.size() == 1) out.push_back(std::move(launch));
+        return out;
+    }
+
+    /// The integer cells of @p z along one clock: each of that clock's own
+    /// change points, and each open interval between consecutive ones.
+    std::vector<Zone> clock_cells(const Zone& z, ClockId c) const {
+        const std::vector<std::int32_t>& bs = clock_bounds_[c];
+        std::vector<Zone> out;
+        // Below the first change point.  No guard on c flips there, so it is one
+        // region — and it must be emitted, or the cells fail to cover the line:
+        // a clock at 1 whose own bounds are {4,5} would otherwise land in no
+        // cell at all and the whole partition would come back empty.
+        if (bs.front() > 0) {
+            Zone lo = z;
+            lo.add_upper_bound(c, bs.front(), true);
+            if (!lo.is_empty()) out.push_back(std::move(lo));
+        }
+        for (std::size_t i = 0; i < bs.size(); ++i) {
+            Zone pt = z;                                      // c = bs[i]
+            pt.add_lower_bound(c, bs[i], false);
+            pt.add_upper_bound(c, bs[i], false);
+            if (!pt.is_empty()) out.push_back(std::move(pt));
+            if (i + 1 < bs.size()) {                          // c ∈ (bs[i], bs[i+1])
+                Zone op = z;
+                op.add_lower_bound(c, bs[i], true);
+                op.add_upper_bound(c, bs[i + 1], true);
+                if (!op.is_empty()) out.push_back(std::move(op));
+            }
+        }
+        Zone hi = z;                                          // c > last
+        hi.add_lower_bound(c, bs.back(), true);
+        if (!hi.is_empty()) out.push_back(std::move(hi));
+        return out;
+    }
+
+    // ── Zone predicates the side conditions read ────────────────────────
+    //
+    // Every side condition of §4.2 is an *entailment* Z ⊨ …, not a narrowing:
+    // it asks whether the whole zone satisfies the guard, and leaves the zone
+    // alone.  By Lemma 1(i) a zone keeps each clock at an integer or strictly
+    // between two consecutive ones and every window endpoint is an integer, so
+    // the zone always lies wholly inside a window or wholly outside it and the
+    // question has an answer.  The tests below do not rely on that: each
+    // intersects with the guard and asks whether the zone survived unchanged,
+    // which is exact containment either way.
+
+    /// @f$Z \models x \in I@f$.
+    bool zone_in_window(const Zone& z, ClockId x, const Window& w) const {
+        if (x == kNoClock) return true;          // untimed: I is the whole line
+        Zone t = z;
+        constrain_in_window(t, x, w);
+        return !t.is_empty() && t == z;
+    }
+
+    /// @f$Z \models x > \sup I@f$ — the window is wholly behind the zone.
+    bool past_window(const Zone& z, ClockId x, const Window& w) const {
+        if (x == kNoClock || w.hi_inf) return false;
+        Zone t = z;                              // the complement of "beyond"
+        t.add_upper_bound(x, w.hi, w.hi_strict);
+        return t.is_empty();
+    }
+
+    /// Does @p z contain a valuation inside @p w?  (Used by the re-imposition
+    /// clause of (Delay), which asks whether the child's cell *meets* a window,
+    /// not whether it lies inside one.)
+    bool window_meets(const Zone& z, ClockId x, const Window& w) const {
+        if (x == kNoClock) return true;
+        Zone t = z;
+        constrain_in_window(t, x, w);
+        return !t.is_empty();
+    }
+
+    /// @f$Z \models y_\mu \geq a \wedge y_\mu > 0@f$: no onset has been raised
+    /// since @f$a@f$ before now, so a witness here answers every onset the
+    /// pursuit still owes and it may end.  The @f$y_\mu > 0@f$ conjunct is what
+    /// adds, at @f$a = 0@f$, that none was raised at this very node.
+    bool onsets_ceased(const Zone& z, ClockId y, std::int32_t a) const {
+        if (y == kNoClock) return false;
+        Zone t = z;
+        t.add_lower_bound(y, a, false);
+        t.add_lower_bound(y, 0, true);
+        return !t.is_empty() && t == z;
+    }
+
+    /// Is @p z the cell abutting @f$\sup I@f$ from above, i.e.
+    /// @f$x \in (\sup I, \sup I + 1)@f$?
+    bool abutting_cell(const Zone& z, ClockId x, const Window& w) const {
+        if (x == kNoClock || w.hi_inf) return false;
+        Zone t = z;
+        t.add_lower_bound(x, w.hi, true);
+        t.add_upper_bound(x, w.hi + 1, true);
+        return !t.is_empty() && t == z;
+    }
+
+    /// (Rlapse)'s guard: @f$Z \models x_\mu > \sup I@f$, or the pursuit is
+    /// persistent and @f$Z \models y_\mu > b@f$.  A persistent release has had
+    /// its window rewritten to @f$[a,\infty)@f$ and so can never pass it; what
+    /// ends it is its last onset outliving the *original* window.
+    bool lapsed(const Zone& z, const Pursuit& p) const {
+        if (past_window(z, p.x_mu, pursuit_window(p))) return true;
+        const Window ow = window_of(p.mu, f_);
+        if (p.persistent && p.y_mu != kNoClock && !ow.hi_inf) {
+            Zone t = z;
+            t.add_upper_bound(p.y_mu, ow.hi, ow.hi_strict);
+            if (t.is_empty()) return true;
+        }
+        return false;
+    }
+
+    /// @f$Z \backslash x_\mu y_\mu@f$: a stopped pursuit frees its clocks.
+    void free_pursuit_clocks(Zone& z, const Pursuit& p) const {
+        if (p.x_mu != kNoClock && p.x_mu < nc_) z.free(p.x_mu);
+        if (p.y_mu != kNoClock && p.y_mu < nc_) z.free(p.y_mu);
+    }
+
+    /// A member of @f$\Gamma_{\mathsf{prop}}@f$: an atom or a negated atom.
+    bool is_literal(FormulaId id) const {
+        const FormulaNode& fn = f_.node(id);
+        if (fn.kind == NodeKind::Atom) return true;
+        return fn.kind == NodeKind::Not &&
+               f_.node(fn.children[0]).kind == NodeKind::Atom;
+    }
+
+    /// @f$\Deadline^{\ast}@f$: @f$\Deadline@f$ with @f$x_\mu@f$'s deadline
+    /// replaced by the *rolled* deadline.
+    ///
+    /// The paper (§4.2) makes it the strict @f$x_\mu < (b-a)+1@f$, one cell wide
+    /// of the closed bound, and that width is what (Ustopabut) needs: under the
+    /// closed @f$x_\mu \leq b-a@f$, @f$\uparrow\! Z \cap Inv_D@f$ never reaches
+    /// the abutting cell, so the abutting stop could never fire and the rule
+    /// would be dead.  @c TCTL_ROLLED_DEADLINE=closed selects the closed bound
+    /// instead, for measuring exactly that.
+    PooledVec<Deadline> rolled_deadline(const PooledVec<Deadline>& D, ClockId x,
+                                        const Window& ow) const {
+        PooledVec<Deadline> out = drop_deadline(D, x);
+        if (x == kNoClock || ow.hi_inf) return out;
+        const std::int32_t span = ow.hi - ow.lo;
+        if (rolled_strict_) out.push_back(Deadline{x, span + 1, true});
+        else                out.push_back(Deadline{x, span, false});
+        std::sort(out.begin(), out.end());
+        return out;
+    }
+
+    // ── (Uunf), (Uunfcarry), (Runf) ─────────────────────────────────────
     Expansion unfold_pursuit(const Node& n, std::size_t i) {
         const Pursuit p = n.pursuits[i];
         const FormulaNode& mn = f_.node(p.mu);
         const FormulaId phi = mn.children[0], psi = mn.children[1];
         const bool existential = !is_universal(mn.kind);
-        const Window w = pursuit_window(p);
         const auto defer = existential ? Pursuit::Stage::DeferEX
                                        : Pursuit::Stage::DeferAX;
+        const Window w  = pursuit_window(p);     // the window still to be met
+        const Window ow = window_of(p.mu, f_);   // the modality's own I
+        const bool in_window = zone_in_window(n.Z, p.x_mu, w);
+        const auto drop_at = [&](Node& c) {
+            c.pursuits.erase(c.pursuits.begin() + static_cast<long>(i));
+        };
 
-        if (p.is_until) {
-            // A bounded window the whole zone has already passed refutes the
-            // branch: no run from this pursuit's onset can witness psi any
-            // more, so the node closes rather than defers.  (An A-until never
-            // gets here -- its deadline emptied the zone first.)  Without this
-            // the pursuit rides above M, where extrapolation erases its onset
-            // diagonals and merges it with an accepted twin from a branch
-            // whose onsets were all witnessable; query_until then counts that
-            // twin as the exit that "discharges it in turn".
-            if (!w.hi_inf && p.x_mu != kNoClock) {
-                Zone can = n.Z;
-                can.add_upper_bound(p.x_mu, w.hi, w.hi_strict);
-                if (can.is_empty()) return {Expansion::Kind::Closed, {}};
+        Expansion e;
+        e.kind = Expansion::Kind::Or;
+
+        // (Runf).  Θ = {φ₂} iff Z ⊨ x_μ ∈ I: inside the window the pursuit
+        // asserts its body, before it asserts nothing.  Either way it is
+        // released by φ₁ or deferred, exactly as an until is.
+        if (!p.is_until) {
+            Node stop = n;                                    // (Rstop)
+            stop.Gamma.insert(phi);
+            if (in_window) stop.Gamma.insert(psi);
+            drop_at(stop);
+            free_pursuit_clocks(stop.Z, p);
+            stop.discharges_until = p.mu;
+            e.children.push_back(std::move(stop));
+
+            Node go = n;                                      // (Rgo)
+            if (in_window) go.Gamma.insert(psi);
+            go.pursuits[i].stage = defer;
+            e.children.push_back(std::move(go));
+            return e;
+        }
+
+        // (Uunf).  Stop because φ₂ holds now and the window is open, or go on
+        // because φ₁ holds now and the witness is later.
+        if (!p.persistent) {
+            if (in_window) {
+                Node stop = n;                                // (Ustop)
+                stop.Gamma.insert(psi);
+                drop_at(stop);
+                free_pursuit_clocks(stop.Z, p);
+                stop.D = drop_deadline(n.D, p.x_mu);
+                stop.discharges_until = p.mu;
+                e.children.push_back(std::move(stop));
             }
-            // (U•): stop ⊕ go.  The stop zone Z ∩ (x_mu ∈ I) is split into
-            // integer regions so the eventuality can be discharged in a
-            // boundary-free cell (e.g. (1,2)) rather than a zone straddling a
-            // hyperplane where a co-present formula flips.
-            Expansion e; e.kind = Expansion::Kind::Or;
-            Zone stopZ = n.Z;
-            constrain_in_window(stopZ, p.x_mu, w);
-            if (!stopZ.is_empty()) {
-                for (const Zone& r : integer_regions(stopZ, p.x_mu)) {
-                    // The stop of a persistent pursuit also asserts phi when
-                    // inf I > 0: an onset s with w - s < inf I is not answered
-                    // at w and must wait for the next witness, so phi is still
-                    // owed here.  At inf I = 0 every onset up to w is answered
-                    // at w and nothing is owed.
-                    const Window ow0 = window_of(p.mu, f_);
-                    const bool owes_phi = p.persistent && ow0.lo > 0;
-
-                    // (U*-drop): a persistent pursuit may stop being persistent.
-                    // A witness at w answers every onset at or before w - inf I,
-                    // so the pursuit ends here exactly when no onset has been
-                    // raised since inf I before now -- y_mu >= inf I.  Without
-                    // this the recurrence is eternal and
-                    // AG[0,5](AF[1,2] q) & AG[8,inf) !q, which is satisfiable,
-                    // is rejected.
-                    // The guard has content only when inf I > 0.  At inf I = 0
-                    // a witness at w answers the onset raised at w itself, so
-                    // y_mu >= 0 holds while onsets are still arriving, and
-                    // retiring the pursuit there drops the recurrence rate: the
-                    // node left behind carries no deadline, and this engine
-                    // re-raises a demand only at a discrete step, so a delay can
-                    // then run past the rate unchallenged.  Generalising to
-                    // inf I = 0 needs the context re-imposed at every cell.
-                    if (p.persistent && p.y_mu != kNoClock && ow0.lo > 0) {
-                        Node drop = n;
-                        drop.Gamma.insert(psi);
-                        if (owes_phi) drop.Gamma.insert(phi);
-                        drop.Z = r;
-                        drop.Z.add_lower_bound(p.y_mu, ow0.lo, true);
-                        if (!drop.Z.is_empty()) {
-                            drop.pursuits.erase(drop.pursuits.begin() +
-                                                static_cast<long>(i));
-                            drop.D = drop_deadline(n.D, p.x_mu);
-                            drop.discharges_until = p.mu;
-                            e.children.push_back(std::move(drop));
-                        }
-                    }
-
-                    Node stop = n;
-                    stop.Gamma.insert(psi);
-                    if (owes_phi) stop.Gamma.insert(phi);
-                    stop.Z = r;
-                    if (p.persistent) {
-                        // Persistent demand: the obligation recurs, so the
-                        // pursuit is not retired.  Reset x_mu and keep the
-                        // deadline, making it "time since the last witness"
-                        // and capping the gap between consecutive witnesses at
-                        // sup I (= sup I - inf I, as inf I = 0 here).  That cap
-                        // is what the rate contradiction needs and what a
-                        // single-onset clock cannot express.
-                        stop.Z.reset(p.x_mu);
-                        stop.just_reset.push_back(p.x_mu);
-                        stop.pursuits[i].stage = Pursuit::Stage::Here;
-                        stop.pursuits[i].part  = Pursuit::Part::Whole;
-                        stop.pursuits[i].rolled = true;
-                        // Retune the cap to the recurrence bound sup I - inf I:
-                        // the launch deadline was sup I, measured from an onset,
-                        // and x_mu now measures from the last witness.
-                        const Window ow = window_of(p.mu, f_);
-                        if (!ow.hi_inf) {
-                            stop.D = drop_deadline(n.D, p.x_mu);
-                            stop.D.push_back(Deadline{p.x_mu, ow.hi - ow.lo,
-                                                      ow.hi_strict || ow.lo_strict});
-                            std::sort(stop.D.begin(), stop.D.end());
-                        }
-                    } else {
-                        stop.pursuits.erase(stop.pursuits.begin() + static_cast<long>(i));
-                        stop.D = drop_deadline(n.D, p.x_mu);
-                    }
-                    stop.discharges_until = p.mu;
-                    e.children.push_back(std::move(stop));
-                }
-            }
-            Node go = n;
+            Node go = n;                                      // (Ugo)
             go.Gamma.insert(phi);
             go.pursuits[i].stage = defer;
             e.children.push_back(std::move(go));
             return e;
         }
 
-        // Release.
-        if (p.part == Pursuit::Part::Whole) {
-            // Untimed release (window [0,∞), no clock): the "before"/"after"
-            // partitions are empty, so pursue only the in-window part on Z.
-            if (p.x_mu == kNoClock) {
-                Node in = n;
-                in.pursuits[i].part = Pursuit::Part::InI;
-                in.pursuits[i].stage = Pursuit::Stage::Here;
-                return {Expansion::Kind::And, {in}};
-            }
-            // Cells never straddle a window boundary: Delay cuts each clock at
-            // the constants the rules read, and a release's endpoints are among
-            // them, so Z lies wholly before, wholly inside or wholly beyond I.
-            // Determine which and act, instead of partitioning.  The partition
-            // below is kept only for a zone that does straddle; straddle_ counts
-            // how often that happens, and on the whole suite it should be never.
-            {
-                Zone before = n.Z; before.add_upper_bound(p.x_mu, w.lo, !w.lo_strict);
-                Zone in = n.Z; constrain_in_window(in, p.x_mu, w);
-                const int parts = (!before.is_empty()) + (!in.is_empty());
-                Zone after = n.Z;
-                bool after_ne = false;
-                const Window ow2 = window_of(p.mu, f_);
-                if (p.persistent && !ow2.hi_inf && p.y_mu != kNoClock) {
-                    after.add_lower_bound(p.y_mu, ow2.hi, !ow2.hi_strict);
-                    after_ne = !after.is_empty();
-                } else if (!w.hi_inf) {
-                    after.add_lower_bound(p.x_mu, w.hi, !w.hi_strict);
-                    after_ne = !after.is_empty();
-                }
-                if (parts + (after_ne ? 1 : 0) == 1) {
-                    Node one = n;
-                    if (!before.is_empty()) {
-                        one.pursuits[i].part = Pursuit::Part::BeforeI;
-                        one.pursuits[i].stage = Pursuit::Stage::Here;
-                    } else if (!in.is_empty()) {
-                        one.pursuits[i].part = Pursuit::Part::InI;
-                        one.pursuits[i].stage = Pursuit::Stage::Here;
-                    } else {
-                        one.pursuits.erase(one.pursuits.begin() +
-                                           static_cast<long>(i));
-                    }
-                    return {Expansion::Kind::And, {one}};
-                }
-                ++straddle_;
-            }
+        // (Uunfcarry).  A stop also asserts φ₁ when a > 0: an onset s with
+        // w - s < a is not answered at w, so φ₁ is still owed there.
+        const bool theta_a = ow.lo > 0;
+        if (in_window) {
+            // (Ustopcarry): continue the recurrence.  Re-zero x_μ, rewrite the
+            // window to [0, b-a] and cap the next witness there.
+            Node c = n;
+            c.Gamma.insert(psi);
+            if (theta_a) c.Gamma.insert(phi);
+            c.Z.reset(p.x_mu);
+            c.just_reset.push_back(p.x_mu);
+            c.pursuits[i].rolled = true;
+            c.pursuits[i].stage  = Pursuit::Stage::Here;
+            c.D = rolled_deadline(n.D, p.x_mu, ow);
+            c.discharges_until = p.mu;
+            e.children.push_back(std::move(c));
 
-            // (R^split): partition Z by x_mu vs I; pursue before/in, lapse after.
-            Expansion e; e.kind = Expansion::Kind::And;
-            // before: x_mu ≤ lo (strict iff lo ∈ I)
-            {   Node before = n; before.Z.add_upper_bound(p.x_mu, w.lo, !w.lo_strict);
-                if (!before.Z.is_empty()) {
-                    before.pursuits[i].part = Pursuit::Part::BeforeI;
-                    before.pursuits[i].stage = Pursuit::Stage::Here;
-                    e.children.push_back(before);
-                }
-            }
-            // in: x_mu ∈ I
-            {   Node in = n; constrain_in_window(in.Z, p.x_mu, w);
-                if (!in.Z.is_empty()) {
-                    in.pursuits[i].part = Pursuit::Part::InI;
-                    in.pursuits[i].stage = Pursuit::Stage::Here;
-                    e.children.push_back(in);
-                }
-            }
-            // after: lapsed, drop the pursuit.
-            //
-            // An ordinary release lapses once x_mu passes sup I.  A persistent
-            // one cannot: its window is [inf I, inf), because the onsets absorbed
-            // into it union to that.  What ends it is the onsets stopping -- the
-            // last of them, y_mu ago, outliving its own window -- so it lapses on
-            // y_mu > sup I against the *original* window.
-            const Window ow = window_of(p.mu, f_);
-            const bool lapse_on_y = p.persistent && !ow.hi_inf && p.y_mu != kNoClock;
-            if (lapse_on_y) {
-                Node after = n;
-                after.Z.add_lower_bound(p.y_mu, ow.hi, !ow.hi_strict);
-                if (!after.Z.is_empty()) {
-                    after.pursuits.erase(after.pursuits.begin() + static_cast<long>(i));
-                    e.children.push_back(after);
-                }
-            } else if (!w.hi_inf) {
-                Node after = n; after.Z.add_lower_bound(p.x_mu, w.hi, !w.hi_strict);
-                if (!after.Z.is_empty()) {
-                    after.pursuits.erase(after.pursuits.begin() + static_cast<long>(i));
-                    e.children.push_back(after);
-                }
-            }
-            if (e.children.empty()) return {Expansion::Kind::Closed, {}};
-            return e;
-        }
-
-        if (p.part == Pursuit::Part::BeforeI) {
-            // (R•_{≺I}): stop {φ} ⊕ go
-            Node stop = n; stop.Gamma.insert(phi);
-            stop.pursuits.erase(stop.pursuits.begin() + static_cast<long>(i));
-            Node go = n; go.pursuits[i].stage = defer;
-            return {Expansion::Kind::Or, {stop, go}};
-        }
-        // (R•_{∈I}): stop {φ,ψ} ⊕ go {ψ}
-        Node stop = n; stop.Gamma.insert(phi); stop.Gamma.insert(psi);
-        stop.pursuits.erase(stop.pursuits.begin() + static_cast<long>(i));
-        Node go = n; go.Gamma.insert(psi); go.pursuits[i].stage = defer;
-        return {Expansion::Kind::Or, {stop, go}};
-    }
-
-    // Integer-region split of a zone along ONE clock `c` (paper's Δ°/Δ^∂): the
-    // sub-zones are the integer points c=k and open cells c∈(k,k+1) up to M, plus
-    // c>M.  Splitting only the clock whose window boundary matters (not every
-    // clock) avoids a Cartesian blow-up while still separating a boundary point
-    // from the open interval where a co-present formula's truth flips.
-    std::vector<Zone> integer_regions(const Zone& z, ClockId c) const {
-        if (c == kNoClock) return {z};     // untimed: no boundary to split at
-        std::vector<Zone> regs;
-        for (std::size_t i = 0; i < bounds_.size(); ++i) {
-            const std::int32_t b = bounds_[i];
-            Zone pt = z;                       // c = b
-            pt.add_lower_bound(c, b, false); pt.add_upper_bound(c, b, false);
-            if (!pt.is_empty()) regs.push_back(std::move(pt));
-            if (i + 1 < bounds_.size()) {      // c ∈ (b, next)
-                Zone op = z;
-                op.add_lower_bound(c, b, true);
-                op.add_upper_bound(c, bounds_[i + 1], true);
-                if (!op.is_empty()) regs.push_back(std::move(op));
+            // (Ustopdrop): a recurrence that never ended would be wrong.  The
+            // pursuit may end at a witness exactly when no onset has been
+            // raised since a before it.
+            if (onsets_ceased(n.Z, p.y_mu, ow.lo)) {
+                Node d = n;
+                d.Gamma.insert(psi);
+                if (theta_a) d.Gamma.insert(phi);
+                drop_at(d);
+                free_pursuit_clocks(d.Z, p);
+                d.D = drop_deadline(n.D, p.x_mu);
+                d.discharges_until = p.mu;
+                e.children.push_back(std::move(d));
             }
         }
-        Zone hi = z;                           // c > last boundary
-        hi.add_lower_bound(c, bounds_.back(), true);
-        if (!hi.is_empty()) regs.push_back(std::move(hi));
-        return regs;
+
+        // (Ustopabut): the stop whose witness is an interval rather than an
+        // instant.  A model may serve the onsets owed after a stop at w by
+        // satisfying φ₂ throughout an interval beginning just past w + (b-a),
+        // open at it; no single instant at or before w + (b-a) carries one.
+        // The abutting stop asserts φ₁ and φ₂ together over its whole cell.
+        if (p.rolled && abutting_cell(n.Z, p.x_mu, w)) {
+            Node c = n;
+            c.Gamma.insert(phi);
+            c.Gamma.insert(psi);
+            c.Z.reset(p.x_mu);
+            c.just_reset.push_back(p.x_mu);
+            c.pursuits[i].stage = Pursuit::Stage::Here;
+            c.D = rolled_deadline(n.D, p.x_mu, ow);
+            c.interval_witness = true;
+            c.discharges_until = p.mu;
+            // The witness is an interval, so a release whose window contains
+            // arbitrarily small positive offsets obliges its body across this
+            // whole cell, not merely at its far end: a position later in the
+            // crossing lies inside the window of one earlier in it.  A ban
+            // re-imposed by the delay is already launched and deferred by the
+            // time this stop fires — saturation precedes unfolding — so binding
+            // it at launch (apply_cover) does not reach it, and it has to be
+            // bound here.  This is what closes the abutting child on a rate
+            // contradiction.
+            for (const Pursuit& s : c.pursuits) {
+                if (s.is_until) continue;
+                if (window_of(s.mu, f_).lo != 0) continue;
+                c.Gamma.insert(f_.node(s.mu).children[1]);
+            }
+            e.children.push_back(std::move(c));
+        }
+
+        Node go = n;                                          // (Ugocarry)
+        go.Gamma.insert(phi);
+        go.pursuits[i].stage = defer;
+        e.children.push_back(std::move(go));
+        return e;
     }
 
-    // Lower endpoint of clock c in z:  c >= lv,  strict iff `lstrict`.
-    void clk_lower(const Zone& z, ClockId c, std::int32_t& lv, bool& lstrict) const {
-        const Bound lb = z.get_bound(kReferenceClock, c);   // 0 - c <= lb ⇒ c >= -lb
-        if (lb.is_infinity()) { lv = 0; lstrict = false; return; }
-        lv = -lb.value; lstrict = lb.is_strict;
-    }
-    // Does z pin c exactly on one of c's own truth-change points?
-    bool at_own_bound(const Zone& z, ClockId c, std::int32_t lv, bool lstrict) const {
-        if (lstrict) return false;
-        const Bound ub = z.get_bound(c, kReferenceClock);   // c - 0 <= ub
-        if (ub.is_infinity() || ub.is_strict || ub.value != lv) return false;
-        const std::vector<std::int32_t>& bs = clock_bounds_[c];
-        return std::find(bs.begin(), bs.end(), lv) != bs.end();
-    }
-    // c's next own change point strictly above lv, if any.
-    bool next_own_bound(ClockId c, std::int32_t lv, std::int32_t& nb) const {
-        for (std::int32_t b : clock_bounds_[c]) if (b > lv) { nb = b; return true; }
-        return false;
-    }
+    // ── (Dinv) ──────────────────────────────────────────────────────────
 
-    // (Delay), §4.2.  Time advances one truth region at a time: first Δ°, the
-    // time-successor strictly below the next integer hyperplane, then Δ^∂, that
-    // hyperplane itself.  By Lemma 3 the truth of every subformula is constant
-    // along an open segment that crosses no hyperplane, so a node whose zone
-    // lies in one region answers each guard once and unambiguously — which is
-    // what keeps [1,2) distinguishable from [1,2].
-    //
-    // The two steps are sequential: Δ^∂ is the delay successor *of the node Δ°
-    // produced*, not a sibling of it.  They are consecutive segments of a single
-    // run rather than independent conjuncts, and conjoining them would demand
-    // that one run meet its obligations twice over.  An eventuality stopped in
-    // the open segment would still be pending in a sibling boundary node, so
-    // E(p U(1,5) q) would be rejected on the ground that x = 5 cannot meet a
-    // window that has just closed at 5.
-    //
-    // Region-uniformity is also what keeps (Rsplit) well behaved.  With every
-    // node's zone inside a single cell of each active clock, the partition of a
-    // release into before/in/after has exactly one non-empty part, so a pursuit
-    // travelling alongside it is never split across the parts and never has to
-    // discharge separately in a segment where the release forbids its target.
-    Expansion delay_successor(const Node& n) {
-        Zone Zup = n.Z;
-        Zup.up();
-        apply_inv(Zup, n.D);
-        if (Zup.is_empty()) return {Expansion::Kind::Closed, {}};
+    /// An active clock, with the next hyperplane (Dinv) may put in front of it.
+    struct Act {
+        ClockId      c;
+        std::int32_t lv;      ///< the clock's integer lower bound in Z
+        bool         at_pt;   ///< Z pins c exactly on one of its own change points
+        bool         has_nb;  ///< a change point remains above lv
+        std::int32_t nb;      ///< the next one
+    };
 
-        // Only clocks a guard can still be tested against need cell-uniformity:
-        // those of the active pursuits and of the deadlines in Inv(N).  A clock
-        // with no live pursuit is never read, and is freshly reset if its
-        // modality is launched again, so splitting on it would only add nodes.
-        struct Act { ClockId c; std::int32_t lv; bool at_pt; bool has_nb; std::int32_t nb; };
-        std::vector<Act> act;
+    /// The active clocks of @p n and their next hyperplanes.
+    ///
+    /// Active means a clock a guard can still be tested against: those of the
+    /// live pursuits and of the deadlines in @f$Inv_D(N)@f$.  A clock with no
+    /// live pursuit is never read and is freshly reset if its modality is
+    /// launched again, so bounding it would only add nodes.
+    ///
+    /// The hyperplane is the clock's next *own change point* — an endpoint of
+    /// its modality's window, or one of the nesting shifts of
+    /// add_onset_shifts() — and not simply the next integer.  Only at those
+    /// values can a guard on the clock, or a demand it carries, flip; a cut
+    /// anywhere else splits a cell whose every position answers every guard
+    /// alike, and produces two nodes where the calculus needs one.  Taking the
+    /// next integer instead makes the graph scale with @f$M@f$: on the
+    /// constant-free onset family that is 1.19M nodes at @f$M=64@f$ against
+    /// 6980 at @f$M=4@f$, for the same proof.
+    std::vector<Act> active_clocks(const Node& n) const {
+        std::vector<Act> out;
         std::vector<char> seen(nc_, 0);
         auto note = [&](ClockId c) {
             if (c == kNoClock || c >= nc_ || seen[c]) return;
@@ -1631,157 +1884,305 @@ private:
             clk_lower(n.Z, c, a.lv, lstrict);
             a.at_pt  = at_own_bound(n.Z, c, a.lv, lstrict);
             a.has_nb = next_own_bound(c, a.lv, a.nb);
-            act.push_back(a);
+            out.push_back(a);
         };
-        for (const Pursuit& p : n.pursuits) note(p.x_mu);
-        for (const Deadline& d : n.D)       note(d.x_mu);
+        for (const Pursuit& p : n.pursuits) { note(p.x_mu); note(p.y_mu); }
+        for (const Deadline& d : n.D) note(d.x_mu);
+        return out;
+    }
 
-        auto mk = [&](Zone z) {
-            z.extrapolate(max_);
-            Node d = n;
-            d.Z = std::move(z);
-            d.phase = Phase::Discrete;
-            d.just_reset.clear();
-            return d;
-        };
+    // Does z pin c exactly on one of c's own truth-change points?
+    bool at_own_bound(const Zone& z, ClockId c, std::int32_t lv, bool lstrict) const {
+        if (lstrict) return false;
+        const Bound ub = z.get_bound(c, kReferenceClock);   // c - 0 <= ub
+        if (ub.is_infinity() || ub.is_strict || ub.value != lv) return false;
+        const std::vector<std::int32_t>& bs = clock_bounds_[c];
+        return std::find(bs.begin(), bs.end(), lv) != bs.end();
+    }
 
+    // c's next own change point strictly above lv, if any.
+    bool next_own_bound(ClockId c, std::int32_t lv, std::int32_t& nb) const {
+        for (std::int32_t b : clock_bounds_[c]) if (b > lv) { nb = b; return true; }
+        return false;
+    }
+
+    // Lower endpoint of clock c in z:  c >= lv,  strict iff `lstrict`.  A zone
+    // keeps each clock at an integer or strictly inside a unit cell, so the next
+    // hyperplane above it is lv + 1 in both cases.
+    void clk_lower(const Zone& z, ClockId c, std::int32_t& lv, bool& lstrict) const {
+        const Bound lb = z.get_bound(kReferenceClock, c);   // 0 - c <= lb ⇒ c >= -lb
+        if (lb.is_infinity()) { lv = 0; lstrict = false; return; }
+        lv = -lb.value; lstrict = lb.is_strict;
+    }
+
+    /// (Dinv).  The location may be occupied strictly below the next hyperplane
+    /// or up to and including it; the two are alternatives, so the rule is
+    /// disjunctive.  The choice matters because a witness may have to be
+    /// produced at a specific instant: below k a pursuit of E(p U[1,2) q) with
+    /// x_μ ∈ (1,2) can still stop, while at k = 2 its window has closed.
+    Expansion choose_invariant(const Node& n) {
+        bool any_nb = false, any_pt = false;
+        for (const Act& a : active_clocks(n)) {
+            if (a.has_nb) any_nb = true;
+            // Only a point on a clock an *until* pursuit reads can be the
+            // instant a witness has to be produced at; a release wants its body
+            // over an interval, and a deadline clock only bounds the elapse.
+            if (!a.at_pt) continue;
+            for (const Pursuit& p : n.pursuits)
+                if (p.is_until && p.x_mu == a.c) { any_pt = true; break; }
+        }
+        // The candidates, in order.  Stay -- the run leaves this location at
+        // once -- is only available where the zone pins an active clock on one
+        // of its own change points, so that the invariant it stands for has an
+        // integer bound; and only an until pursuit can be obliged to act at one
+        // exact instant, a release wanting its body over an interval.
+        Inv cand[3];
+        std::size_t nc = 0;
+        if (any_pt) cand[nc++] = Inv::Stay;
+        if (any_nb) cand[nc++] = Inv::Below;
+        cand[nc++] = Inv::Upto;
+
+        // Two branches that leave the same parts behind are the same choice
+        // written twice: the (EX) children do not depend on the invariant, so
+        // the expansions below them are identical and only the recorded Inv
+        // differs.  That happens constantly -- Upto collapses onto Below the
+        // moment a deadline empties the boundary part, and Below onto Stay
+        // whenever the open part is the zone itself -- and each duplicate is a
+        // whole subtree explored twice.  Deciding it here costs one delay_parts
+        // per candidate, which the child would have computed anyway.
+        Expansion e;
+        e.kind = Expansion::Kind::Or;
+        std::vector<std::vector<Zone>> seen;
+        seen.reserve(nc);
+        for (std::size_t i = 0; i < nc; ++i) {
+            Node t = n;
+            t.inv = cand[i];
+            std::vector<Zone> parts = delay_parts(t);
+            bool dup = false;
+            for (const std::vector<Zone>& q : seen) {
+                if (q.size() != parts.size()) continue;
+                bool same = true;
+                for (std::size_t j = 0; j < parts.size(); ++j)
+                    if (!(q[j] == parts[j])) { same = false; break; }
+                if (same) { dup = true; break; }
+            }
+            if (dup) continue;
+            seen.push_back(std::move(parts));
+            e.children.push_back(std::move(t));
+        }
+        if (e.children.size() == 1) e.kind = Expansion::Kind::And;
+        return e;
+    }
+
+    // ── (Delay) ─────────────────────────────────────────────────────────
+
+    /// The non-empty parts of @f$\uparrow\! Z \cap Inv \cap Inv_D(N)@f$.
+    ///
+    /// Time advances one truth region at a time: by Lemma 1(i) the truth of
+    /// every subformula is constant along a segment that crosses no integer
+    /// hyperplane, so a node whose zone lies in one region answers each guard
+    /// once and unambiguously — which is what keeps [1,2) distinguishable from
+    /// [1,2].  The parts are therefore the open cell below the hyperplanes and,
+    /// when the invariant admits it, the boundary regions on them.  They are
+    /// returned together because (Delay) is conjunctive: all of them are
+    /// reachable by elapsing time, and a witness must admit every elapse its
+    /// invariant permits.  The zero-elapse part is dropped, both delay children
+    /// elapsing positive time.
+    std::vector<Zone> delay_parts(const Node& n) const {
+        // The location is occupied only at this instant, so it permits no
+        // elapse and has no (Delay)-children — its expansion is its (EX)
+        // children alone.
+        if (n.inv == Inv::Stay) return {};
+        const std::vector<Act> act = active_clocks(n);
+        const bool upto = (n.inv == Inv::Upto);
         bool any_nb = false;
         for (const Act& a : act) if (a.has_nb) any_nb = true;
 
-        // Δ°: every active clock strictly below its next change point, and every
-        // clock sitting exactly on one pushed strictly off it.  Both constraints
-        // are single-clock, so no diagonal enters the construction.  The push-off
-        // matters even when no change point remains ahead: a clock resting on its
-        // *last* bound still has the point and the open cell above it as two
-        // distinct regions, and a zone spanning both would put (R^split) back to
-        // splitting one run's future into AND-siblings.
+        Zone Zup = n.Z;
+        Zup.up();
+        apply_inv(Zup, n.D);                       // Inv_D(N)
+        if (Zup.is_empty()) return {};
+
+        Zone cur = n.Z;
+        cur.extrapolate(max_);
+
+        // Is the zone a single point in every active clock?  Then, and only
+        // then, does a part equal to it stand for zero elapse.
+        bool at_point = true;
+        for (const Act& a : act) if (!a.at_pt) { at_point = false; break; }
+
+        std::vector<Zone> parts;
+        auto emit = [&](Zone z) {
+            if (z.is_empty()) return;
+            z.extrapolate(max_);
+            // "Both delay children elapse positive time" (§4.2) drops the
+            // zero-elapse part.  A part equal to the current zone is zero-elapse
+            // only when that zone is a *point*: inside an open cell time passes
+            // with the zone unchanged, so the part is a genuine delay and must
+            // be emitted, as a self-loop.  Dropping it left a node inside a cell
+            // with no (Delay) child at all, so a run could sit there for ever
+            // through (EX) steps alone with no delay edge for (M1) to see, and
+            // the stall was accepted.  Emitted, the self-loop is a delay whose
+            // cycle bounds a clock it never resets, so (M1) rejects it — which
+            // is what refutes AG(EG[2,4] p) & AG[6,7] !p, whose doomed onsets
+            // survived by stalling just below the cell where they close.
+            if (z == cur && at_point) return;
+            for (const Zone& q : parts) if (q == z) return;
+            parts.push_back(std::move(z));
+        };
+
+        // Δ°, the part below the hyperplanes: every active clock strictly below
+        // its next change point, and every clock sitting exactly on one pushed
+        // strictly off it.  Both constraints are single-clock, so no diagonal
+        // enters the construction.  The push-off is what keeps a boundary point
+        // and the open cell above it two distinct regions, and it is needed
+        // whether or not a change point remains ahead: a clock resting on its
+        // *last* bound still has the point and the cell above it as two regions,
+        // and a zone spanning both answers x > b and x = b at once — which is
+        // why E(true U(2,∞) p), whose only witness lies strictly above its last
+        // constant, could not stop while this was skipped.
         Zone open = Zup;
         for (const Act& a : act) {
             if (a.has_nb) open.add_upper_bound(a.c, a.nb, true);
             if (a.at_pt)  open.add_lower_bound(a.c, a.lv, true);
         }
-        Zone cur = n.Z; cur.extrapolate(max_);
-        if (!open.is_empty()) {
-            Node d = mk(open);
-            if (!(d.Z == cur)) return {Expansion::Kind::And, {d}};
-            // Δ° = Z: already inside the open cell, so the next step is Δ^∂.
-        }
 
         if (!any_nb) {
             // Past the last change point of every active clock, so no hyperplane
-            // remains: (Delay) degenerates to ↑Z, a self-loop that keeps time
-            // running.  It is not Zeno — every active clock is now extrapolated
-            // above its maximum, hence unbounded (Lemma 4).
-            if (open.is_empty()) return {Expansion::Kind::Closed, {}};
-            Node d = mk(std::move(open));
-            return {Expansion::Kind::And, {d}};
+            // remains and the invariant bounds nothing: (Delay) degenerates to
+            // the cell above, a self-loop that keeps time running.  It is
+            // emitted even when the extrapolated zone is unchanged — the elapse
+            // is unbounded, not zero.  Nor is it Zeno: every active clock is now
+            // above its maximum, hence unbounded, so (M1) accepts the cycle.
+            if (open.is_empty()) return {};
+            open.extrapolate(max_);
+            parts.push_back(std::move(open));
+            return parts;
         }
 
-        // Δ^∂: the run reaches the next hyperplane.  Which clocks land on a
-        // change point together depends on the valuation, so this is an
-        // OR-narrowing — sound by monotonicity of realisability under narrowing
-        // (§4.1), the same justification (Cov*) narrows on, and complete because
-        // every valuation is covered by one of the combinations.
+        emit(std::move(open));
+        if (!upto) return parts;
+
+        // Δ^∂, the parts on the hyperplanes.  Which clocks land on one together
+        // is fixed by the zone's diagonals, so this enumeration finds the
+        // combinations the zone admits rather than branching over all of them.
         Zone capped = Zup;
         for (const Act& a : act) {
             if (a.has_nb) capped.add_upper_bound(a.c, a.nb, false);
             if (a.at_pt)  capped.add_lower_bound(a.c, a.lv, true);
         }
-        std::vector<Act> cand;
-        for (const Act& a : act) if (a.has_nb) cand.push_back(a);
+        std::vector<const Act*> cand;
+        for (const Act& a : act) if (a.has_nb) cand.push_back(&a);
 
-        Expansion e; e.kind = Expansion::Kind::Or;
         std::function<void(std::size_t, Zone, bool)> rec =
             [&](std::size_t i, Zone z, bool any_at) {
-                if (z.is_empty()) return;                      // prune early
-                if (i == cand.size()) {
-                    if (!any_at) return;                       // that is Δ°
-                    Node d = mk(std::move(z));
-                    if (!d.Z.is_empty()) e.children.push_back(std::move(d));
-                    return;
-                }
-                const Act& a = cand[i];
-                Zone at = z;                                   // c on its bound
+                if (z.is_empty()) return;
+                if (i == cand.size()) { if (any_at) emit(std::move(z)); return; }
+                const Act& a = *cand[i];
+                Zone at = z;                       // c lands on its hyperplane
                 at.add_lower_bound(a.c, a.nb, false);
                 at.add_upper_bound(a.c, a.nb, false);
                 rec(i + 1, std::move(at), true);
-                Zone below = std::move(z);                     // c still below it
+                Zone below = std::move(z);         // c is still below it
                 below.add_upper_bound(a.c, a.nb, true);
                 rec(i + 1, std::move(below), any_at);
             };
         rec(0, std::move(capped), false);
+        return parts;
+    }
 
+    /// A (Delay) child is a new cell — in the extraction a new location with a
+    /// label of its own — so its goals re-impose the demands of the cell rather
+    /// than inherit the claims of the last one (§4.2).
+    Node make_delay_child(const Node& n, Zone z) const {
+        Node d;
+        d.X = n.X;
+        d.Z = std::move(z);
+        d.D = n.D;
+        d.pursuits = n.pursuits;
+        d.inv = Inv::Unset;
+        d.delayed_here = true;
+
+        // A literal is a claim about one configuration and does not cross the
+        // cell edge, so Γ' is Γ without its literals …
+        FormulaIdVec keep;
+        keep.reserve(n.Gamma.elements().size());
+        for (FormulaId id : n.Gamma.elements())
+            if (!is_literal(id)) keep.push_back(id);
+        d.Gamma = FormulaSet::from_sorted(keep);
+
+        for (const Pursuit& p : d.pursuits) {
+            const FormulaNode& mn = f_.node(p.mu);
+            if (!p.is_until) {
+                // … plus the body of every release pursuit whose window the
+                // child's zone meets: a release obliges its body at every
+                // position of its window, not only at the discrete steps.  This
+                // is also what keeps the clock y_μ of any demand that body
+                // raises honest across a delay — the re-imposed body re-demands
+                // μ, and (Abs) re-zeroes y_μ at every cell it still covers.
+                if (window_meets(d.Z, p.x_mu, pursuit_window(p)))
+                    d.Gamma.insert(mn.children[1]);
+            } else if (p.stage != Pursuit::Stage::Here) {
+                // … plus the first argument of every deferred until pursuit,
+                // owed at every position before its stop.
+                d.Gamma.insert(mn.children[0]);
+            }
+        }
+        return d;
+    }
+
+    // ── (EX) ────────────────────────────────────────────────────────────
+
+    /// One child per demanded @f$EX\psi@f$, each carrying @f$\psi@f$ under the
+    /// context of its parent; a single stutter child when no step is demanded.
+    ///
+    /// The context is consumed by the step rather than inherited: a universal
+    /// obligation persists because unfolding it puts it back, and a discharged
+    /// one disappears because nothing does.
+    std::vector<Node> ex_children(const Node& n) const {
+        PooledVec<Pursuit> ex, ax;
+        for (const Pursuit& p : n.pursuits) {
+            if (p.stage == Pursuit::Stage::DeferEX)      ex.push_back(p);
+            else if (p.stage == Pursuit::Stage::DeferAX) ax.push_back(p);
+        }
+        auto make = [&](const Pursuit* one) {
+            Node c;
+            c.Gamma = n.X;                    // {ψ} ∪ Ctx
+            c.Z = n.Z;
+            c.D = n.D;
+            c.inv = Inv::Unset;
+            if (one) {
+                Pursuit q = *one;
+                q.stage = Pursuit::Stage::Here;
+                c.pursuits.push_back(q);
+            }
+            for (const Pursuit& q0 : ax) {
+                Pursuit q = q0;
+                q.stage = Pursuit::Stage::Here;
+                c.pursuits.push_back(q);
+            }
+            return c;
+        };
+        std::vector<Node> out;
+        if (ex.empty()) out.push_back(make(nullptr));
+        else for (const Pursuit& p : ex) out.push_back(make(&p));
+        return out;
+    }
+
+    /// The children of a saturated node with a fixed invariant: its (Delay)-
+    /// and (EX)-children together, conjunctively, since a witness must admit
+    /// every elapse its invariant permits and supply every step its goals
+    /// demand.
+    Expansion successors(const Node& n) {
+        Expansion e;
+        e.kind = Expansion::Kind::And;
+        for (Zone& z : delay_parts(n))
+            e.children.push_back(make_delay_child(n, std::move(z)));
+        for (Node& c : ex_children(n))
+            e.children.push_back(std::move(c));
         if (e.children.empty()) return {Expansion::Kind::Closed, {}};
         return e;
     }
-
-    Expansion successors(const Node& n) {
-        if (n.phase == Phase::Elapse) return delay_successor(n);
-        // (EX): one child per DeferEX pursuit; DeferAX carried to all; stutter.
-        PooledVec<Pursuit> ex, ax;
-        for (const Pursuit& p : n.pursuits) {
-            if (p.stage == Pursuit::Stage::DeferEX) ex.push_back(p);
-            else if (p.stage == Pursuit::Stage::DeferAX) ax.push_back(p);
-        }
-        // Reviving a deferred pursuit: time has advanced (a delay just ran), so a
-        // release must re-partition its window against the new zone — reset its
-        // part to Whole so (R^split) re-runs (else it stays "in-window" and keeps
-        // imposing ψ after x_mu has lapsed past I).
-            // An untimed release has no clock, so (R^split)'s before- and
-        // after-window parts are empty and the whole-zone stage exists only to
-        // be rewritten into the in-window one on the very next step.  Reviving
-        // straight into that stage costs nothing and removes a state per live
-        // release: on a tower of AG(EF ...) every level carries one, so the
-        // node's pursuit vector was ranging over 2^depth combinations that
-        // differ in a field with one reachable value.
-        // Whole is the pre-split state of a release pursuit, and (R^split)
-        // partitions the zone into the parts before, inside and after the
-        // window.  When the zone already lies wholly in one of them the split
-        // has exactly one non-empty child, carrying the same zone and differing
-        // only in this field -- so the Whole node and its single child are two
-        // nodes for one configuration.  Reviving straight into the part the
-        // zone determines removes the first of them.  The clockless case is
-        // where the window is the whole timeline and the answer is always InI.
-        auto revive = [&](Pursuit q) {
-            q.stage = Pursuit::Stage::Here;
-            q.part = Pursuit::Part::Whole;
-            if (q.is_until) return q;
-            if (q.x_mu == kNoClock) { q.part = Pursuit::Part::InI; return q; }
-            const Window w = window_of(q.mu, f_);
-            Zone before = n.Z; before.add_upper_bound(q.x_mu, w.lo, !w.lo_strict);
-            Zone in = n.Z; constrain_in_window(in, q.x_mu, w);
-            Zone after = n.Z;
-            if (!w.hi_inf) after.add_lower_bound(q.x_mu, w.hi, !w.hi_strict);
-            else after = Zone::empty(nc_);
-            const int parts = (!before.is_empty()) + (!in.is_empty()) +
-                              (!after.is_empty());
-            if (parts == 1) {
-                if (!before.is_empty())  q.part = Pursuit::Part::BeforeI;
-                else if (!in.is_empty()) q.part = Pursuit::Part::InI;
-                // wholly after the window: the obligation has lapsed, and
-                // (R^split) would drop the pursuit -- leave Whole so it does.
-            }
-            return q;
-        };
-        auto make_child = [&](const Pursuit* ex_one) {
-            Node c;
-            c.X = n.X;
-            c.Gamma = n.X;             // {ψ} ∪ X base
-            c.Z = n.Z; c.O = n.O; c.D = n.D; c.phase = Phase::Elapse;
-            if (ex_one) c.pursuits.push_back(revive(*ex_one));
-            for (const Pursuit& q : ax) c.pursuits.push_back(revive(q));
-            return c;
-        };
-        Expansion e; e.kind = Expansion::Kind::And;
-        if (ex.empty()) {
-            e.children.push_back(make_child(nullptr));       // stutter
-        } else {
-            for (const Pursuit& p : ex) e.children.push_back(make_child(&p));
-        }
-        return e;
-    }
-
-
     // ── Explicit-stack frame (no call recursion → no stack overflow) ────
 
     // because one particular back-edge happens to close a bad one.  That is the
@@ -1823,9 +2224,18 @@ private:
         std::sort(scratch32_.begin(), scratch32_.end());
         scratch32_.erase(std::unique(scratch32_.begin(), scratch32_.end()),
                          scratch32_.end());
-        put(k, static_cast<std::uint32_t>(scratch32_.size()));
-        for (std::uint32_t c : scratch32_) put(k, c);
+        // The reset set as a bitmask rather than a counted list: the tableau
+        // has few clocks, so one or two words cover it however many were reset.
+        for (std::size_t w = 0; w < rw32_; ++w) put(k, 0);
+        const std::size_t base = k.size() - rw32_;
+        for (std::uint32_t c : scratch32_) k[base + (c >> 5)] |= 1u << (c & 31);
         put(k, static_cast<std::uint32_t>(n.discharges_until));
+        // Whether (Delay) produced this node is what \ref M1 reads, so it must
+        // tell two nodes apart: the same goals and zone are reachable both by
+        // elapsing time and by a discrete step or an expansion step, and
+        // merging the two would let a cycle built from expansion steps alone
+        // inherit the delay that only the other arrival carried.
+        (void)base;
     }
 
     // ── A node of the explored AND–OR graph ─────────────────────────────
@@ -1838,17 +2248,38 @@ private:
         /// two hundred bytes of shells whose contents are already gone.  A null
         /// pointer costs eight.
         std::unique_ptr<Node>      n;
-        Expansion::Kind            kind = Expansion::Kind::Closed;
-        std::vector<std::uint32_t> ch;
-
-        bool                   delayed    = false;      ///< reached by (Delay)
-        FormulaId              discharges = kInvalidId; ///< (U•) stop taken here
-        std::vector<FormulaId> untils;                  ///< active until pursuits
-
-        std::uint32_t index = 0, low = 0;   ///< Tarjan
+        /// Children and active until pursuits live in the flat arenas
+        /// #charena_ / #uarena_, not in a vector apiece.  Both are written once
+        /// and read on every acceptance pass, and at two or three entries each a
+        /// std::vector spent a 24-byte header plus a malloc rounding on what
+        /// fits in a dozen bytes -- some hundred bytes per node, against a graph
+        /// that runs to hundreds of thousands of them.
+        std::uint32_t ch_off = 0, u_off = 0;
+        std::uint32_t ch_len = 0, u_len = 0;
+        FormulaId     discharges = kInvalidId; ///< (U•) stop taken here
+        std::uint32_t index = 0, low = 0;      ///< Tarjan
+        Expansion::Kind kind = Expansion::Kind::Closed;
+        bool delayed = false;               ///< reached by (Delay)
         bool visited = false, onstack = false;
         bool done = false, val = false;     ///< final once its SCC is evaluated
     };
+
+    /// A read-only run of node ids (or formula ids) inside one of the arenas.
+    struct Span {
+        const std::uint32_t* p = nullptr;
+        std::uint32_t        n = 0;
+        const std::uint32_t* begin() const noexcept { return p; }
+        const std::uint32_t* end()   const noexcept { return p + n; }
+        std::size_t          size()  const noexcept { return n; }
+        bool                 empty() const noexcept { return n == 0; }
+        std::uint32_t operator[](std::size_t i) const noexcept { return p[i]; }
+    };
+    Span ch_of(std::uint32_t v) const {
+        return {charena_.data() + g_[v].ch_off, g_[v].ch_len};
+    }
+    Span us_of(std::uint32_t v) const {
+        return {uarena_.data() + g_[v].u_off, g_[v].u_len};
+    }
 
     // Per-node clock sets live in flat bitmap arrays rather than in the node, so
     // that a graph of millions of nodes costs no per-node allocation.
@@ -1872,7 +2303,8 @@ private:
     /// retained children.
     void release_search_state(std::uint32_t v) {
         if (keep_graph_) return;
-        std::vector<std::uint32_t>().swap(g_[v].ch);
+        // Children live in charena_ now; there is no per-node buffer to free.
+        (void)v;
     }
 
     // Intern a node: return its id, creating it (and its metadata) on first sight.
@@ -2092,7 +2524,7 @@ private:
         std::size_t gi = 0;
         for (auto& kv : grp) {
             Node c;
-            c.Z = n.Z; c.O = n.O; c.D = n.D; c.phase = n.phase;
+            c.Z = n.Z; c.D = n.D; c.inv = n.inv;
             FormulaIdVec gam, ctx;
             for (std::size_t i : kv.second) {
                 if (i < items.size()) {
@@ -2179,13 +2611,28 @@ private:
         subsume_goals(n);
         collapse_dead_clocks(n);
         acc_key(n, k, ez);
-        if (auto it = gid_.find(k); it != gid_.end()) return it->second;
+        const std::uint64_t h = key_hash(k.data(), k.size());
+        std::size_t slot = 0;
+        if (const std::uint32_t hit = klookup(k.data(), k.size(), h, slot);
+            hit != kNoRegion)
+            return hit;
 
         const auto id = static_cast<std::uint32_t>(g_.size());
-        // Elements of an unordered_map are reference-stable, so the graph can
-        // index the keys by node id at eight bytes each rather than copying.
-        const auto ins = gid_.emplace(std::move(k), id);
-        key_of_.push_back(&ins.first->first);
+        // Grow the parallel per-node arrays in fixed steps rather than by
+        // doubling: the same reason as the arena, one buffer instead of two.
+        if ((id & 0xFFFFu) == 0) {
+            const std::size_t want = id + 0x10000u;
+            koff_.reserve(want); klen_.reserve(want); khash_.reserve(want);
+            cap_.reserve(want * words_); res_.reserve(want * words_);
+            unb_.reserve(want * words_);
+        }
+        klen_.push_back(static_cast<std::uint32_t>(k.size()));
+        khash_.push_back(h);
+        koff_.push_back(karena_put(k.data(), static_cast<std::uint32_t>(k.size())));
+        ktab_[slot] = id + 1;
+        // Keep the load factor under 0.7; the grow rehashes the entry just
+        // written along with the rest, so writing it first is safe.
+        if ((id + 1) * 10 >= ktab_.size() * 7) ktab_grow();
         g_.emplace_back();
         cap_.resize(cap_.size() + words_, 0);
         res_.resize(res_.size() + words_, 0);
@@ -2193,10 +2640,27 @@ private:
 
         GNode& gn = g_.back();
         gn.n          = std::make_unique<Node>(std::move(n));
-        gn.delayed    = (gn.n->phase == Phase::Discrete);
+        gn.delayed    = gn.n->delayed_here;
         gn.discharges = gn.n->discharges_until;
-        for (const Pursuit& p : gn.n->pursuits)
-            if (p.is_until) gn.untils.push_back(p.mu);
+        gn.u_off      = static_cast<std::uint32_t>(uarena_.size());
+        // (M2) is stated for existential untils, but a *bounded* existential
+        // release needs the same treatment and nothing else supplies it.  Its
+        // branch must outlive its window -- on a time-divergent run x_mu always
+        // passes sup I and (Rlapse) fires -- so if no path carrying the pursuit
+        // ever drops it, that branch is Zeno and the release is not really
+        // witnessed.  Without this a doomed onset survives by stalling inside
+        // a cell for ever: every node on the stall cycle satisfies (M1) through
+        // its (Cov) launch sibling, which starts a *fresh, safe* onset, so (M1)
+        // is met by another configuration's future while the doomed pursuit's
+        // own branch never progresses.  That is how AG(EG[2,4] p) & AG[6,7] !p
+        // came back SAT.
+        for (const Pursuit& p : gn.n->pursuits) {
+            if (p.is_until) { uarena_.push_back(p.mu); continue; }
+            const NodeKind mk = f_.node(p.mu).kind;
+            if (is_universal(mk)) continue;
+            if (!window_of(p.mu, f_).hi_inf) uarena_.push_back(p.mu);
+        }
+        gn.u_len = static_cast<std::uint32_t>(uarena_.size()) - gn.u_off;
 
         // The clocks that can cap the elapse are exactly those (Delay) reads:
         // of a live pursuit, or of a deadline in Inv(N).  A clock whose pursuit
@@ -2240,6 +2704,21 @@ private:
         std::vector<std::uint32_t> kids;
         kids.reserve(e.children.size());
         for (Node& c : e.children) kids.push_back(intern(std::move(c)));
+        // Distinct children of one expansion often intern to the same node —
+        // (Delay) parts that extrapolate together, and (EX) children that agree
+        // once the context is consumed.  A repeat says nothing new under either
+        // kind (a conjunction demands it once, a disjunction offers it once) but
+        // is re-scanned by every acceptance loop and every reverse-edge build,
+        // all of which are linear in the child list.  Order is preserved so the
+        // extraction still walks children in rule order.
+        {
+            std::vector<std::uint32_t> seen;
+            seen.reserve(kids.size());
+            for (std::uint32_t k : kids)
+                if (std::find(seen.begin(), seen.end(), k) == seen.end())
+                    seen.push_back(k);
+            kids.swap(seen);
+        }
         if (debug_) {                       // temporary: edge dump for figures
             std::ostringstream os;
             os << "EDGE " << v << " ["
@@ -2249,7 +2728,9 @@ private:
             std::fputs(os.str().c_str(), stderr);
         }
         g_[v].kind = e.kind;
-        g_[v].ch   = std::move(kids);
+        g_[v].ch_off = static_cast<std::uint32_t>(charena_.size());
+        g_[v].ch_len = static_cast<std::uint32_t>(kids.size());
+        charena_.insert(charena_.end(), kids.begin(), kids.end());
         return true;
     }
 
@@ -2297,11 +2778,11 @@ private:
                         ok = false;
                     } else if (v.kind == Expansion::Kind::And) {
                         ok = true;
-                        for (std::uint32_t c : v.ch)
+                        for (std::uint32_t c : ch_of(S[i]))
                             if (!child_alive(c)) { ok = false; break; }
                     } else {
                         ok = false;
-                        for (std::uint32_t c : v.ch)
+                        for (std::uint32_t c : ch_of(S[i]))
                             if (child_alive(c)) { ok = true; break; }
                     }
                     if (!ok) { alive[i] = 0; changed = true; }
@@ -2332,7 +2813,7 @@ private:
         std::vector<std::vector<std::size_t>> rev(S.size());
         for (std::size_t i = 0; i < S.size(); ++i) {
             if (!alive[i]) continue;
-            for (std::uint32_t c : g_[S[i]].ch) {
+            for (std::uint32_t c : ch_of(S[i])) {
                 auto it = pos.find(c);
                 if (it == pos.end() || !alive[it->second]) continue;
                 rev[it->second].push_back(i);
@@ -2379,7 +2860,7 @@ private:
 
         for (std::size_t i = 0; i < m; ++i) {
             if (!alive[i]) continue;
-            for (std::uint32_t c : g_[S[i]].ch) {
+            for (std::uint32_t c : ch_of(S[i])) {
                 if (pos.count(c)) continue;
                 if (g_[c].done && g_[c].val) { reaches[i] = 1; break; }
             }
@@ -2387,7 +2868,7 @@ private:
         for (const std::vector<std::size_t>& T : sub_sccs(S, pos, alive)) {
             bool cyclic = T.size() > 1;
             if (!cyclic)
-                for (std::uint32_t c : g_[S[T[0]]].ch)
+                for (std::uint32_t c : ch_of(S[T[0]]))
                     if (auto it = pos.find(c); it != pos.end() && it->second == T[0])
                         cyclic = true;
             if (!cyclic || !progressing(S, T)) continue;
@@ -2421,36 +2902,72 @@ private:
         std::vector<FormulaId> mus;
         for (std::size_t i = 0; i < m; ++i)
             if (alive[i])
-                for (FormulaId mu : g_[S[i]].untils) mus.push_back(mu);
+                for (FormulaId mu : us_of(S[i])) mus.push_back(mu);
         std::sort(mus.begin(), mus.end());
         mus.erase(std::unique(mus.begin(), mus.end()), mus.end());
         if (mus.empty()) return false;
 
         const std::vector<std::vector<std::size_t>> rev = reverse_edges(S, pos, alive);
         auto pursues = [&](std::uint32_t id, FormulaId mu) {
-            const std::vector<FormulaId>& u = g_[id].untils;
+            const Span u = us_of(id);
             return std::find(u.begin(), u.end(), mu) != u.end();
         };
 
         bool removed = false;
         for (FormulaId mu : mus) {
+            // \ref M2 asks for a path that carries mu throughout *with x_mu
+            // unreset along the way*, which is what ties the stop to the onset
+            // the pursuit measures.  Without that clause a doomed pursuit is
+            // laundered: (Cov)'s launch replaces the live pursuit of mu with a
+            // fresh one on a re-zeroed x_mu, and `pursues` matches on the
+            // modality alone, so the exit clause below credits the doomed
+            // obligation with a stop that in fact belongs to a later, servable
+            // onset.  On AG(EF[3,4] p) & AG[4,5] !p the onset at t = 1 is
+            // doomed -- its whole window [4,5] is banned -- and it was being
+            // discharged by the stop of an onset past 5.
+            //
+            // The clause is existential-only, as in the paper: a universal
+            // until is governed by \ref M3, and (Ustopcarry) legitimately
+            // re-zeroes x_mu while discharging.
+            const bool e_until = !is_universal(f_.node(mu).kind);
+            const ClockId x_mu = clock_of(cmap_, mu);
+            auto reset_on_entry = [&](std::uint32_t id) {
+                if (!m2_unreset_ || !e_until || x_mu == kNoClock || x_mu >= nc_)
+                    return false;
+                return ((res_of(id)[x_mu >> 6] >> (x_mu & 63)) & 1ULL) != 0;
+            };
+
             std::vector<char> live(m, 0), ok(m, 0);
             for (std::size_t i = 0; i < m; ++i)
                 live[i] = alive[i] && pursues(S[i], mu);
 
             for (std::size_t i = 0; i < m; ++i) {
                 if (!live[i]) continue;
-                for (std::uint32_t c : g_[S[i]].ch) {
+                bool stop = false, exit_keep = false, exit_reset = false,
+                     unreset_cont = false;
+                for (std::uint32_t c : ch_of(S[i])) {
                     const bool in_S = pos.count(c) != 0;
                     const bool ca   = in_S ? alive[pos.at(c)] != 0 : (g_[c].done && g_[c].val);
                     if (!ca) continue;
-                    // the stop branch itself, or a surviving exit that carries
-                    // the pursuit onward and so must discharge it in turn
-                    if (g_[c].discharges == mu || (!in_S && pursues(c, mu))) {
-                        ok[i] = 1;
-                        break;
+                    if (g_[c].discharges == mu) { stop = true; break; }
+                    if (!pursues(c, mu)) continue;
+                    if (!reset_on_entry(c)) unreset_cont = true;
+                    // a surviving exit that carries the pursuit onward and so
+                    // must discharge it in turn
+                    if (!in_S) {
+                        if (reset_on_entry(c)) exit_reset = true;
+                        else                   exit_keep  = true;
                     }
                 }
+                // A (Cov) launch re-zeroes x_mu and *replaces* the pursuit, so
+                // it continues a later onset, not this one — crediting it is
+                // what laundered the doomed obligation.  The obligation rides
+                // the launch's AND-sibling, the discharge, which keeps the
+                // pursuit untouched; so the launch is discounted exactly when
+                // such a sibling is there to carry it.  Where no unreset
+                // continuation exists at all, the reset child is the only
+                // continuation and discounting it would reject a witness.
+                ok[i] = stop || exit_keep || (exit_reset && !unreset_cont);
             }
             std::vector<std::size_t> q;
             for (std::size_t i = 0; i < m; ++i) if (ok[i]) q.push_back(i);
@@ -2489,7 +3006,7 @@ private:
             st.push_back({s, 0});
             while (!st.empty()) {
                 const std::size_t v = st.back().v;
-                const std::vector<std::uint32_t>& ch = g_[S[v]].ch;
+                const Span ch = ch_of(S[v]);
                 if (st.back().ci < ch.size()) {
                     const std::uint32_t c = ch[st.back().ci++];
                     auto it = pos.find(c);
@@ -2585,8 +3102,8 @@ private:
 
         while (!st.empty()) {
             const std::uint32_t v = st.back().v;
-            if (st.back().ci < g_[v].ch.size()) {
-                const std::uint32_t w = g_[v].ch[st.back().ci++];
+            if (st.back().ci < g_[v].ch_len) {
+                const std::uint32_t w = ch_of(v)[st.back().ci++];
                 if (!g_[w].visited) {
                     if (!try_split(w)) {
                         if (!visit(w)) return false;
@@ -2744,17 +3261,75 @@ private:
     bool budget_hit_ = false;
     bool has_deadline_ = false;
     bool debug_ = false;
+    /// (M2)'s "x_mu unreset along the way" clause.  On by default;
+    /// TCTL_M2_UNRESET=0 drops it, for the ablation.  Without it the
+    /// E-until/E-release re-demand families come back wrongly SAT.
+    bool m2_unreset_ = [] {
+        const char* v = std::getenv("TCTL_M2_UNRESET");
+        return !(v && std::string(v) == "0");
+    }();
+    /// Partition an existential launch into onset cells (see onset_cells()).
+    /// Off by default: measured, it changes no verdict and no node count,
+    /// because (Delay) already leaves every zone region-uniform per clock.
+    /// TCTL_ONSET_CELLS=1 turns it back on.
+    bool onset_cells_ = std::getenv("TCTL_ONSET_CELLS") != nullptr;
+    /// Which rolled deadline (Ustopcarry)/(Ustopabut) install.
+    ///
+    /// The paper's D* is the strict x_mu < (b-a)+1, which is what makes the
+    /// abutting cell reachable and (Ustopabut) fire at all.  Measured over the
+    /// self-test suite it is *unsound*: it admits a recurrence one cell slower
+    /// than the window allows, and AG(AF[1,2] q) & AG(q -> AG(0,1] !q) — whose
+    /// witnesses must be at most 1 apart by the rate and more than 1 apart by
+    /// the ban, hence UNSAT — comes back SAT.  The closed x_mu <= b-a is right
+    /// on every such family and is the default here; it makes the abutting cell
+    /// unreachable, so (Ustopabut) becomes dead code.
+    ///
+    /// TCTL_ROLLED_DEADLINE=strict selects the paper's bound, for measuring the
+    /// difference.  See rolled_deadline() and not_track/PAPER_PORT.md.
+    bool rolled_strict_ = [] {
+        const char* v = std::getenv("TCTL_ROLLED_DEADLINE");
+        return v && std::string(v) == "strict";
+    }();
     std::uint32_t root_id_ = static_cast<std::uint32_t>(-1);
     std::chrono::steady_clock::time_point deadline_{};
 
     // ── SCC acceptance state (unused under TCTL_LEGACY_LOOP) ────────────
-    std::vector<GNode>                             g_;     // the explored graph
-    std::unordered_map<Key, std::uint32_t, KeyHash> gid_;  // acc_key → node id
-    std::vector<const Key*> key_of_;                       // node id → its key
-    std::size_t words_ = 1;                                // clock-bitmap width
+    /// The explored graph.  A deque, not a vector: it grows by one node per
+    /// intern for the whole search, and a vector's doubling copies every GNode
+    /// built so far while holding both buffers -- the peak that costs, on the
+    /// run that is already the largest.  A deque grows in blocks, never copies,
+    /// and keeps references stable across growth.
+    std::deque<GNode>                              g_;     // the explored graph
+    // ── Key store: one arena plus one open-addressed table ──────────────
+    //
+    // A key is a run of words in karena_; a node id indexes koff_/klen_/khash_.
+    // The unordered_map<vector<uint32_t>, uint32_t> this replaces cost, per
+    // node, a map node, a separate heap buffer for the vector *and* a bucket
+    // slot -- and `emplace(std::move(k))` moved the build buffer out on every
+    // miss, so the hot path malloc'd once per new node just to re-grow it.
+    // Here a new key is an append and a lookup is an index.
+    std::vector<std::uint32_t> charena_;  // every node's children, back to back
+    std::vector<std::uint32_t> uarena_;   // every node's until pursuits
+    // The key arena is chunked, not one growing vector.  A vector doubling at
+    // 8 MB holds the old and the new buffer at once, so the *peak* is three
+    // times the live size for the length of one memcpy -- and peak is what a
+    // solver is judged on.  Fixed blocks never copy, and the pointers they hand
+    // out stay valid for the life of the search.
+    static constexpr std::uint32_t kBlkShift = 16;                  // 64 Ki words
+    static constexpr std::uint32_t kBlkWords = 1u << kBlkShift;
+    static constexpr std::uint32_t kBlkMask  = kBlkWords - 1;
+    std::vector<std::unique_ptr<std::uint32_t[]>> kblocks_;
+    std::uint32_t kfill_ = kBlkWords;    // words used in the newest block
+    std::vector<std::uint32_t> koff_;     // node id → offset into karena_
+    std::vector<std::uint32_t> klen_;     // node id → length in words
+    std::vector<std::uint64_t> khash_;    // node id → its hash, kept for rehash
+    std::vector<std::uint32_t> ktab_;     // slot → node id + 1; 0 is empty
+    std::size_t                kmask_ = 0;
+    std::size_t words_ = 1;                                // clock-bitmap width (64-bit)
+    std::size_t rw32_  = 1;                                // reset-mask width (32-bit)
     // key-building scratch, reused so the hot path allocates nothing
-    mutable std::vector<std::array<std::uint32_t, 8>> pursuit_scratch_;
-    mutable std::vector<std::array<std::uint32_t, 4>> deadline_scratch_;
+    mutable std::vector<std::array<std::uint32_t, 2>> pursuit_scratch_;
+    mutable std::vector<std::array<std::uint32_t, 2>> deadline_scratch_;
     mutable std::vector<std::uint32_t> scratch32_;
     mutable std::vector<char>          live_scratch_;   ///< clocks a live pursuit/deadline reads
     // minimal-graph packing scratch, reused so key building allocates nothing

@@ -100,13 +100,6 @@ struct Pursuit {
         DeferEX,   ///< @f$EX\,\mu^\bullet@f$ — residual carried to one successor.
         DeferAX    ///< @f$AX\,\mu^\bullet@f$ — residual carried to all successors.
     };
-    /// Which part of the release partition (Rsplit) is being pursued.
-    enum class Part : std::uint8_t {
-        Whole,     ///< Not yet partitioned; also the only value an until takes.
-        BeforeI,   ///< @f$Z^{\prec I}@f$ — the window has not opened yet.
-        InI        ///< @f$Z^{\in I}@f$ — inside the window, the obligation applies.
-    };
-
     FormulaId mu;                    ///< The launched modality @f$Q(\varphi \circ_I \psi)@f$.
     ClockId   x_mu;                  ///< Its formula-clock; also a key in @f$O@f$.
     /// @brief The onset clock @f$y_\mu@f$: time since the demand was last raised.
@@ -121,7 +114,6 @@ struct Pursuit {
     /// which is never absorbed.
     ClockId   y_mu = kNoClock;
     Stage     stage = Stage::Here;   ///< Current proof-theoretic marker.
-    Part      part  = Part::Whole;   ///< Region being pursued (releases only).
     bool      is_until = true;       ///< Until pursuits are subject to loop condition (i).
     /// @brief The demand is *persistent*: it is re-issued at every configuration.
     ///
@@ -146,7 +138,7 @@ struct Pursuit {
     bool operator==(const Pursuit& o) const noexcept {
         return mu == o.mu && x_mu == o.x_mu && y_mu == o.y_mu &&
                stage == o.stage &&
-               part == o.part && is_until == o.is_until &&
+               is_until == o.is_until &&
                persistent == o.persistent && rolled == o.rolled;
     }
     bool operator<(const Pursuit& o) const noexcept {
@@ -154,25 +146,39 @@ struct Pursuit {
         if (x_mu != o.x_mu)   return x_mu < o.x_mu;
         if (y_mu != o.y_mu)   return y_mu < o.y_mu;
         if (stage != o.stage) return stage < o.stage;
-        if (part != o.part)   return part < o.part;
         if (persistent != o.persistent) return persistent < o.persistent;
         if (rolled != o.rolled) return rolled < o.rolled;
         return is_until < o.is_until;
     }
 };
 
-/// @brief Which successor rule a saturated node is due to apply.
+/// @brief The invariant a saturated node's location will carry (Inv).
 ///
-/// The two successor rules alternate, so that a launched clock @f$x_\mu@f$ can
-/// grow into its window across a chain of delays before the pursuit's stop
-/// guard is tested: a pure-delay witness waits in one location until
-/// @f$x_\mu \in I@f$ and then stops.
-enum class Phase : std::uint8_t {
-    Elapse,   ///< Time may pass: apply (Delay).
-    Discrete  ///< Edges may be taken: apply (EX).
+/// A saturated node first chooses how long its location may be occupied, then
+/// expands.  The choice is disjunctive and the two alternatives are the cell
+/// below the next integer hyperplane and the cell up to and including it; an
+/// invariant only bounds occupancy, so a run leaving the location at once, or
+/// mid-cell, is admitted by either.  Recording the choice on the node is what
+/// gives the extracted automaton a well-defined invariant per location.
+enum class Inv : std::uint8_t {
+    Unset,   ///< Not yet chosen: (Inv) is due.
+    Below,   ///< @f$x < k@f$ — the location is left before the hyperplane.
+    Upto,    ///< @f$x \le k@f$ — the hyperplane may be reached.
+    /// @brief @f$x \le \nu(x)@f$ — the location is occupied only at this instant.
+    ///
+    /// Offered only where the zone already pins an active clock on one of its
+    /// own change points, so the bound is an integer and the invariant is a
+    /// legitimate clock constraint.  Both other branches measure @f$k@f$ from
+    /// the *next* change point and so admit a positive elapse; neither can say
+    /// "the run leaves at once".  A witness that must be produced at a specific
+    /// instant needs exactly that: @f$E(true\,U_{[2,2]}\,p)@f$ reaches
+    /// @f$x = 2@f$, and since (Delay) is conjunctive the node must admit every
+    /// elapse its invariant permits — but the window closes at 2, so any elapse
+    /// past it closes the delay child and takes the instant down with it.
+    Stay
 };
 
-/// @brief A tableau node @f$\langle \Gamma, X, Z, O, D \rangle@f$.
+/// @brief A tableau node @f$\langle \Gamma, \Ctx, Z, D, Inv \rangle@f$ (§4.1).
 ///
 /// A node carries the formulas to be realised at a configuration.  It is
 /// *closed* when its propositional part is inconsistent or its zone is empty,
@@ -182,15 +188,22 @@ struct Node {
     FormulaSet                   Gamma;      ///< @f$\Gamma@f$: goal formulas and literals.
     FormulaSet                   X;          ///< @f$X@f$: context holding at every successor.
     Zone                         Z;          ///< @f$Z@f$: the node's clock valuations, canonical modulo @f$\cong_M@f$.
-    /// @f$O@f$: clock map, launched @f$\mu \mapsto x_\mu@f$.
-    ///
-    /// A sorted vector rather than a node-based map: a node is copied on every
-    /// rule application, and a red-black tree costs one allocation per entry
-    /// where a vector costs one in total.
-    PooledVec<std::pair<FormulaId, ClockId>> O;
     PooledVec<Deadline>          D;          ///< @f$D@f$: deadlines inducing @f$Inv(N)@f$.
     PooledVec<Pursuit>           pursuits;   ///< Active pursuits @f$\mu^\bullet@f$.
-    Phase                        phase = Phase::Elapse;  ///< Successor rule due next.
+    Inv                          inv = Inv::Unset;  ///< Invariant chosen for this location.
+    /// @brief The node is an *interval witness*: its zone is a crossing whose
+    /// every position carries the asserted goals.
+    ///
+    /// Set by the abutment stop, whose witness is an interval rather than an
+    /// instant.  A release launched at such a node whose window opens at zero
+    /// bans within the very crossing that asserts it --- a position later in
+    /// the cell lies inside the window of one earlier in it --- so its body is
+    /// asserted here rather than deferred.
+    bool                         interval_witness = false;
+    /// True when this node was produced by (Delay), i.e. time elapsed to reach
+    /// it.  Read by the loop test, which needs to know that a cycle crosses a
+    /// delay to call it time-progressing.
+    bool                         delayed_here = false;
 
     /// Clocks reset on the edge that created this node.
     /// Diagnostic metadata for the loop test; excluded from the node key.

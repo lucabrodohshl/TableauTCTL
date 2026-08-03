@@ -2422,6 +2422,100 @@ std::vector<TestCase> generate_propositional_100() {
     };
 }
 
+
+// ============================================================================
+// The 2026-08-02 redesign families: every formula class the calculus redesign
+// was tested against, with exact expected verdicts.  Each verdict is justified
+// from TCTL semantics in a comment, NOT from engine behaviour.
+// ============================================================================
+
+// Family D (drop): AG[0,c](AF[a,b] q) & AG>=B !q.
+//
+// Onsets t in [0,c] each need a q in [t+a, t+b], so witnesses live in
+// [a, c+b] and the last onset needs one at or after c+a.  Banning q from B
+// kills the formula exactly when the last onset's window [c+a, c+b] has no
+// point below B, i.e. SAT iff B > c+a.  This family pins the (U*-drop) rule:
+// the recurrence must end exactly when the demands do.
+std::vector<TestCase> generate_drop_family() {
+    std::vector<TestCase> v;
+    char buf[128];
+    for (int c = 0; c <= 5; ++c)
+        for (int a = 0; a <= 2; ++a)
+            for (int w = 1; w <= 2; ++w) {          // w = b - a >= 1
+                const int b = a + w;
+                for (int B = (c + a > 0 ? c + a - 1 : 0); B <= c + a + 2; ++B) {
+                    std::snprintf(buf, sizeof buf,
+                                  "AG[0,%d] (AF[%d,%d] q) & AG>=%d (!q)",
+                                  c, a, b, B);
+                    v.push_back({buf, B > c + a});
+                }
+            }
+    return v;
+}
+
+// Family R (rate): AG(AF[a,b] q) & AG(q -> AG(0,d] !q).
+//
+// The unbounded context forces a q-stream for ever; the ban after each q
+// forces consecutive q's more than d apart; the stream serves every onset only
+// if consecutive q's are at most b-a apart.  Compatible iff d < b-a, so
+// SAT iff d < b-a.  This family pins the recurrence rate itself.
+std::vector<TestCase> generate_rate_family() {
+    std::vector<TestCase> v;
+    char buf[128];
+    for (int a = 0; a <= 3; ++a)
+        for (int w = 1; w <= 3; ++w) {
+            const int b = a + w;
+            for (int d = 1; d <= w + 1; ++d) {
+                std::snprintf(buf, sizeof buf,
+                              "AG (AF[%d,%d] q) & AG(q -> AG(0,%d] (!q))",
+                              a, b, d);
+                v.push_back({buf, d < w});
+            }
+        }
+    return v;
+}
+
+// Singletons met along the redesign.
+std::vector<TestCase> generate_redesign_cases() {
+    return {
+        // Sliding witnesses: with p at {1,3}, EF[0,1) p holds on (0,1] u (2,3],
+        // open at 2; every onset in [0,1] is served although no witness lies at
+        // or before 2 after the first.  SAT -- the (U*-abut) case.
+        { "AG[0,1] (AF[1,2] (EF[0,1) p))", true },
+        { "AG[0,1] (AF[1,2] (EF[0,1] p))", true },
+        // One witness interval serves a cell wider than b-a would suggest:
+        // witnesses 2.5 and 4.5 dodge the ban [3,4] and cover onsets [0,1].
+        { "AG[0,1] (AF[2,4] q) & AG[3,4] (!q)", true },
+        // Onset-shift regression: the bad onset is the single point t=1.
+        { "AG (EF[3,4] p) & AG[4,5] (!p)", false },
+        // Nested existential re-demand must not be absorbed.
+        { "AG (EF[1,3] (AG (EF[4,6] (AG (EF[7,9] p)))))", true },
+        // Punctual-squeeze rate contradiction at a=0: after each q the ban
+        // (0,1] forbids the next q for 1, and some onset then misses [t,t+1].
+        { "AG (AF[0,1] q) & AG(q -> AG(0,1] (!q))", false },
+        // Same shape, window [0,3]: q every 2 works.  SAT.
+        { "AG (AF[0,3] q) & AG(q -> AG(0,1] (!q))", true },
+        // Literals do not cross a cell edge: p now, banned just after.
+        { "p & !EF(0,2] p", true },
+        { "p & !EF>0 p", true },
+        { "AG[0,2) p & AG[2,5] !p", true },
+        { "AG[0,2] p & AG(2,5] !p", true },
+    };
+}
+
+static void test_drop_family(TestContext& ctx) {
+    auto tests = generate_drop_family();
+    run_test_vector(ctx, tests, "drop_family", false, 10);
+}
+static void test_rate_family(TestContext& ctx) {
+    auto tests = generate_rate_family();
+    run_test_vector(ctx, tests, "rate_family", false, 15);
+}
+static void test_redesign_cases(TestContext& ctx) {
+    auto tests = generate_redesign_cases();
+    run_test_vector(ctx, tests, "redesign_cases", false, 20);
+}
+
 static void test_propositional_100(TestContext& ctx) {
     auto tests = generate_propositional_100();
     run_test_vector(ctx, tests, "propositional_100", false, 10);
@@ -2833,6 +2927,9 @@ int run_selftests() {
     runner.run("stress_200",                        test_stress_200);
 
     runner.run("propositional_100",                   test_propositional_100);
+    runner.run("drop_family",                         test_drop_family);
+    runner.run("rate_family",                         test_rate_family);
+    runner.run("redesign_cases",                      test_redesign_cases);
 
     // Parallel / single-thread equivalence
     runner.run("parallel_equivalence",               test_parallel_equivalence);
