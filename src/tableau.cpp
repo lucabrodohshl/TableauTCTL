@@ -2262,6 +2262,22 @@ private:
             if (!is_literal(id)) keep.push_back(id);
         d.Gamma = FormulaSet::from_sorted(keep);
 
+        // A release carried as a *context* modality rather than as a pursuit
+        // (the AG-context encoding, see ag_context_for) obliges its body at
+        // every position just as a pursuit does.  (Delay)'s clause is written
+        // over release pursuits, so without this the body is re-imposed at (EX)
+        // children -- which inherit Ctx -- but not at the cells in between, and
+        // an interval of the model would carry no obligation at all.  Ctx
+        // itself travels on d.X, so the modality persists; what has to be added
+        // here is the per-cell assertion of its body.
+        for (FormulaId id : n.X.elements()) {
+            const FormulaNode& xn = f_.node(id);
+            if (!is_modality(xn.kind) || is_until_modality(xn.kind)) continue;
+            if (xn.children[1] == kInvalidId) continue;
+            if (window_meets(d.Z, clock_of(cmap_, id), window_of(id, f_)))
+                d.Gamma.insert(xn.children[1]);
+        }
+
         for (const Pursuit& p : d.pursuits) {
             const FormulaNode& mn = f_.node(p.mu);
             if (!p.is_until) {
@@ -3350,7 +3366,8 @@ private:
     int ag_mode_ = ag_mode_from_env();
     static int ag_mode_from_env() {
         const char* v = std::getenv("TCTL_AG_CONTEXT");
-        if (!v) return 0;
+        if (!v) return 1;                                   // =all, by default
+        if (std::strcmp(v, "off") == 0 || std::strcmp(v, "0") == 0) return 0;
         if (std::strcmp(v, "top") == 0) return 2;
         if (std::strcmp(v, "smart") == 0) return 3;
         return 1;
