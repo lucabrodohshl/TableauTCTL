@@ -400,6 +400,7 @@ public:
     /// them depends on the magnitude of a constant, which is what keeps the
     /// search flat in M.
     void add_onset_shifts(FormulaId root, FormulaFactory& f) {
+        if (!onset_shifts_) return;
         // Every timed modality of the formula, with its window.
         struct Mod { FormulaId id; std::int32_t a, b; bool binf; bool rel; };
         std::vector<Mod> mods;
@@ -1474,7 +1475,7 @@ private:
             c.pursuits.erase(c.pursuits.begin() + static_cast<long>(i));
             free_pursuit_clocks(c.Z, p);
             c.D = drop_deadline(n.D, p.x_mu);
-            c.discharges_until = p.mu;
+            if (m2_tracks_release(p)) c.discharges_until = p.mu;
             return {Expansion::Kind::And, {std::move(c)}};
         }
 
@@ -1685,6 +1686,13 @@ private:
         return false;
     }
 
+    /// Does (M2) follow this release?  Only a bounded existential one, the
+    /// case intern() puts into the until set.
+    bool m2_tracks_release(const Pursuit& p) const {
+        return !p.is_until && !is_universal(f_.node(p.mu).kind) &&
+               !window_of(p.mu, f_).hi_inf;
+    }
+
     /// @f$Z \backslash x_\mu y_\mu@f$: a stopped pursuit frees its clocks.
     void free_pursuit_clocks(Zone& z, const Pursuit& p) const {
         if (p.x_mu != kNoClock && p.x_mu < nc_) z.free(p.x_mu);
@@ -1746,7 +1754,11 @@ private:
             if (in_window) stop.Gamma.insert(psi);
             drop_at(stop);
             free_pursuit_clocks(stop.Z, p);
-            stop.discharges_until = p.mu;
+            // Only a release (M2) actually tracks -- a bounded existential one
+            // -- needs its discharge recorded.  For any other release the mark
+            // is read by nothing and merely splits the node from its unmarked
+            // twin, which is a whole subtree explored twice.
+            if (m2_tracks_release(p)) stop.discharges_until = p.mu;
             e.children.push_back(std::move(stop));
 
             Node go = n;                                      // (Rgo)
@@ -3261,6 +3273,15 @@ private:
     bool budget_hit_ = false;
     bool has_deadline_ = false;
     bool debug_ = false;
+    /// Cut points isolating doomed onsets; see add_onset_shifts().
+    /// TCTL_ONSET_SHIFTS=0 drops them, for the ablation.  Dropping them is a
+    /// large *loss*: they are not only a completeness aid but a canonicaliser,
+    /// aligning cells so that zones reached by different branches coincide.
+    /// Without them the nested-E family goes 70271 -> 185362 nodes.
+    bool onset_shifts_ = [] {
+        const char* v = std::getenv("TCTL_ONSET_SHIFTS");
+        return !(v && std::string(v) == "0");
+    }();
     /// (M2)'s "x_mu unreset along the way" clause.  On by default;
     /// TCTL_M2_UNRESET=0 drops it, for the ablation.  Without it the
     /// E-until/E-release re-demand families come back wrongly SAT.
