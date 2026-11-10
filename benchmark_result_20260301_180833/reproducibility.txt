@@ -1,0 +1,41 @@
+=== TCTL Benchmark Reproducibility Record ===
+
+timestamp: 2026-03-01 18:08:33
+command_line: --benchmark --bench-timeout 1800 --bench-max-depth 20 --bench-max-k 20
+
+git_commit: 63e993a
+git_dirty: dirty
+
+compiler: c++ (Ubuntu 11.4.0-1ubuntu1~22.04.2) 11.4.0
+gcc_version: 11.4.0
+cpp_standard: 202002
+build_type: Release (NDEBUG defined)
+openmp: disabled
+
+uname: Linux luca-vm 6.8.0-87-generic #88~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Tue Oct 14 14:03:14 UTC 2 x86_64 x86_64 x86_64 GNU/Linux
+cpu_model: Common KVM processor
+cpu_cores: 8
+ram_total: 125,8 GB
+
+=== Benchmark Configuration ===
+seed: 1337
+threads: 1
+timeout_per_instance_s: 1800
+warmup_runs: 4
+abstraction_mode: M
+run_ablation: yes
+memory_limit: not supported
+
+=== Parameter Ranges ===
+family_A_depth: 1..20 (M=20 fixed)
+family_B_M_values: 1 2 4 8 16 32 64 128 256 512 1024 2048 5096 10192 20384 40768
+family_B4_chain_k: 10
+family_B5_nested_depth: 10
+family_C_k: 1..20
+family_D_until_depth: 1..20 (conj cutoff=10)
+family_E_release_depth: 1..20
+family_F_zeno_M: 2..20
+family_G_clocks_k: 1..15 (M=10 fixed)
+family_H_chain_n: 1..30 (M=2 fixed)
+family_I_alternation_n: 1..40 (M=5 fixed)
+
